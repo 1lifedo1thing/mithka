@@ -525,6 +525,8 @@ class ChatViewModel extends ChangeNotifier {
   StreamSubscription? _sub;
   final ChatLiveMessageBuffer _liveIncomingMessages = ChatLiveMessageBuffer();
   bool _isLoadingOlder = false;
+  bool _isLoadingNewer = false;
+  final Set<int> _newerHistoryDeletedMessageIds = {};
   bool _hasOlderHistory = true;
   int? _pendingScrollToId;
   int? _lastForcedReadMessageId;
@@ -606,6 +608,12 @@ class ChatViewModel extends ChangeNotifier {
       _allMessages.isNotEmpty &&
       _hasOlderHistory;
   bool get isLoadingOlder => _isLoadingOlder;
+  bool get canLoadNewer =>
+      !_chatOpenWorkIsStale &&
+      !_isLoadingNewer &&
+      !_latestHistoryLoadInFlight &&
+      !_historyReachesLatest &&
+      latestServerMessageId(_allMessages) > 0;
   bool get isLoadingLatest => _latestHistoryLoadInFlight;
   bool get hasOlderHistory => _hasOlderHistory;
   int get _oldestServerMessageId {
@@ -3301,6 +3309,71 @@ class ChatViewModel extends ChangeNotifier {
     return true;
   }
 
+  /// Extends the current window toward the latest message without discarding
+  /// unread history or changing its viewport anchor. A short TDLib page is not
+  /// proof that we have reached the end of the chat.
+  Future<bool> loadNewer() async {
+    if (!canLoadNewer) return false;
+    final fromMessageId = latestServerMessageId(_allMessages);
+    final requestGeneration = _historyWindowGeneration;
+    _isLoadingNewer = true;
+    _newerHistoryDeletedMessageIds.clear();
+    try {
+      final response = await _client.query({
+        '@type': 'getChatHistory',
+        'chat_id': chatId,
+        'from_message_id': fromMessageId,
+        'offset': -30,
+        'limit': 31,
+        'only_local': false,
+      });
+      if (_chatOpenWorkIsStale ||
+          requestGeneration != _historyWindowGeneration) {
+        return false;
+      }
+      final parsed =
+          (response.objects('messages') ?? const <Map<String, dynamic>>[])
+              .map(TDParse.message)
+              .whereType<ChatMessage>()
+              .where(
+                (message) =>
+                    !_newerHistoryDeletedMessageIds.contains(message.id),
+              )
+              .toList();
+      final newestId = latestServerMessageId(parsed);
+      if (newestId <= fromMessageId) return false;
+      _historyReachesLatest =
+          _knownLatestMessageId > 0 && newestId >= _knownLatestMessageId;
+      _knownLatestMessageId = math.max(_knownLatestMessageId, newestId);
+      _merge(parsed);
+      _resolveRichMessagesIfNeeded(parsed);
+      _resolveSendersIfNeeded(parsed);
+      _resolveRepliesIfNeeded(parsed);
+      _resolveForwardsIfNeeded(parsed);
+      _resolveServiceUsersIfNeeded(parsed);
+      return true;
+    } catch (error) {
+      if (!_chatOpenWorkIsStale &&
+          requestGeneration == _historyWindowGeneration &&
+          _markPeerRestricted(error)) {
+        notifyListeners();
+      }
+      return false;
+    } finally {
+      _isLoadingNewer = false;
+      _newerHistoryDeletedMessageIds.clear();
+    }
+  }
+
+  /// Called only after the reader reaches the actual latest edge. Unlike an
+  /// explicit jump-to-latest, this keeps every paged message and its geometry.
+  void resumeLatestHistoryIfLoaded() {
+    if (!anchoredHistory || !_historyReachesLatest) return;
+    anchoredHistory = false;
+    _historyAnchorMessageId = null;
+    notifyListeners();
+  }
+
   /// Prevents an in-flight latest-history response from replacing the current
   /// anchored window after the user takes control of the transcript.
   ///
@@ -5155,6 +5228,9 @@ class ChatViewModel extends ChangeNotifier {
         if (update.boolean('is_permanent') != true) return;
         final deletedIds = update.int64Array('message_ids') ?? const <int>[];
         ++_chatReadStateRevision;
+        if (_isLoadingNewer) {
+          _newerHistoryDeletedMessageIds.addAll(deletedIds);
+        }
         if (_latestHistoryLoadInFlight) {
           _latestHistoryDeletedMessageIds.addAll(deletedIds);
           for (final messageId in deletedIds) {

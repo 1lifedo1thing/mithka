@@ -1631,7 +1631,13 @@ class _ChatViewState extends State<ChatView> {
         isNearOldest(pos, threshold: 500)) {
       unawaited(_loadOlderFromScroll());
     }
-    final nearBottom = _isNearBottom(80);
+    if (_initialTranscriptReady &&
+        _scrollTargetId == null &&
+        pos.userScrollDirection == ScrollDirection.reverse &&
+        _isNearBottom(500)) {
+      unawaited(_vm.loadNewer());
+    }
+    final nearBottom = _vm.historyReachesLatest && _isNearBottom(80);
     if (_isAtLoadedBottom(1)) {
       _autoScrollPolicy.returnToBottom();
       if (!_hasTranscriptPointerDown) {
@@ -1663,7 +1669,7 @@ class _ChatViewState extends State<ChatView> {
           .finishUserScroll();
       _returnToLatestCoordinator.userDragEnded();
       if (endedTowardLatest && !protectedRestoredPosition) {
-        _requestAutomaticReturnToLatestIfNearLatest();
+        unawaited(_continueHistoryIfNearLatest());
       }
     } else if (_initialTranscriptReady) {
       // Once an older-page request is in flight, a turn toward the latest
@@ -2143,7 +2149,9 @@ class _ChatViewState extends State<ChatView> {
   }
 
   bool _isAtLoadedBottom([double threshold = 24]) {
-    return !_vm.anchoredHistory && _isNearBottom(threshold);
+    return _vm.historyReachesLatest &&
+        !_vm.anchoredHistory &&
+        _isNearBottom(threshold);
   }
 
   void _clearBottomIndicatorsIfNeeded() {
@@ -2355,9 +2363,9 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
-  void _requestAutomaticReturnToLatestIfNearLatest() {
-    if (!shouldRequestAutomaticReturnToLatest(
-      anchoredHistory: _vm.anchoredHistory,
+  Future<void> _continueHistoryIfNearLatest() async {
+    if (!shouldContinueAnchoredHistory(
+      anchoredHistory: _vm.anchoredHistory || !_vm.historyReachesLatest,
       restoredPositionProtected: _restoredPositionGuard.blocksAutomaticReturn,
       pointerDown: _hasTranscriptPointerDown,
       hasScrollTarget: _scrollTargetId != null,
@@ -2367,7 +2375,12 @@ class _ChatViewState extends State<ChatView> {
     )) {
       return;
     }
-    _requestReturnToLatest();
+    if (!_vm.historyReachesLatest) {
+      await _vm.loadNewer();
+      return;
+    }
+    _vm.resumeLatestHistoryIfLoaded();
+    _onScroll();
   }
 
   void _markReadAtBottomIfNeeded() {
@@ -6666,7 +6679,7 @@ class _ChatViewState extends State<ChatView> {
     if (_showEntryUnreadBanner) return true;
     if (_liveNewMessageCount > 0) return !_isAtLoadedBottom();
     if (_isAtLoadedBottom()) return false;
-    return _openAtLatest || !_isNearBottom(80);
+    return _openAtLatest || !_vm.historyReachesLatest || !_isNearBottom(80);
   }
 
   /// Small button (bottom-right of the transcript) to return to the newest

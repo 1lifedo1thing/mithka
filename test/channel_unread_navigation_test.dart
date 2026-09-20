@@ -26,6 +26,7 @@ var _singleUnreadLineCount = 0;
 var _thinHistory = false;
 var _tallGroupUnread = false;
 var _shortGroup = false;
+var _pagedUnread = false;
 double? _savedReadingTop;
 
 void main() {
@@ -51,11 +52,96 @@ void main() {
     _thinHistory = false;
     _tallGroupUnread = false;
     _shortGroup = false;
+    _pagedUnread = false;
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
     await updates.close();
   });
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    testWidgets(
+      'reading past a partial unread page preserves the window on $platform',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          _pagedUnread = true;
+          clearChatMemoryCaches();
+          await _setSurfaceSize(tester, const Size(390, 844));
+          await _pumpMainShell(tester, reducedMotion: true);
+          ChatDeepLinkController.shared.openChat(chatId: -43, title: 'Channel');
+          await _settle(tester);
+          requests.clear();
+          final transcript = find.byType(CustomScrollView).last;
+          final controller = tester
+              .widget<CustomScrollView>(transcript)
+              .controller!;
+          controller.jumpTo(controller.position.maxScrollExtent);
+          await _settle(tester);
+          final badgeAtPageEdge = find
+              .byKey(ChatNewMessagesControlShell.unreadBadgeKey)
+              .evaluate()
+              .length;
+          final lastLoaded = find.byKey(
+            const ValueKey('messageTextBubble-104'),
+          );
+          expect(lastLoaded, findsOneWidget);
+          final before = tester.getRect(lastLoaded).top;
+          await tester.drag(transcript, const Offset(0, -24));
+          await _settle(tester);
+          expect(
+            requests.where(
+              (r) =>
+                  r['@type'] == 'getChatHistory' && r['from_message_id'] == 0,
+            ),
+            isEmpty,
+            reason:
+                'a scroll must not replace the page with the latest history',
+          );
+          expect(
+            badgeAtPageEdge,
+            1,
+            reason: 'unloaded unread messages remain beyond this page',
+          );
+          expect(
+            requests.where(
+              (r) =>
+                  r['@type'] == 'getChatHistory' &&
+                  r['from_message_id'] == 104 &&
+                  (r['offset'] as int) < 0,
+            ),
+            isNotEmpty,
+          );
+          expect(lastLoaded, findsOneWidget);
+          expect(tester.getRect(lastLoaded).top, closeTo(before, 40));
+          expect(
+            find.byKey(const ValueKey('messageTextBubble-1000')),
+            findsNothing,
+          );
+          requests.clear();
+          await tester.tap(
+            find.byKey(ChatNewMessagesControlShell.unreadBadgeKey),
+          );
+          await _settle(tester);
+          expect(
+            requests.where(
+              (r) =>
+                  r['@type'] == 'getChatHistory' && r['from_message_id'] == 0,
+            ),
+            isNotEmpty,
+            reason: 'the explicit latest button still jumps over history',
+          );
+          expect(
+            find.byKey(const ValueKey('messageTextBubble-1000')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await _disposeShell(tester);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
   testWidgets(
     'one short unread arrives at the bottom without a first-drag jump',
     (tester) async {
@@ -365,15 +451,20 @@ void main() {
 Map<String, dynamic> _message(int id) => {
   '@type': 'message',
   'id': id,
-  'chat_id': -42,
+  'chat_id': _pagedUnread ? -43 : -42,
   'date': 1700000000 + id,
   'is_outgoing': false,
-  'sender_id': {'@type': 'messageSenderChat', 'chat_id': -42},
+  'sender_id': {
+    '@type': 'messageSenderChat',
+    'chat_id': _pagedUnread ? -43 : -42,
+  },
   'content': {
     '@type': 'messageText',
     'text': {
       '@type': 'formattedText',
-      'text': _shortGroup
+      'text': _pagedUnread
+          ? 'Post $id\n${List.filled(8, 'Page content.').join('\n')}'
+          : _shortGroup
           ? 'Group $id'
           : _tallGroupUnread
           ? 'Group $id\n${List.filled(id >= 999 ? 45 : 2, 'Group message content.').join('\n')}'
@@ -390,7 +481,7 @@ Map<String, dynamic> _response(Map<String, dynamic> request) {
     case 'getChat':
       return {
         '@type': 'chat',
-        'id': -42,
+        'id': _pagedUnread ? -43 : -42,
         'title': 'Channel',
         'last_read_inbox_message_id': _singleUnread
             ? 999
@@ -420,6 +511,20 @@ Map<String, dynamic> _response(Map<String, dynamic> request) {
       return {'@type': 'connectionStateReady'};
     case 'getChatHistory':
       final from = request['from_message_id'] as int;
+      if (_pagedUnread && from != 0) {
+        final newer = (request['offset'] as int) < 0;
+        return {
+          '@type': 'messages',
+          'messages': [
+            for (
+              var id = newer ? from + 4 : from;
+              id >= (from == 100 && newer ? 80 : from);
+              id--
+            )
+              _message(id),
+          ],
+        };
+      }
       return {
         '@type': 'messages',
         'messages': [
