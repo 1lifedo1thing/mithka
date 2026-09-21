@@ -172,6 +172,31 @@ class MessageTextEntity {
   }
 }
 
+/// A server quote or a manually selected UTF-16 range from a message.
+class MessageTextQuote {
+  const MessageTextQuote({
+    required this.text,
+    required this.position,
+    this.entities = const [],
+    this.isManual = true,
+  });
+
+  final String text;
+  final int position;
+  final List<MessageTextEntity> entities;
+  final bool isManual;
+
+  Map<String, dynamic> toInputJson() => {
+    '@type': 'inputTextQuote',
+    'text': {
+      '@type': 'formattedText',
+      'text': text,
+      'entities': [for (final entity in entities) entity.toTdJson()],
+    },
+    'position': position,
+  };
+}
+
 class RichMessageTableCell {
   const RichMessageTableCell({
     required this.text,
@@ -715,6 +740,9 @@ class ChatMessage {
     this.summaryLanguageCode = '',
     this.canRecognizeSpeech = false,
     this.replyToMessageId,
+    this.replyToQuote,
+    this.textQuoteSource,
+    this.textQuoteSourceEntities,
     this.replyToDate,
     this.replyToEntities = const [],
     this.replyToImage,
@@ -825,6 +853,17 @@ class ChatMessage {
 
   // 引用 / reply: the message this one replies to, resolved lazily for the quote.
   int? replyToMessageId;
+  MessageTextQuote? replyToQuote;
+  // Rendering can extract tables from the original formatted text. Quotes
+  // must still address the unmodified source text, not that rendered subset.
+  String? textQuoteSource;
+  List<MessageTextEntity>? textQuoteSourceEntities;
+  String get quoteSourceText => textQuoteSource ?? text;
+  List<MessageTextEntity> get quoteSourceEntities =>
+      textQuoteSourceEntities ?? textEntities;
+  String? get replyPreviewText => replyToQuote?.text ?? replyToPreview;
+  List<MessageTextEntity> get replyPreviewEntities =>
+      replyToQuote?.entities ?? replyToEntities;
   int? replyToDate; // unix timestamp of the quoted message
   String? replyToSender; // resolved sender name of the quoted message
   String? replyToPreview; // one-line preview of the quoted message
@@ -1681,6 +1720,13 @@ abstract final class TDParse {
         summaryCard: summaryCard(message, content),
         summaryLanguageCode: message.str('summary_language_code') ?? '',
         replyToMessageId: isContentRestricted ? null : replyToMessageId,
+        replyToQuote: isContentRestricted
+            ? null
+            : textQuote(replyTo?.obj('quote')),
+        textQuoteSource: isContentRestricted
+            ? null
+            : formattedTextForContent(content)?.str('text'),
+        textQuoteSourceEntities: isContentRestricted ? null : parsedEntities,
         serviceUserIds: isContentRestricted
             ? const []
             : serviceUserIds(content, senderId),
@@ -2058,6 +2104,18 @@ abstract final class TDParse {
       return _richMessageText(content.obj('message'))?.entities ?? const [];
     }
     return textEntities(formattedTextForContent(content));
+  }
+
+  static MessageTextQuote? textQuote(Map<String, dynamic>? quote) {
+    final formatted = quote?.obj('text');
+    final text = formatted?.str('text');
+    if (text == null || text.isEmpty) return null;
+    return MessageTextQuote(
+      text: text,
+      position: quote?.integer('position') ?? 0,
+      entities: textEntities(formatted),
+      isManual: quote?.boolean('is_manual') ?? true,
+    );
   }
 
   static List<MessageTextEntity> textEntities(Map<String, dynamic>? ft) {

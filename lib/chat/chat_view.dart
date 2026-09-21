@@ -109,8 +109,10 @@ import 'media_spoiler.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import 'message_bubble_repository_view.dart';
+import 'message_quote_selection_dialog.dart';
 import 'message_reaction_availability.dart';
 import 'message_replies_sheet.dart';
+import 'message_text_quote.dart';
 import 'message_translation_cache.dart';
 import 'music_player_controller.dart';
 import 'openai_compatible_unread_summary_provider.dart';
@@ -1631,7 +1633,13 @@ class _ChatViewState extends State<ChatView> {
         isNearOldest(pos, threshold: 500)) {
       unawaited(_loadOlderFromScroll());
     }
-    final nearBottom = _isNearBottom(80);
+    if (_initialTranscriptReady &&
+        _scrollTargetId == null &&
+        pos.userScrollDirection == ScrollDirection.reverse &&
+        _isNearBottom(500)) {
+      unawaited(_vm.loadNewer());
+    }
+    final nearBottom = _vm.historyReachesLatest && _isNearBottom(80);
     if (_isAtLoadedBottom(1)) {
       _autoScrollPolicy.returnToBottom();
       if (!_hasTranscriptPointerDown) {
@@ -1663,7 +1671,7 @@ class _ChatViewState extends State<ChatView> {
           .finishUserScroll();
       _returnToLatestCoordinator.userDragEnded();
       if (endedTowardLatest && !protectedRestoredPosition) {
-        _requestAutomaticReturnToLatestIfNearLatest();
+        unawaited(_continueHistoryIfNearLatest());
       }
     } else if (_initialTranscriptReady) {
       // Once an older-page request is in flight, a turn toward the latest
@@ -2143,7 +2151,9 @@ class _ChatViewState extends State<ChatView> {
   }
 
   bool _isAtLoadedBottom([double threshold = 24]) {
-    return !_vm.anchoredHistory && _isNearBottom(threshold);
+    return _vm.historyReachesLatest &&
+        !_vm.anchoredHistory &&
+        _isNearBottom(threshold);
   }
 
   void _clearBottomIndicatorsIfNeeded() {
@@ -2355,9 +2365,9 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
-  void _requestAutomaticReturnToLatestIfNearLatest() {
-    if (!shouldRequestAutomaticReturnToLatest(
-      anchoredHistory: _vm.anchoredHistory,
+  Future<void> _continueHistoryIfNearLatest() async {
+    if (!shouldContinueAnchoredHistory(
+      anchoredHistory: _vm.anchoredHistory || !_vm.historyReachesLatest,
       restoredPositionProtected: _restoredPositionGuard.blocksAutomaticReturn,
       pointerDown: _hasTranscriptPointerDown,
       hasScrollTarget: _scrollTargetId != null,
@@ -2367,7 +2377,12 @@ class _ChatViewState extends State<ChatView> {
     )) {
       return;
     }
-    _requestReturnToLatest();
+    if (!_vm.historyReachesLatest) {
+      await _vm.loadNewer();
+      return;
+    }
+    _vm.resumeLatestHistoryIfLoaded();
+    _onScroll();
   }
 
   void _markReadAtBottomIfNeeded() {
@@ -4888,6 +4903,8 @@ class _ChatViewState extends State<ChatView> {
         setState(() => _showOriginalTranslationMessageIds.remove(message.id));
       case MessageAction.reply:
         _vm.setReply(message);
+      case MessageAction.quote:
+        await _quoteMessageText(message);
       case MessageAction.replies:
         await _openMessageComments(message);
       case MessageAction.forward:
@@ -6666,7 +6683,7 @@ class _ChatViewState extends State<ChatView> {
     if (_showEntryUnreadBanner) return true;
     if (_liveNewMessageCount > 0) return !_isAtLoadedBottom();
     if (_isAtLoadedBottom()) return false;
-    return _openAtLatest || !_isNearBottom(80);
+    return _openAtLatest || !_vm.historyReachesLatest || !_isNearBottom(80);
   }
 
   /// Small button (bottom-right of the transcript) to return to the newest
@@ -9685,6 +9702,36 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  Future<void> _quoteMessageText(ChatMessage message) async {
+    if (!_vm.canQuoteText || !canQuoteMessageText(message)) return;
+    final limit = await _vm.messageQuoteLengthLimit();
+    if (!mounted || !_vm.canQuoteText) return;
+    final quote = await showGeneralDialog<MessageTextQuote>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: AppStringKeys.confirmCancel.l10n(context),
+      barrierColor: Colors.black.withValues(alpha: 0.52),
+      transitionDuration: AppMotion.duration(context, AppMotion.responsive),
+      transitionBuilder: AppMotion.dialogTransition,
+      pageBuilder: (_, _, _) =>
+          MessageQuoteSelectionDialog(message: message, maxLength: limit),
+    );
+    if (!mounted || quote == null || !_vm.canQuoteText) return;
+    final current = _vm.messages.where((m) => m.id == message.id).firstOrNull;
+    if (current == null) return;
+    final validated = quoteMessageRange(
+      current,
+      start: quote.position,
+      end: quote.position + quote.text.length,
+      maxLength: limit,
+    );
+    if (validated == null || validated.text != quote.text) {
+      showToast(context, AppStringKeys.topicPostContentActionFailed);
+      return;
+    }
+    _vm.setReply(current, quote: validated);
+  }
+
   Future<void> _toggleMessageReaction(
     ChatMessage message,
     MessageReaction reaction,
@@ -9722,6 +9769,7 @@ class _ChatViewState extends State<ChatView> {
       isPinned: _vm.pinnedMessage?.id == _actionTarget!.id,
       allowForwarding: _vm.canForwardContent,
       allowTranslation: _hasAvailableTranslationOption,
+      allowQuote: _vm.canQuoteText,
       allowSuggestedPostOffer:
           _vm.isDirectMessagesGroup && !_vm.isAdministeredDirectMessagesGroup,
       source: _actionSource,

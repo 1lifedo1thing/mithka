@@ -974,6 +974,7 @@
     <string name="chatListMarkUnread">标为未读</string>
     <string name="chatListNoChats">还没有聊天</string>
     <string name="chatListScanQrCode">扫描二维码</string>
+    <string name="chatListUnarchive">取消归档</string>
     <string name="chatListUnpin">取消置顶</string>
     <string name="chatLoadingTopics">正在加载话题</string>
     <string name="chatMeLabel">我</string>

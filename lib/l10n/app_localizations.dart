@@ -874,6 +874,7 @@ abstract final class AppStringKeys {
   static const desktopWindowMinimize = 'desktopWindowMinimize';
   static const chatListNoChats = 'chatListNoChats';
   static const chatListScanQrCode = 'chatListScanQrCode';
+  static const chatListUnarchive = 'chatListUnarchive';
   static const chatListUnpin = 'chatListUnpin';
   static const chatLoadingTopics = 'chatLoadingTopics';
   static const chatMediaDelete = 'chatMediaDelete';

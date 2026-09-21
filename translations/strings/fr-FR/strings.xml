@@ -975,6 +975,7 @@
     <string name="chatListMarkUnread">Marquer comme non lu</string>
     <string name="chatListNoChats">Aucune discussion pour le moment</string>
     <string name="chatListScanQrCode">Scanner un QR code</string>
+    <string name="chatListUnarchive">Désarchiver</string>
     <string name="chatListUnpin">Désépingler</string>
     <string name="chatLoadingTopics">Chargement des sujets</string>
     <string name="chatMeLabel">Moi</string>

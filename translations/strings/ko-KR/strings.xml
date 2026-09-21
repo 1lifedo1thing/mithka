@@ -974,6 +974,7 @@
     <string name="chatListMarkUnread">읽지 않음으로 표시</string>
     <string name="chatListNoChats">아직 채팅이 없습니다</string>
     <string name="chatListScanQrCode">QR 코드 스캔</string>
+    <string name="chatListUnarchive">보관 해제</string>
     <string name="chatListUnpin">고정 해제</string>
     <string name="chatLoadingTopics">주제 불러오는 중</string>
     <string name="chatMeLabel">나</string>

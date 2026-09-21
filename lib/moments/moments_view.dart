@@ -4614,7 +4614,7 @@ class _PostReplyQuote extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final sender = message.replyToSender?.trim();
-    final preview = message.replyToPreview?.trim() ?? '';
+    final preview = message.replyPreviewText?.trim() ?? '';
     final image = message.replyToImage;
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final hasText =

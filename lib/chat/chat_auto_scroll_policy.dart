@@ -204,12 +204,10 @@ class ChatRestoredPositionGuard {
   }
 }
 
-/// An around-message history window may include the latest loaded message
-/// without containing the current latest messages. Once a user has finished
-/// dragging toward that edge, replace the anchored window with the latest
-/// history. The guards keep this from interrupting an active gesture,
-/// explicit target, or restored-position protection.
-bool shouldRequestAutomaticReturnToLatest({
+/// Reaching an anchored window's edge should continue its history, never
+/// replace it with the latest page. Wait for an idle gesture before changing
+/// anchored mode, respecting explicit targets and restored positions.
+bool shouldContinueAnchoredHistory({
   required bool anchoredHistory,
   required bool restoredPositionProtected,
   required bool pointerDown,

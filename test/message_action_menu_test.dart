@@ -16,6 +16,53 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('quote action is opt-in and requires selectable message text', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final translation = TranslationController(
+      await SharedPreferences.getInstance(),
+    );
+    addTearDown(translation.dispose);
+    MessageAction? selected;
+    Future<void> pumpMenu({
+      required bool allowQuote,
+      String text = 'original',
+    }) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: translation,
+          child: MaterialApp(
+            home: Scaffold(
+              body: MessageActionMenu(
+                message: ChatMessage(
+                  id: 7,
+                  isOutgoing: false,
+                  text: text,
+                  date: 1,
+                  contentType: 'messageText',
+                ),
+                isPinned: false,
+                allowQuote: allowQuote,
+                onSelect: (action) => selected = action,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final quote = find.byKey(const ValueKey('message-action-quote'));
+    await pumpMenu(allowQuote: false);
+    expect(quote, findsNothing);
+    await pumpMenu(allowQuote: true, text: '');
+    expect(quote, findsNothing);
+    await pumpMenu(allowQuote: true);
+    expect(quote, findsOneWidget);
+    await tester.tap(quote);
+    expect(selected, MessageAction.quote);
+  });
+
   test('message action rows stay balanced', () {
     expect(MessageActionMenu.rowCountsForActionCount(6), (first: 3, second: 3));
     expect(MessageActionMenu.rowCountsForActionCount(7), (first: 4, second: 3));

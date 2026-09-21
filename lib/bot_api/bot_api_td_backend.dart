@@ -1937,6 +1937,8 @@ class BotApiTdBackend {
   ) {
     final options = _map(request['options']);
     final reply = _map(request['reply_to']);
+    final quote = _map(reply?['quote']);
+    final quoteText = _map(quote?['text']);
     return {
       'chat_id': chatId,
       'message_thread_id': ?_int(request['message_thread_id']),
@@ -1945,6 +1947,11 @@ class BotApiTdBackend {
           'message_id': _int(reply?['message_id']) ?? 0,
           'chat_id': ?_int(reply?['chat_id']),
           'allow_sending_without_reply': true,
+          if (quoteText != null) ...{
+            'quote': _string(quoteText['text']),
+            'quote_entities': _botEntities(quoteText['entities']),
+            'quote_position': _int(quote?['position']) ?? 0,
+          },
         },
       'disable_notification': options?['disable_notification'] == true,
       'protect_content': options?['protect_content'] == true,

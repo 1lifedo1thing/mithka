@@ -142,12 +142,20 @@ class ChatFolderRail extends StatelessWidget {
     required this.onSelect,
     this.keyForFolder,
     this.onEdit,
+    this.highlights = const {},
   });
   final List<ChatFilterOption> filters;
   final int? selectedFolderId;
   final ValueChanged<ChatFilterOption> onSelect;
   final Key? Function(int? folderId)? keyForFolder;
   final ValueChanged<ChatFilterOption>? onEdit;
+
+  /// Live page-transition highlights; omitted for a settled folder rail.
+  final Map<int?, double> highlights;
+
+  double _highlight(ChatFilterOption filter) =>
+      highlights[filter.folderId] ??
+      (filter.folderId == selectedFolderId ? 1 : 0);
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -179,9 +187,9 @@ class ChatFolderRail extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppRadius.control),
-                  color: filter.folderId == selectedFolderId
-                      ? c.linkBlue.withValues(alpha: 0.10)
-                      : null,
+                  color: c.linkBlue.withValues(
+                    alpha: 0.10 * _highlight(filter),
+                  ),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -189,9 +197,11 @@ class ChatFolderRail extends StatelessWidget {
                     ChatFolderIcon(
                       filter.isAll ? 'All' : filter.iconName,
                       size: 22,
-                      color: filter.folderId == selectedFolderId
-                          ? c.linkBlue
-                          : c.textSecondary,
+                      color: Color.lerp(
+                        c.textSecondary,
+                        c.linkBlue,
+                        _highlight(filter),
+                      )!,
                     ),
                     const SizedBox(height: 3),
                     Text(
@@ -201,12 +211,14 @@ class ChatFolderRail extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: filter.folderId == selectedFolderId
+                        fontWeight: _highlight(filter) >= 0.5
                             ? FontWeight.w600
                             : FontWeight.w400,
-                        color: filter.folderId == selectedFolderId
-                            ? c.linkBlue
-                            : c.textSecondary,
+                        color: Color.lerp(
+                          c.textSecondary,
+                          c.linkBlue,
+                          _highlight(filter),
+                        ),
                       ),
                     ),
                   ],
@@ -1526,6 +1538,7 @@ class _ChatListViewState extends State<ChatListView>
     });
     _model.prefetchFolder(filter.folderId);
     _folderSettleTarget = filter;
+    _ensureFolderTabVisible(filter.folderId, direction);
     _startFolderSettle(to: -direction * _folderPagerWidth, velocity: 0);
   }
 
@@ -1598,6 +1611,7 @@ class _ChatListViewState extends State<ChatListView>
     _folderDrag.value = 0;
     if (target == null) {
       setState(() => _folderPeek = null);
+      _ensureFolderTabVisible(_model.selectedFilter.folderId, -direction);
       return;
     }
     _commitFolderSwitch(target, direction: direction);
@@ -1645,7 +1659,10 @@ class _ChatListViewState extends State<ChatListView>
       Scrollable.ensureVisible(
         ctx,
         alignment: alignment,
-        duration: const Duration(milliseconds: 250),
+        duration: AppMotion.duration(
+          context,
+          const Duration(milliseconds: 250),
+        ),
         curve: Curves.easeOutCubic,
       );
     });
@@ -1964,7 +1981,10 @@ class _ChatListViewState extends State<ChatListView>
         _folderPeek = neighbour;
         if (neighbour != null) _folderPeekSide = travel.isNegative ? 1 : -1;
       });
-      if (neighbour != null) _model.prefetchFolder(neighbour.folderId);
+      if (neighbour != null) {
+        _model.prefetchFolder(neighbour.folderId);
+        _ensureFolderTabVisible(neighbour.folderId, _folderPeekSide);
+      }
     }
     _folderDrag.value = chatListFolderDragOffset(
       travel: travel,
@@ -2238,12 +2258,22 @@ class _ChatListViewState extends State<ChatListView>
     return peeked ? progress : 0;
   }
 
-  Widget _chatFolderRail() => ChatFolderRail(
-    filters: _model.filters,
-    selectedFolderId: _model.selectedFilter.folderId,
-    onSelect: _selectFilter,
-    onEdit: _editFolderAppearance,
-    keyForFolder: (id) => _sideFolderKeys.putIfAbsent(id, GlobalKey.new),
+  Widget _chatFolderRail() => AnimatedBuilder(
+    animation: _folderDrag,
+    builder: (context, _) => ChatFolderRail(
+      filters: _model.filters,
+      selectedFolderId: _model.selectedFilter.folderId,
+      highlights: {
+        for (final filter in _model.filters)
+          filter.folderId: _folderTabHighlight(
+            selected: filter.folderId == _model.selectedFilter.folderId,
+            peeked: filter.folderId == _folderPeek?.folderId,
+          ),
+      },
+      onSelect: _selectFilter,
+      onEdit: _editFolderAppearance,
+      keyForFolder: (id) => _sideFolderKeys.putIfAbsent(id, GlobalKey.new),
+    ),
   );
 
   Widget _chatFolderTabs() {

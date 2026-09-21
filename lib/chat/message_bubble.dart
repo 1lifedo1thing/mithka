@@ -663,7 +663,7 @@ class _MessageBubbleState extends State<MessageBubble>
           : _colors.textSecondary;
     }
     if (message.replyToImage != null &&
-        (message.replyToPreview?.trim().isEmpty ?? true)) {
+        (message.replyPreviewText?.trim().isEmpty ?? true)) {
       return outgoing
           ? colors.outgoingReplyMediaText
           : colors.incomingReplyMediaText;
@@ -2105,7 +2105,7 @@ class _MessageBubbleState extends State<MessageBubble>
         _forwardHeader(outgoing),
         const SizedBox(height: 3),
       ],
-      if (includeReplyQuote && message.replyToPreview != null) ...[
+      if (includeReplyQuote && message.replyPreviewText != null) ...[
         _replyQuote(outgoing),
         const SizedBox(height: 5),
       ],
@@ -4114,18 +4114,18 @@ class _MessageBubbleState extends State<MessageBubble>
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 14, color: labelColor),
                     ),
-                    if ((message.replyToPreview ?? '').isNotEmpty) ...[
+                    if ((message.replyPreviewText ?? '').isNotEmpty) ...[
                       const SizedBox(height: 4),
                       _richText(
-                        message.replyToPreview!,
+                        message.replyPreviewText!,
                         faded,
                         faded,
                         0,
-                        message.replyToPreview!.length,
+                        message.replyPreviewText!.length,
                         outgoing,
                         false,
                         maxLines: 2,
-                        entities: message.replyToEntities,
+                        entities: message.replyPreviewEntities,
                         fontSize: 14,
                       ),
                     ],
@@ -5090,7 +5090,7 @@ class _MessageBubbleState extends State<MessageBubble>
     required bool outgoing,
   }) {
     final hasForwardHeader = message.hasForwardAttribution;
-    final hasReplyQuote = message.replyToPreview != null;
+    final hasReplyQuote = message.replyPreviewText != null;
     if (!_groupsMediaCaption(caption)) {
       final attributedMedia = hasForwardHeader || hasReplyQuote
           ? _bubbleBackground(

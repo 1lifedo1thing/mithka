@@ -36,6 +36,7 @@ import 'forward_options.dart';
 import 'gif_item.dart';
 import 'message_reaction_availability.dart';
 import 'message_send_options.dart';
+import 'message_text_quote.dart';
 import 'outgoing_attachment.dart';
 import 'poll_composer_view.dart';
 import 'quick_reaction_choice.dart';
@@ -432,13 +433,30 @@ class ChatViewModel extends ChangeNotifier {
   String _draftFormattedText = '';
   List<Map<String, dynamic>> _draftFormattedEntities = const [];
   final List<_DraftMention> _draftMentions = [];
-  ChatMessage? replyTo;
+  ChatMessage? _replyTo;
+  MessageTextQuote? _replyQuote;
+  ChatMessage? get replyTo => _replyTo;
+  set replyTo(ChatMessage? message) {
+    _replyTo = message;
+    _replyQuote = null;
+  }
+
+  MessageTextQuote? get replyQuote => _replyQuote;
+  Map<String, dynamic>? get replyToInput => replyTo == null
+      ? null
+      : {
+          '@type': 'inputMessageReplyToMessage',
+          'message_id': replyTo!.id,
+          if (!isSecretChat && _replyQuote != null)
+            'quote': _replyQuote!.toInputJson(),
+        };
   ChatMessage? editingMessage;
   String? _draftBeforeEditing;
   String _formattedDraftBeforeEditing = '';
   List<Map<String, dynamic>> _entitiesBeforeEditing = const [];
   List<_DraftMention> _mentionsBeforeEditing = const [];
   ChatMessage? _replyBeforeEditing;
+  MessageTextQuote? _replyQuoteBeforeEditing;
   List<MessageSenderOption> availableMessageSenders = const [];
   MessageSenderOption? selectedMessageSender;
   Map<String, dynamic>? _messageSenderFromChat;
@@ -525,6 +543,8 @@ class ChatViewModel extends ChangeNotifier {
   StreamSubscription? _sub;
   final ChatLiveMessageBuffer _liveIncomingMessages = ChatLiveMessageBuffer();
   bool _isLoadingOlder = false;
+  bool _isLoadingNewer = false;
+  final Set<int> _newerHistoryDeletedMessageIds = {};
   bool _hasOlderHistory = true;
   int? _pendingScrollToId;
   int? _lastForcedReadMessageId;
@@ -606,6 +626,12 @@ class ChatViewModel extends ChangeNotifier {
       _allMessages.isNotEmpty &&
       _hasOlderHistory;
   bool get isLoadingOlder => _isLoadingOlder;
+  bool get canLoadNewer =>
+      !_chatOpenWorkIsStale &&
+      !_isLoadingNewer &&
+      !_latestHistoryLoadInFlight &&
+      !_historyReachesLatest &&
+      latestServerMessageId(_allMessages) > 0;
   bool get isLoadingLatest => _latestHistoryLoadInFlight;
   bool get hasOlderHistory => _hasOlderHistory;
   int get _oldestServerMessageId {
@@ -1170,6 +1196,7 @@ class ChatViewModel extends ChangeNotifier {
     ];
     _mentionsBeforeEditing = List<_DraftMention>.from(_draftMentions);
     _replyBeforeEditing = replyTo;
+    _replyQuoteBeforeEditing = _replyQuote;
     editingMessage = message;
     replyTo = null;
     draft = message.text;
@@ -1221,12 +1248,14 @@ class ChatViewModel extends ChangeNotifier {
         ..clear()
         ..addAll(_mentionsBeforeEditing);
       replyTo = _replyBeforeEditing;
+      _replyQuote = _replyQuoteBeforeEditing;
     }
     _draftBeforeEditing = null;
     _formattedDraftBeforeEditing = '';
     _entitiesBeforeEditing = const [];
     _mentionsBeforeEditing = const [];
     _replyBeforeEditing = null;
+    _replyQuoteBeforeEditing = null;
     if (scheduleDraftSave) _scheduleDraftSave();
     if (notify) notifyListeners();
   }
@@ -1447,10 +1476,7 @@ class ChatViewModel extends ChangeNotifier {
       },
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
@@ -1571,10 +1597,7 @@ class ChatViewModel extends ChangeNotifier {
       },
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
@@ -1609,10 +1632,7 @@ class ChatViewModel extends ChangeNotifier {
           : richMessageInputContent(blocks),
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     replyTo = null;
     final pendingMessage = await _client.query(
@@ -1732,10 +1752,7 @@ class ChatViewModel extends ChangeNotifier {
       'input_message_content': {'@type': 'inputMessageDice', 'emoji': emoji},
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
@@ -1749,12 +1766,30 @@ class ChatViewModel extends ChangeNotifier {
   ///
   /// The reply metadata already addresses the sender. Mentions remain an
   /// explicit action so replying cannot accidentally invoke inline-bot search.
-  void setReply(ChatMessage? message) {
+  void setReply(ChatMessage? message, {MessageTextQuote? quote}) {
     if (editingMessage != null) {
       _restoreComposerAfterMessageEdit(notify: false);
     }
     replyTo = message;
+    if (message != null && !isSecretChat && quote != null) {
+      _replyQuote = quote;
+    }
     notifyListeners();
+  }
+
+  bool get canQuoteText =>
+      canSendMessages && !isSecretChat && !hasProtectedContent;
+
+  Future<int> messageQuoteLengthLimit() async {
+    try {
+      final option = await _client.query({
+        '@type': 'getOption',
+        'name': 'message_reply_quote_length_max',
+      });
+      final limit = option.integer('value');
+      if (limit != null && limit > 0) return limit;
+    } catch (_) {}
+    return defaultMessageQuoteLengthLimit;
   }
 
   List<Map<String, dynamic>> _mentionEntitiesFor(
@@ -1805,15 +1840,12 @@ class ChatViewModel extends ChangeNotifier {
       ...captionEntities,
       ..._mentionEntitiesFor(caption, captionEntities),
     ];
-    final reply = replyTo;
     final requests = buildAttachmentSendRequests(
       chatId: chatId,
       attachments: attachments,
       caption: caption,
       captionEntities: allEntities,
-      replyTo: reply == null
-          ? null
-          : {'@type': 'inputMessageReplyToMessage', 'message_id': reply.id},
+      replyTo: replyToInput,
       sendConfiguration: sendConfiguration,
     );
     replyTo = null;
@@ -3299,6 +3331,71 @@ class ChatViewModel extends ChangeNotifier {
     }
 
     return true;
+  }
+
+  /// Extends the current window toward the latest message without discarding
+  /// unread history or changing its viewport anchor. A short TDLib page is not
+  /// proof that we have reached the end of the chat.
+  Future<bool> loadNewer() async {
+    if (!canLoadNewer) return false;
+    final fromMessageId = latestServerMessageId(_allMessages);
+    final requestGeneration = _historyWindowGeneration;
+    _isLoadingNewer = true;
+    _newerHistoryDeletedMessageIds.clear();
+    try {
+      final response = await _client.query({
+        '@type': 'getChatHistory',
+        'chat_id': chatId,
+        'from_message_id': fromMessageId,
+        'offset': -30,
+        'limit': 31,
+        'only_local': false,
+      });
+      if (_chatOpenWorkIsStale ||
+          requestGeneration != _historyWindowGeneration) {
+        return false;
+      }
+      final parsed =
+          (response.objects('messages') ?? const <Map<String, dynamic>>[])
+              .map(TDParse.message)
+              .whereType<ChatMessage>()
+              .where(
+                (message) =>
+                    !_newerHistoryDeletedMessageIds.contains(message.id),
+              )
+              .toList();
+      final newestId = latestServerMessageId(parsed);
+      if (newestId <= fromMessageId) return false;
+      _historyReachesLatest =
+          _knownLatestMessageId > 0 && newestId >= _knownLatestMessageId;
+      _knownLatestMessageId = math.max(_knownLatestMessageId, newestId);
+      _merge(parsed);
+      _resolveRichMessagesIfNeeded(parsed);
+      _resolveSendersIfNeeded(parsed);
+      _resolveRepliesIfNeeded(parsed);
+      _resolveForwardsIfNeeded(parsed);
+      _resolveServiceUsersIfNeeded(parsed);
+      return true;
+    } catch (error) {
+      if (!_chatOpenWorkIsStale &&
+          requestGeneration == _historyWindowGeneration &&
+          _markPeerRestricted(error)) {
+        notifyListeners();
+      }
+      return false;
+    } finally {
+      _isLoadingNewer = false;
+      _newerHistoryDeletedMessageIds.clear();
+    }
+  }
+
+  /// Called only after the reader reaches the actual latest edge. Unlike an
+  /// explicit jump-to-latest, this keeps every paged message and its geometry.
+  void resumeLatestHistoryIfLoaded() {
+    if (!anchoredHistory || !_historyReachesLatest) return;
+    anchoredHistory = false;
+    _historyAnchorMessageId = null;
+    notifyListeners();
   }
 
   /// Prevents an in-flight latest-history response from replacing the current
@@ -5155,6 +5252,9 @@ class ChatViewModel extends ChangeNotifier {
         if (update.boolean('is_permanent') != true) return;
         final deletedIds = update.int64Array('message_ids') ?? const <int>[];
         ++_chatReadStateRevision;
+        if (_isLoadingNewer) {
+          _newerHistoryDeletedMessageIds.addAll(deletedIds);
+        }
         if (_latestHistoryLoadInFlight) {
           _latestHistoryDeletedMessageIds.addAll(deletedIds);
           for (final messageId in deletedIds) {
@@ -6176,6 +6276,8 @@ class ChatViewModel extends ChangeNotifier {
     if (targets.isEmpty) return;
     for (final target in targets) {
       target.text = text;
+      target.textQuoteSource = text;
+      target.textQuoteSourceEntities = entities ?? target.textEntities;
       if (entities != null) target.textEntities = entities;
       if (customEmoji != null) target.customEmoji = customEmoji;
       if (updateLinkPreview) target.linkPreview = linkPreview;
