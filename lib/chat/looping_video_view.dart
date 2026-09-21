@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../components/photo_avatar.dart';
+import '../media/inline_video_motion_guard.dart';
 import '../media/looping_media_playback.dart';
 import '../media/video_view_compatibility.dart';
 import '../tdlib/td_client.dart';
@@ -326,15 +327,18 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
             showProgress: widget.showDownloadProgress,
           ),
         if (controller != null && controller.value.isInitialized)
-          FittedBox(
-            fit: widget.fit,
-            child: SizedBox(
-              width: controller.value.size.width,
-              height: controller.value.size.height,
-              // Inline previews have no controls of their own. Keeping the
-              // native view out of hit testing lets the enclosing message
-              // gesture open fullscreen playback on direct-surface devices.
-              child: IgnorePointer(child: VideoPlayer(controller)),
+          InlineVideoMotionGuard(
+            viewType: controller.viewType,
+            child: FittedBox(
+              fit: widget.fit,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                // Inline previews have no controls of their own. Keeping the
+                // native view out of hit testing lets the enclosing message
+                // gesture open fullscreen playback on direct-surface devices.
+                child: IgnorePointer(child: VideoPlayer(controller)),
+              ),
             ),
           ),
       ],
