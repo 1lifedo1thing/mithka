@@ -975,6 +975,7 @@
     <string name="chatListMarkUnread">Als ungelesen markieren</string>
     <string name="chatListNoChats">Noch keine Chats</string>
     <string name="chatListScanQrCode">QR-Code scannen</string>
+    <string name="chatListUnarchive">Archivierung aufheben</string>
     <string name="chatListUnpin">Lösen</string>
     <string name="chatLoadingTopics">Themen werden geladen</string>
     <string name="chatMeLabel">Ich</string>

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chats/archived_chats_view.dart';
@@ -13,6 +14,86 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('macOS archive rows use secondary click without a swipe tray', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({});
+    final theme = ThemeController(await SharedPreferences.getInstance());
+    addTearDown(theme.dispose);
+    final chat = ChatSummary(
+      id: 12,
+      title: 'Archived group',
+      lastMessage: 'A message',
+      lastMessageId: 11,
+      date: 1,
+      unreadCount: 0,
+      order: 1,
+      isMuted: false,
+    );
+    var selections = 0;
+    var unarchives = 0;
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ThemeController>.value(
+        value: theme,
+        child: MaterialApp(
+          home: ArchivedChatsView(
+            chats: [chat],
+            onChatSelected: (_) => selections++,
+            onUnarchive: (_) => unarchives++,
+          ),
+        ),
+      ),
+    );
+    final row = find.byType(ChatRowView);
+    final before = tester.getTopLeft(row);
+    expect(
+      tester.getSize(row).height,
+      AppMetric.chatListRowHeight(TargetPlatform.macOS),
+    );
+    expect(find.byKey(const ValueKey('archived-chat-unarchive')), findsNothing);
+    for (final kind in [
+      PointerDeviceKind.mouse,
+      PointerDeviceKind.trackpad,
+      PointerDeviceKind.touch,
+    ]) {
+      final drag = await tester.startGesture(tester.getCenter(row), kind: kind);
+      await drag.moveBy(const Offset(-130, 0));
+      await drag.up();
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(row), before);
+      expect(
+        find.byKey(const ValueKey('archived-chat-unarchive')),
+        findsNothing,
+      );
+    }
+    expect(unarchives, 0);
+    await tester.tap(row);
+    await tester.pump();
+    expect(selections, 1);
+
+    final secondary = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await secondary.down(tester.getCenter(row));
+    await secondary.up();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('desktop-row-action-menu')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('desktop-row-action-unarchive')),
+    );
+    await tester.pumpAndSettle();
+    expect(unarchives, 1);
+    expect(selections, 1);
+    expect(find.byKey(const ValueKey('desktop-row-action-menu')), findsNothing);
+    expect(tester.takeException(), isNull);
+    debugDefaultTargetPlatformOverride = null;
+  });
   testWidgets('group assistant row keeps badge on icon and metadata at right', (
     tester,
   ) async {
@@ -253,8 +334,16 @@ void main() {
       ),
     );
 
+    expect(find.byKey(const ValueKey('archived-chat-unarchive')), findsNothing);
+    final rowHeight = tester.getSize(find.byType(ChatRowView)).height;
     await tester.drag(find.text('Archived group'), const Offset(-100, 0));
     await tester.pump();
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('archived-chat-unarchive')))
+          .height,
+      rowHeight,
+    );
     await tester.tap(find.byKey(const ValueKey('archived-chat-unarchive')));
     expect(unarchived, isTrue);
   });

@@ -974,6 +974,7 @@
     <string name="chatListMarkUnread">未読にする</string>
     <string name="chatListNoChats">チャットはまだありません</string>
     <string name="chatListScanQrCode">QRコードをスキャン</string>
+    <string name="chatListUnarchive">アーカイブを解除</string>
     <string name="chatListUnpin">ピン留めを解除</string>
     <string name="chatLoadingTopics">トピックを読み込み中</string>
     <string name="chatMeLabel">自分</string>
