@@ -51,7 +51,10 @@ void main() {
       'void _updateFileInfo',
     );
 
-    expect(backgroundDownload, contains('_startContinuousDownload(0)'));
+    expect(
+      backgroundDownload,
+      contains('_startContinuousDownload(_playbackReadOffset)'),
+    );
   });
 
   test('sparse local files are completion-gated before file playback', () {
