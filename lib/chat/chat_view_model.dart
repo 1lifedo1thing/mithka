@@ -36,6 +36,7 @@ import 'forward_options.dart';
 import 'gif_item.dart';
 import 'message_reaction_availability.dart';
 import 'message_send_options.dart';
+import 'message_text_quote.dart';
 import 'outgoing_attachment.dart';
 import 'poll_composer_view.dart';
 import 'quick_reaction_choice.dart';
@@ -432,13 +433,30 @@ class ChatViewModel extends ChangeNotifier {
   String _draftFormattedText = '';
   List<Map<String, dynamic>> _draftFormattedEntities = const [];
   final List<_DraftMention> _draftMentions = [];
-  ChatMessage? replyTo;
+  ChatMessage? _replyTo;
+  MessageTextQuote? _replyQuote;
+  ChatMessage? get replyTo => _replyTo;
+  set replyTo(ChatMessage? message) {
+    _replyTo = message;
+    _replyQuote = null;
+  }
+
+  MessageTextQuote? get replyQuote => _replyQuote;
+  Map<String, dynamic>? get replyToInput => replyTo == null
+      ? null
+      : {
+          '@type': 'inputMessageReplyToMessage',
+          'message_id': replyTo!.id,
+          if (!isSecretChat && _replyQuote != null)
+            'quote': _replyQuote!.toInputJson(),
+        };
   ChatMessage? editingMessage;
   String? _draftBeforeEditing;
   String _formattedDraftBeforeEditing = '';
   List<Map<String, dynamic>> _entitiesBeforeEditing = const [];
   List<_DraftMention> _mentionsBeforeEditing = const [];
   ChatMessage? _replyBeforeEditing;
+  MessageTextQuote? _replyQuoteBeforeEditing;
   List<MessageSenderOption> availableMessageSenders = const [];
   MessageSenderOption? selectedMessageSender;
   Map<String, dynamic>? _messageSenderFromChat;
@@ -1178,6 +1196,7 @@ class ChatViewModel extends ChangeNotifier {
     ];
     _mentionsBeforeEditing = List<_DraftMention>.from(_draftMentions);
     _replyBeforeEditing = replyTo;
+    _replyQuoteBeforeEditing = _replyQuote;
     editingMessage = message;
     replyTo = null;
     draft = message.text;
@@ -1229,12 +1248,14 @@ class ChatViewModel extends ChangeNotifier {
         ..clear()
         ..addAll(_mentionsBeforeEditing);
       replyTo = _replyBeforeEditing;
+      _replyQuote = _replyQuoteBeforeEditing;
     }
     _draftBeforeEditing = null;
     _formattedDraftBeforeEditing = '';
     _entitiesBeforeEditing = const [];
     _mentionsBeforeEditing = const [];
     _replyBeforeEditing = null;
+    _replyQuoteBeforeEditing = null;
     if (scheduleDraftSave) _scheduleDraftSave();
     if (notify) notifyListeners();
   }
@@ -1455,10 +1476,7 @@ class ChatViewModel extends ChangeNotifier {
       },
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
@@ -1579,10 +1597,7 @@ class ChatViewModel extends ChangeNotifier {
       },
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
@@ -1617,10 +1632,7 @@ class ChatViewModel extends ChangeNotifier {
           : richMessageInputContent(blocks),
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     replyTo = null;
     final pendingMessage = await _client.query(
@@ -1740,10 +1752,7 @@ class ChatViewModel extends ChangeNotifier {
       'input_message_content': {'@type': 'inputMessageDice', 'emoji': emoji},
     };
     if (replyTo != null) {
-      request['reply_to'] = {
-        '@type': 'inputMessageReplyToMessage',
-        'message_id': replyTo!.id,
-      };
+      request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
@@ -1757,12 +1766,30 @@ class ChatViewModel extends ChangeNotifier {
   ///
   /// The reply metadata already addresses the sender. Mentions remain an
   /// explicit action so replying cannot accidentally invoke inline-bot search.
-  void setReply(ChatMessage? message) {
+  void setReply(ChatMessage? message, {MessageTextQuote? quote}) {
     if (editingMessage != null) {
       _restoreComposerAfterMessageEdit(notify: false);
     }
     replyTo = message;
+    if (message != null && !isSecretChat && quote != null) {
+      _replyQuote = quote;
+    }
     notifyListeners();
+  }
+
+  bool get canQuoteText =>
+      canSendMessages && !isSecretChat && !hasProtectedContent;
+
+  Future<int> messageQuoteLengthLimit() async {
+    try {
+      final option = await _client.query({
+        '@type': 'getOption',
+        'name': 'message_reply_quote_length_max',
+      });
+      final limit = option.integer('value');
+      if (limit != null && limit > 0) return limit;
+    } catch (_) {}
+    return defaultMessageQuoteLengthLimit;
   }
 
   List<Map<String, dynamic>> _mentionEntitiesFor(
@@ -1813,15 +1840,12 @@ class ChatViewModel extends ChangeNotifier {
       ...captionEntities,
       ..._mentionEntitiesFor(caption, captionEntities),
     ];
-    final reply = replyTo;
     final requests = buildAttachmentSendRequests(
       chatId: chatId,
       attachments: attachments,
       caption: caption,
       captionEntities: allEntities,
-      replyTo: reply == null
-          ? null
-          : {'@type': 'inputMessageReplyToMessage', 'message_id': reply.id},
+      replyTo: replyToInput,
       sendConfiguration: sendConfiguration,
     );
     replyTo = null;
@@ -6252,6 +6276,8 @@ class ChatViewModel extends ChangeNotifier {
     if (targets.isEmpty) return;
     for (final target in targets) {
       target.text = text;
+      target.textQuoteSource = text;
+      target.textQuoteSourceEntities = entities ?? target.textEntities;
       if (entities != null) target.textEntities = entities;
       if (customEmoji != null) target.customEmoji = customEmoji;
       if (updateLinkPreview) target.linkPreview = linkPreview;

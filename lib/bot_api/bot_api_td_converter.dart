@@ -892,6 +892,7 @@ class BotApiTdConverter {
   Map<String, dynamic>? _replyTo(Map<String, dynamic> source) {
     final reply = _map(source['reply_to_message']);
     final id = _int(reply?['message_id']);
+    final quote = _map(source['quote']);
     if (id == null) return null;
     return {
       '@type': 'messageReplyToMessage',
@@ -900,7 +901,14 @@ class BotApiTdConverter {
           _int((_map(source['chat']))?['id']) ??
           0,
       'message_id': id,
-      'quote': null,
+      'quote': quote == null
+          ? null
+          : {
+              '@type': 'textQuote',
+              'text': formattedText(quote['text'], quote['entities']),
+              'position': _int(quote['position']) ?? 0,
+              'is_manual': quote['is_manual'] == true,
+            },
       'origin': null,
       'origin_send_date': 0,
       'content': null,

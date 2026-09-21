@@ -109,8 +109,10 @@ import 'media_spoiler.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import 'message_bubble_repository_view.dart';
+import 'message_quote_selection_dialog.dart';
 import 'message_reaction_availability.dart';
 import 'message_replies_sheet.dart';
+import 'message_text_quote.dart';
 import 'message_translation_cache.dart';
 import 'music_player_controller.dart';
 import 'openai_compatible_unread_summary_provider.dart';
@@ -4901,6 +4903,8 @@ class _ChatViewState extends State<ChatView> {
         setState(() => _showOriginalTranslationMessageIds.remove(message.id));
       case MessageAction.reply:
         _vm.setReply(message);
+      case MessageAction.quote:
+        await _quoteMessageText(message);
       case MessageAction.replies:
         await _openMessageComments(message);
       case MessageAction.forward:
@@ -9698,6 +9702,36 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  Future<void> _quoteMessageText(ChatMessage message) async {
+    if (!_vm.canQuoteText || !canQuoteMessageText(message)) return;
+    final limit = await _vm.messageQuoteLengthLimit();
+    if (!mounted || !_vm.canQuoteText) return;
+    final quote = await showGeneralDialog<MessageTextQuote>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: AppStringKeys.confirmCancel.l10n(context),
+      barrierColor: Colors.black.withValues(alpha: 0.52),
+      transitionDuration: AppMotion.duration(context, AppMotion.responsive),
+      transitionBuilder: AppMotion.dialogTransition,
+      pageBuilder: (_, _, _) =>
+          MessageQuoteSelectionDialog(message: message, maxLength: limit),
+    );
+    if (!mounted || quote == null || !_vm.canQuoteText) return;
+    final current = _vm.messages.where((m) => m.id == message.id).firstOrNull;
+    if (current == null) return;
+    final validated = quoteMessageRange(
+      current,
+      start: quote.position,
+      end: quote.position + quote.text.length,
+      maxLength: limit,
+    );
+    if (validated == null || validated.text != quote.text) {
+      showToast(context, AppStringKeys.topicPostContentActionFailed);
+      return;
+    }
+    _vm.setReply(current, quote: validated);
+  }
+
   Future<void> _toggleMessageReaction(
     ChatMessage message,
     MessageReaction reaction,
@@ -9735,6 +9769,7 @@ class _ChatViewState extends State<ChatView> {
       isPinned: _vm.pinnedMessage?.id == _actionTarget!.id,
       allowForwarding: _vm.canForwardContent,
       allowTranslation: _hasAvailableTranslationOption,
+      allowQuote: _vm.canQuoteText,
       allowSuggestedPostOffer:
           _vm.isDirectMessagesGroup && !_vm.isAdministeredDirectMessagesGroup,
       source: _actionSource,

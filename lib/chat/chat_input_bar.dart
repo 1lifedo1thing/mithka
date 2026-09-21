@@ -3110,14 +3110,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final page = _inlineBotResults;
     if (page == null || page.queryId == 0 || result.id.isEmpty) return;
     try {
-      final reply = vm.replyTo;
       await _botPlatform.sendInlineResult(
         chatId: vm.chatId,
         queryId: page.queryId,
         resultId: result.id,
-        replyTo: reply == null
-            ? null
-            : {'@type': 'inputMessageReplyToMessage', 'message_id': reply.id},
+        replyTo: vm.replyToInput,
       );
       if (!mounted) return;
       vm.setReply(null);
@@ -3518,7 +3515,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
         : (m.senderName?.isNotEmpty ?? false)
         ? m.senderName!
         : vm.peerTitle;
-    return '$name:${_replyPreview(m)}';
+    return '$name:${vm.replyQuote?.text ?? _replyPreview(m)}';
   }
 
   String _replyPreview(ChatMessage m) {
