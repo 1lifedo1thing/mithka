@@ -313,6 +313,7 @@ class MessageActionMenu extends StatelessWidget {
     this.allowForwarding = true,
     this.allowTranslation = true,
     this.allowQuote = false,
+    this.hasSelectedQuote = false,
     this.allowSuggestedPostOffer = false,
     this.source = MessageActionSource.normal,
     this.showingOriginalTranslation = false,
@@ -324,6 +325,7 @@ class MessageActionMenu extends StatelessWidget {
   final bool allowForwarding;
   final bool allowTranslation;
   final bool allowQuote;
+  final bool hasSelectedQuote;
   final bool allowSuggestedPostOffer;
   final MessageActionSource source;
   final bool showingOriginalTranslation;
@@ -482,8 +484,13 @@ class MessageActionMenu extends StatelessWidget {
     if (allowSuggestedPostOffer && !message.isService && _isEditableMessage) {
       result.add(MessageAction.suggestOffer);
     }
-    result.add(MessageAction.reply);
-    if (allowQuote && canQuoteMessageText(message)) {
+    final canQuote = allowQuote && canQuoteMessageText(message);
+    result.add(
+      isDesktop && canQuote && hasSelectedQuote
+          ? MessageAction.quote
+          : MessageAction.reply,
+    );
+    if (!isDesktop && canQuote) {
       result.add(MessageAction.quote);
     }
     if (message.hasActualReplies) {

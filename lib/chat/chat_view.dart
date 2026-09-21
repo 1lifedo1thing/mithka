@@ -1176,6 +1176,9 @@ class _ChatViewState extends State<ChatView> {
   bool _modelDirtyWhileInactive = false;
   bool _reactivationSyncScheduled = false;
   ChatMessage? _actionTarget;
+  int? _desktopQuoteMessageId;
+  MessageTextQuote? _desktopQuote;
+  MessageTextQuote? _actionQuote;
   Rect? _actionRect; // bounds in the action-overlay Stack's coordinate space
   final GlobalKey _actionOverlayKey = GlobalKey();
   GlobalKey<SelectionAreaState>? _mobileTextSelectionAreaKey;
@@ -4220,6 +4223,7 @@ class _ChatViewState extends State<ChatView> {
       showRepeat: _vm.canForwardContent && _isRepeatTail(messageIndex),
       onRepeat: () => _vm.repeatMessage(message),
       onLongPress: _isSelecting ? null : _showActionMenuForMessage,
+      onDesktopQuoteChanged: _handleDesktopQuoteChanged,
       mobileTextSelectionAreaKey: mobileSelectionKey,
       onMobileTextSelectionChanged: _handleMobileTextSelectionChanged,
       onMobileTextSelectionDisposed: mobileSelectionKey == null
@@ -4882,8 +4886,10 @@ class _ChatViewState extends State<ChatView> {
   }
 
   Future<void> _perform(MessageAction action, ChatMessage message) async {
+    final selectedQuote = _actionQuote;
     setState(() {
       _actionTarget = null;
+      _actionQuote = null;
       _actionRect = null;
       _clearMobileTextSelectionState();
       _actionSource = MessageActionSource.normal;
@@ -4902,9 +4908,13 @@ class _ChatViewState extends State<ChatView> {
       case MessageAction.displayTranslation:
         setState(() => _showOriginalTranslationMessageIds.remove(message.id));
       case MessageAction.reply:
-        _vm.setReply(message);
+        if (selectedQuote != null && _vm.canQuoteText) {
+          await _quoteMessageText(message, selectedQuote: selectedQuote);
+        } else {
+          _vm.setReply(message);
+        }
       case MessageAction.quote:
-        await _quoteMessageText(message);
+        await _quoteMessageText(message, selectedQuote: selectedQuote);
       case MessageAction.replies:
         await _openMessageComments(message);
       case MessageAction.forward:
@@ -9293,6 +9303,20 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
+  void _handleDesktopQuoteChanged(
+    ChatMessage message,
+    MessageTextQuote? quote,
+  ) {
+    if (!mounted) return;
+    if (quote != null) {
+      _desktopQuoteMessageId = message.id;
+      _desktopQuote = quote;
+    } else if (_desktopQuoteMessageId == message.id) {
+      _desktopQuoteMessageId = null;
+      _desktopQuote = null;
+    }
+  }
+
   void _showActionMenuForMessage(
     ChatMessage message,
     Rect? rect, [
@@ -9326,6 +9350,12 @@ class _ChatViewState extends State<ChatView> {
     final oldSelectionState = _mobileTextSelectionAreaKey?.currentState;
     setState(() {
       _actionTarget = message;
+      // Keep the quote while the menu takes focus and clears Flutter's live
+      // selection. Each newly opened menu replaces this snapshot.
+      _actionQuote =
+          desktop && _vm.canQuoteText && _desktopQuoteMessageId == message.id
+          ? _desktopQuote
+          : null;
       _actionRect = overlayRect;
       _mobileTextSelectionAreaKey = enableMobileTextSelection
           ? GlobalKey<SelectionAreaState>()
@@ -9636,6 +9666,7 @@ class _ChatViewState extends State<ChatView> {
       onEditCaption: (message) => unawaited(_editMessageText(message)),
       onOpenComments: _openMessageComments,
       onLongPress: _showActionMenuForMessage,
+      onDesktopQuoteChanged: _handleDesktopQuoteChanged,
       mobileTextSelectionAreaKey: mobileSelectionKey,
       onMobileTextSelectionChanged: _handleMobileTextSelectionChanged,
       onMobileTextSelectionDisposed:
@@ -9702,20 +9733,31 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
-  Future<void> _quoteMessageText(ChatMessage message) async {
+  Future<void> _quoteMessageText(
+    ChatMessage message, {
+    MessageTextQuote? selectedQuote,
+  }) async {
     if (!_vm.canQuoteText || !canQuoteMessageText(message)) return;
     final limit = await _vm.messageQuoteLengthLimit();
     if (!mounted || !_vm.canQuoteText) return;
-    final quote = await showGeneralDialog<MessageTextQuote>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: AppStringKeys.confirmCancel.l10n(context),
-      barrierColor: Colors.black.withValues(alpha: 0.52),
-      transitionDuration: AppMotion.duration(context, AppMotion.responsive),
-      transitionBuilder: AppMotion.dialogTransition,
-      pageBuilder: (_, _, _) =>
-          MessageQuoteSelectionDialog(message: message, maxLength: limit),
-    );
+    // Desktop quotes are chosen directly in the transcript, not in a second
+    // window. Touch keeps the explicit quote-selection flow.
+    if (selectedQuote == null &&
+        isDesktopTargetPlatform(Theme.of(context).platform)) {
+      return;
+    }
+    final quote =
+        selectedQuote ??
+        await showGeneralDialog<MessageTextQuote>(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: AppStringKeys.confirmCancel.l10n(context),
+          barrierColor: Colors.black.withValues(alpha: 0.52),
+          transitionDuration: AppMotion.duration(context, AppMotion.responsive),
+          transitionBuilder: AppMotion.dialogTransition,
+          pageBuilder: (_, _, _) =>
+              MessageQuoteSelectionDialog(message: message, maxLength: limit),
+        );
     if (!mounted || quote == null || !_vm.canQuoteText) return;
     final current = _vm.messages.where((m) => m.id == message.id).firstOrNull;
     if (current == null) return;
@@ -9770,6 +9812,7 @@ class _ChatViewState extends State<ChatView> {
       allowForwarding: _vm.canForwardContent,
       allowTranslation: _hasAvailableTranslationOption,
       allowQuote: _vm.canQuoteText,
+      hasSelectedQuote: _actionQuote != null,
       allowSuggestedPostOffer:
           _vm.isDirectMessagesGroup && !_vm.isAdministeredDirectMessagesGroup,
       source: _actionSource,
