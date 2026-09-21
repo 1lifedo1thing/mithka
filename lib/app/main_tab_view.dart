@@ -939,11 +939,8 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
               : AppStringKeys.themeModeDark,
         ),
         darkMode: Theme.of(context).brightness == Brightness.dark,
-        onToggleThemeMode: () {
-          theme.mode = Theme.of(context).brightness == Brightness.dark
-              ? AppearanceMode.light
-              : AppearanceMode.dark;
-        },
+        onToggleThemeMode: () =>
+            theme.toggleDayNight(Theme.of(context).brightness),
         showAccountPhone: !theme.hideSidebarPhone,
         applicationMenuLabel: AppStrings.t(AppStringKeys.chatMenu),
         languageMenuLabel: AppStrings.t(AppStringKeys.languageMithkaLanguage),

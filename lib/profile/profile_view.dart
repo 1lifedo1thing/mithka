@@ -731,14 +731,9 @@ class _ProfileViewState extends State<ProfileView> {
   Widget _bottomBar() {
     final c = context.colors;
     final theme = context.watch<ThemeController>();
-    // Derive from the EFFECTIVE brightness, not just the stored mode: when mode
-    // is `system` the rendered brightness comes from the OS, so a plain
-    // `mode==dark` check would mislabel the button and the toggle could resolve
-    // to the same brightness (a visible no-op after the first tap).
-    final isDark =
-        theme.mode == AppearanceMode.dark ||
-        (theme.mode == AppearanceMode.system &&
-            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+    // The OS value can already have changed while the rendered theme is still
+    // transitioning. Label the action relative to what is actually on screen.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
         color: c.navBar,
@@ -764,11 +759,7 @@ class _ProfileViewState extends State<ProfileView> {
               const SizedBox(width: 24),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                // Flip between EXPLICIT light/dark every tap (never `system`,
-                // which could equal the current brightness and do nothing).
-                onTap: () => theme.mode = isDark
-                    ? AppearanceMode.light
-                    : AppearanceMode.dark,
+                onTap: () => theme.toggleDayNight(Theme.of(context).brightness),
                 child: _barItem(
                   isDark ? HeroAppIcons.sun : HeroAppIcons.moon,
                   isDark
