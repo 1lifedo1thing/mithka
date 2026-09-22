@@ -42,6 +42,7 @@ import 'animated_sticker_view.dart';
 import 'bot_button_presentation.dart';
 import 'chat_appearance_preview.dart';
 import 'custom_emoji.dart';
+import 'desktop_message_quote_source.dart';
 import 'file_detail_view.dart';
 import 'inline_video_autoplay.dart';
 import 'link_handler.dart';
@@ -84,6 +85,7 @@ class MessageBubble extends StatefulWidget {
     this.mobileTextSelectionAreaKey,
     this.onMobileTextSelectionChanged,
     this.onMobileTextSelectionDisposed,
+    this.onDesktopQuoteChanged,
     this.onReply,
     this.onAvatarTap,
     this.onAvatarLongPress,
@@ -155,6 +157,7 @@ class MessageBubble extends StatefulWidget {
   final GlobalKey<SelectionAreaState>? mobileTextSelectionAreaKey;
   final ValueChanged<SelectedContent?>? onMobileTextSelectionChanged;
   final VoidCallback? onMobileTextSelectionDisposed;
+  final DesktopQuoteChanged? onDesktopQuoteChanged;
   final ValueChanged<ChatMessage>? onReply;
   final ValueChanged<ChatMessage>? onAvatarTap;
   final ValueChanged<ChatMessage>? onAvatarLongPress;
@@ -257,6 +260,30 @@ class _MessageBubbleState extends State<MessageBubble>
       onSelectionChanged: widget.onMobileTextSelectionChanged,
       onDisposed: widget.onMobileTextSelectionDisposed ?? () {},
       child: child,
+    );
+  }
+
+  Widget _desktopQuoteSource(ChatMessage source, String text, Widget child) {
+    final selectable = DesktopMessageQuoteSource(
+      key: ValueKey((source.id, text)),
+      message: source,
+      displayedText: text,
+      onChanged: widget.onDesktopQuoteChanged,
+      child: child,
+    );
+    if (source.id == message.id ||
+        !isDesktopTargetPlatform(Theme.of(context).platform)) {
+      return selectable;
+    }
+    // A grouped-file caption can belong to a message other than the row's
+    // first item. Its context menu must address that same quote source.
+    return Listener(
+      onPointerUp: (event) {
+        if (_desktopSecondaryPointer == event.pointer) {
+          _handleGroupedFileSecondaryTap(source, event.position);
+        }
+      },
+      child: selectable,
     );
   }
 
@@ -2048,14 +2075,22 @@ class _MessageBubbleState extends State<MessageBubble>
           ),
         )
       else
-        ..._richTextWidgets(
+        _desktopQuoteSource(
+          source,
           displayText,
-          baseColor,
-          linkColor,
-          outgoing,
-          false,
-          displayEntities,
-          textFontSize,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: _richTextWidgets(
+              displayText,
+              baseColor,
+              linkColor,
+              outgoing,
+              false,
+              displayEntities,
+              textFontSize,
+            ),
+          ),
         ),
       if (displayRichBlocks.isNotEmpty) ...[
         if (displayText.isNotEmpty) const SizedBox(height: 8),
@@ -5217,16 +5252,20 @@ class _MessageBubbleState extends State<MessageBubble>
                       ),
                     )
                   else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: _richTextWidgets(
-                        displayCaption,
-                        baseColor,
-                        linkColor,
-                        outgoing,
-                        false,
-                        captionEntities,
+                    _desktopQuoteSource(
+                      message,
+                      displayCaption,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: _richTextWidgets(
+                          displayCaption,
+                          baseColor,
+                          linkColor,
+                          outgoing,
+                          false,
+                          captionEntities,
+                        ),
                       ),
                     ),
                   if (_showsTranslationBlockFor(message)) ...[
@@ -5819,19 +5858,23 @@ class _MessageBubbleState extends State<MessageBubble>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    KeyedSubtree(
-                      key: replacesOriginal
-                          ? const ValueKey('messageTranslatedOnlyText')
-                          : null,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _richTextWidgets(
-                          displayCaption,
-                          displayCaptionColor,
-                          displayCaptionLink,
-                          outgoing,
-                          false,
-                          displayCaptionEntities,
+                    _desktopQuoteSource(
+                      captionSource,
+                      replacesOriginal ? '' : displayCaption,
+                      KeyedSubtree(
+                        key: replacesOriginal
+                            ? const ValueKey('messageTranslatedOnlyText')
+                            : null,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _richTextWidgets(
+                            displayCaption,
+                            displayCaptionColor,
+                            displayCaptionLink,
+                            outgoing,
+                            false,
+                            displayCaptionEntities,
+                          ),
                         ),
                       ),
                     ),

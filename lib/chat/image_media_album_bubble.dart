@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:provider/provider.dart';
@@ -16,6 +17,7 @@ import '../theme/message_name_colors.dart';
 import '../theme/telegram_cloud_theme.dart';
 import '../theme/theme_controller.dart';
 import 'chat_appearance_preview.dart';
+import 'desktop_message_quote_source.dart';
 import 'media_album_layout.dart';
 import 'media_preview_geometry.dart';
 import 'media_spoiler.dart';
@@ -67,6 +69,7 @@ class ImageMediaAlbumBubble extends StatelessWidget {
     this.mobileTextSelectionAreaKey,
     this.onMobileTextSelectionChanged,
     this.onMobileTextSelectionDisposed,
+    this.onDesktopQuoteChanged,
     this.onToggleSelection,
     this.onBotCommandTap,
     this.onHashtagTap,
@@ -110,6 +113,7 @@ class ImageMediaAlbumBubble extends StatelessWidget {
   final GlobalKey<SelectionAreaState>? mobileTextSelectionAreaKey;
   final ValueChanged<SelectedContent?>? onMobileTextSelectionChanged;
   final VoidCallback? onMobileTextSelectionDisposed;
+  final DesktopQuoteChanged? onDesktopQuoteChanged;
   final ValueChanged<ChatMessage>? onToggleSelection;
   final ValueChanged<String>? onBotCommandTap;
   final ValueChanged<String>? onHashtagTap;
@@ -443,12 +447,23 @@ class ImageMediaAlbumBubble extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _captionText(
-                                  captionText,
-                                  captionEntities,
-                                  displayedTextColor,
-                                  displayedLinkColor,
-                                  replacesOriginal: replacesOriginal,
+                                DesktopMessageQuoteSource(
+                                  key: ValueKey((
+                                    captionMessage.id,
+                                    captionText,
+                                  )),
+                                  message: captionMessage,
+                                  displayedText: replacesOriginal
+                                      ? ''
+                                      : captionText,
+                                  onChanged: onDesktopQuoteChanged,
+                                  child: _captionText(
+                                    captionText,
+                                    captionEntities,
+                                    displayedTextColor,
+                                    displayedLinkColor,
+                                    replacesOriginal: replacesOriginal,
+                                  ),
                                 ),
                                 if (showsTranslationBlock) ...[
                                   const SizedBox(height: 7),
@@ -462,6 +477,32 @@ class ImageMediaAlbumBubble extends StatelessWidget {
                                 ],
                               ],
                             );
+                            if (!selecting &&
+                                isDesktopTargetPlatform(
+                                  Theme.of(context).platform,
+                                )) {
+                              return Listener(
+                                onPointerDown: (event) {
+                                  if (event.buttons == kSecondaryMouseButton) {
+                                    onLongPress?.call(
+                                      captionMessage,
+                                      Rect.fromLTWH(
+                                        event.position.dx,
+                                        event.position.dy,
+                                        0,
+                                        0,
+                                      ),
+                                      MessageActionSource.normal,
+                                    );
+                                  }
+                                },
+                                child: SelectionArea(
+                                  contextMenuBuilder: (_, _) =>
+                                      const SizedBox.shrink(),
+                                  child: selectionContent,
+                                ),
+                              );
+                            }
                             final selectionKey = mobileTextSelectionAreaKey;
                             if (selectionKey == null) return selectionContent;
                             return MobileMessageTextSelectionArea(
