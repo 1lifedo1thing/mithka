@@ -830,8 +830,13 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun registerPlugins(flutterEngine: FlutterEngine) {
+        // Keep per-plugin isolation while matching the generated production registry.
+        // test/android_plugin_registration_test.dart guards dependency drift.
         val pluginClasses = buildList {
+            add("com.llfbandit.app_links.AppLinksPlugin")
             add("com.ryanheise.audio_session.AudioSessionPlugin")
+            add("io.flutter.plugins.camerax.CameraAndroidCameraxPlugin")
+            add("com.fluttercavalry.fc_native_video_thumbnail.FcNativeVideoThumbnailPlugin")
             add("com.mr.flutter.plugin.filepicker.FilePickerPlugin")
             add("io.flutter.plugins.firebase.analytics.FlutterFirebaseAnalyticsPlugin")
             add("io.flutter.plugins.firebase.core.FlutterFirebaseCorePlugin")
@@ -844,16 +849,21 @@ class MainActivity : FlutterFragmentActivity() {
             add("io.flutter.plugins.imagepicker.ImagePickerPlugin")
             add("com.fluttercandies.photo_manager.PhotoManagerPlugin")
             add("com.github.dart_lang.jni.JniPlugin")
+            add("com.gurfdev.light_compressor_v2.LightCompressorPlugin")
             add("io.flutter.plugins.localauth.LocalAuthPlugin")
+            add("dev.steenbakker.mobile_scanner.MobileScannerPlugin")
             add("com.crazecoder.openfile.OpenFilePlugin")
             add("dev.fluttercommunity.plus.packageinfo.PackageInfoPlugin")
             add("io.flutter.plugins.pathprovider.PathProviderPlugin")
             add("com.baseflow.permissionhandler.PermissionHandlerPlugin")
+            add("com.llfbandit.record.RecordPlugin")
+            add("dev.fluttercommunity.plus.sensors.SensorsPlugin")
             add("io.sentry.flutter.SentryFlutterPlugin")
             add("io.flutter.plugins.sharedpreferences.SharedPreferencesPlugin")
             add("com.iebb.f_videoplayer_pip.FVideoPictureInPicturePlugin")
             add("io.flutter.plugins.urllauncher.UrlLauncherPlugin")
             add("io.flutter.plugins.videoplayer.VideoPlayerPlugin")
+            add("io.flutter.plugins.webviewflutter.WebViewFlutterPlugin")
         }
 
         for (className in pluginClasses) {
