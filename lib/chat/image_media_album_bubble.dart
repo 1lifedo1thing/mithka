@@ -569,6 +569,7 @@ class ImageMediaAlbumBubble extends StatelessWidget {
     entities: entities,
     style: TextStyle(fontSize: 15, height: 1.25, color: textColor),
     linkColor: linkColor,
+    underlineLinks: linkNeedsUnderline(body: textColor, link: linkColor),
     onBotCommandTap: onBotCommandTap,
     onHashtagTap: onHashtagTap,
     onMentionTap: onMentionTap,
