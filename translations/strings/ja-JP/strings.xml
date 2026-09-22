@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">モデルを手動入力</string>
-    <string name="aiInvalidEndpoint">選択した API 形式に一致する HTTPS URL を使用してください。HTTP は localhost でのみ使用できます。</string>
+    <string name="aiInvalidEndpoint">選択した API 形式のリクエストパスを含む完全な HTTPS API URL を入力してください。HTTP は localhost でのみ使用できます。</string>
     <string name="aiInvalidModel">モデル名と有効なコンテキストトークン数を入力してください。</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute、Apple オンデバイスモデル、保存済みサーバーモデルを翻訳または要約用に個別選択できます。</string>
     <string name="aiModelConfiguration">モデル設定</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API キー</string>
     <string name="aiServerApiKeyOptional">ローカルまたはキー不要のサーバーでは省略可能</string>
     <string name="aiServerEndpoint">API エンドポイント</string>
+    <string name="aiServerEndpointHelp">Base URL だけでなく、プロトコル、ホスト、リクエストパスを含む完全な API URL を入力してください。パスは自動補完されません。例：{value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">モデル</string>
     <string name="aiServerModelHint">モデル名</string>

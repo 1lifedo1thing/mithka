@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">Chat Completions OpenAI</string>
     <string name="aiEndpointStyleOpenAiResponses">Responses OpenAI</string>
     <string name="aiEnterModelManually">Saisir le modèle manuellement</string>
-    <string name="aiInvalidEndpoint">Utilisez une URL HTTPS correspondant au style d’API sélectionné. HTTP n’est autorisé que pour localhost.</string>
+    <string name="aiInvalidEndpoint">Saisissez l’URL HTTPS complète de l’API, avec le chemin de requête du style d’API sélectionné. HTTP n’est autorisé que pour localhost.</string>
     <string name="aiInvalidModel">Saisissez un modèle et un nombre valide de jetons de contexte.</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute, le modèle Apple sur l’appareil et les modèles serveur enregistrés peuvent être choisis séparément pour traduire ou résumer.</string>
     <string name="aiModelConfiguration">Configuration des modèles</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">Clé API</string>
     <string name="aiServerApiKeyOptional">Facultative pour les serveurs locaux ou sans clé</string>
     <string name="aiServerEndpoint">URL de l’API</string>
+    <string name="aiServerEndpointHelp">Saisissez l’URL complète de l’API, avec le protocole, l’hôte et le chemin de requête, pas seulement l’URL de base. Le chemin n’est pas complété automatiquement. Exemple : {value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">Modèle</string>
     <string name="aiServerModelHint">Nom du modèle</string>

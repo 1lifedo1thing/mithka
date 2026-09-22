@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">모델 직접 입력</string>
-    <string name="aiInvalidEndpoint">선택한 API 형식과 일치하는 HTTPS URL을 사용하세요. HTTP는 localhost에서만 허용됩니다.</string>
+    <string name="aiInvalidEndpoint">선택한 API 형식의 요청 경로를 포함한 전체 HTTPS API URL을 입력하세요. HTTP는 localhost에서만 허용됩니다.</string>
     <string name="aiInvalidModel">모델 이름과 올바른 컨텍스트 토큰 수를 입력하세요.</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute, Apple 온디바이스 모델 및 저장된 서버 모델을 번역이나 요약에 각각 선택할 수 있습니다.</string>
     <string name="aiModelConfiguration">모델 설정</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API 키</string>
     <string name="aiServerApiKeyOptional">로컬 또는 키가 필요 없는 서버에서는 선택 사항</string>
     <string name="aiServerEndpoint">API 엔드포인트</string>
+    <string name="aiServerEndpointHelp">Base URL만 입력하지 말고 프로토콜, 호스트, 요청 경로를 포함한 전체 API URL을 입력하세요. 경로는 자동으로 완성되지 않습니다. 예: {value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">모델</string>
     <string name="aiServerModelHint">모델 이름</string>

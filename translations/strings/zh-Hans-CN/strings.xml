@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">手动输入模型</string>
-    <string name="aiInvalidEndpoint">请使用与所选 API 格式匹配的 HTTPS 地址。只有 localhost 可使用 HTTP。</string>
+    <string name="aiInvalidEndpoint">请输入完整的 HTTPS API URL，包含所选 API 格式对应的请求路径。只有 localhost 可使用 HTTP。</string>
     <string name="aiInvalidModel">请输入模型名称和有效的上下文 Token 数量。</string>
     <string name="aiModelCandidatesDescription">Apple 私有云计算、Apple 本机模型和已保存的服务商模型均可分别用于翻译或总结。</string>
     <string name="aiModelConfiguration">模型配置</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API 密钥</string>
     <string name="aiServerApiKeyOptional">本地或无密钥服务器可不填</string>
     <string name="aiServerEndpoint">API 端点</string>
+    <string name="aiServerEndpointHelp">请输入完整 API URL，包含协议、域名和请求路径，不要只填 Base URL。路径不会自动补全。示例：{value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">模型</string>
     <string name="aiServerModelHint">模型名称</string>

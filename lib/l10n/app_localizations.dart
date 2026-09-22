@@ -325,6 +325,7 @@ abstract final class AppStringKeys {
   static const aiServerApiKey = 'aiServerApiKey';
   static const aiServerApiKeyOptional = 'aiServerApiKeyOptional';
   static const aiServerEndpoint = 'aiServerEndpoint';
+  static const aiServerEndpointHelp = 'aiServerEndpointHelp';
   static const aiServerEndpointHint = 'aiServerEndpointHint';
   static const aiServerModel = 'aiServerModel';
   static const aiServerModelHint = 'aiServerModelHint';
