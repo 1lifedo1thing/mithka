@@ -224,7 +224,31 @@ void main() {
       event.contexts.operatingSystem = SentryOperatingSystem(
         name: 'Android',
         version: '14',
+        rawDescription: 'PRIVATE',
+        kernelVersion: 'PRIVATE',
       );
+      final app = SentryApp.fromJson({
+        'app_identifier': 'ad.neko.mithka',
+        'app_version': '1.5.3',
+        'app_memory': 123456,
+        'device_app_hash': 'PRIVATE',
+        'view_names': ['PRIVATE'],
+        'future_sdk_field': 'PRIVATE',
+      });
+      event.contexts.app = app;
+      event.contexts.runtimes = [
+        SentryRuntime.fromJson({
+          'name': 'Dart',
+          'version': '3.12.2',
+          'raw_description': 'PRIVATE',
+          'future_sdk_field': 'PRIVATE',
+        }),
+      ];
+      event.contexts.gpu = SentryGpu.fromJson({
+        'name': 'Adreno',
+        'api_type': 'OpenGL ES',
+        'future_sdk_field': 'PRIVATE',
+      });
       event.contexts['chat'] = {'title': 'PRIVATE'};
       event.release = 'mithka@1.5.3';
       event.tags!['git.commit'] = 'abc123';
@@ -241,6 +265,10 @@ void main() {
       expect(event.contexts.device!.model, 'A142');
       expect(event.contexts.device!.lowMemory, isTrue);
       expect(event.contexts.operatingSystem!.version, '14');
+      expect(event.contexts.app!.version, '1.5.3');
+      expect(event.contexts.app!.appMemory, 123456);
+      expect(event.contexts.runtimes.single.version, '3.12.2');
+      expect(event.contexts.gpu!.name, 'Adreno');
       expect(event.release, 'mithka@1.5.3');
       expect(event.tags!['git.commit'], 'abc123');
       expect(event.transaction, 'video.playback');
@@ -249,6 +277,8 @@ void main() {
         'PRIVATE',
         reason: 'Do not mutate shared SDK context',
       );
+      expect(app.deviceAppHash, 'PRIVATE');
+      expect(app.viewNames, ['PRIVATE']);
     },
   );
 

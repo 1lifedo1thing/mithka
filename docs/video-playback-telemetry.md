@@ -29,8 +29,10 @@ commands are not reported as terminal playback failures.
 Raw exceptions, media URLs/paths/names, media/chat/message/account IDs, titles,
 user identifiers and ambient navigation breadcrumbs are excluded. A targeted
 `beforeSend` filter removes inherited private context without changing ordinary
-crash reporting. Device names and unique device identifiers are removed while
-model, OS and memory diagnostics remain available.
+crash reporting. Device names, device/app-specific identifiers, visible view
+names and raw OS/runtime descriptions are removed while model, OS, GPU and
+memory diagnostics remain available. SDK contexts use explicit field allowlists
+so newly introduced context fields are not automatically transmitted.
 
 ## Volume and interpretation
 
