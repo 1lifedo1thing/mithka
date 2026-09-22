@@ -1289,12 +1289,14 @@
     <string name="downloadsMediaVideoMessage">視訊訊息</string>
     <string name="downloadsMediaVoiceMessage">語音訊息</string>
     <string name="downloadsNoDownloadsFound">沒有找到下載。</string>
+    <string name="downloadsPause">暫停下載</string>
     <string name="downloadsPauseAllDownloads">暫停所有下載</string>
     <string name="downloadsPausedProgress">已暫停 · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">重新整理下載</string>
     <string name="downloadsRemoveAndDeleteFile">刪除並刪除文件</string>
     <string name="downloadsRemoveAndKeepCachedFile">刪除並保留快取文件</string>
     <string name="downloadsRemoveFromDownloads">從下載中刪除？</string>
+    <string name="downloadsResume">繼續下載</string>
     <string name="downloadsResumeAllDownloads">繼續所有下載</string>
     <string name="downloadsSearchDownloads">搜尋下載</string>
     <string name="editProfileAddPhoto">新增照片</string>
@@ -2670,7 +2672,9 @@
     <string name="sharedMediaEmpty">暫無內容</string>
     <string name="sharedMediaFilterAll">全部</string>
     <string name="sharedMediaFilterDownloaded">已下載</string>
+    <string name="sharedMediaFilterDownloading">下載中</string>
     <string name="sharedMediaFilterNotDownloaded">未下載</string>
+    <string name="sharedMediaFilterPartial">部分下載</string>
     <string name="sharedMediaFromSource">來自 {value1}</string>
     <string name="sharedMediaLinks">連結</string>
     <string name="sharedMediaMinDuration">最短時長</string>
@@ -3426,4 +3430,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">發送前查看錄音。發送選項包括靜默傳送、調度、效果和一次性檢視。</string>
     <string name="voiceNotePreviewVoiceMessage">語音訊息</string>
     <string name="mediaSpoilerReveal">劇透內容，點擊顯示</string>
+    <string name="downloadsTasks">下載任務</string>
+    <string name="downloadsCacheHint">聊天與封存中的快取內容。可載入更多，尋找更早的檔案。</string>
+    <string name="sharedMediaFilterCached">已快取／下載中</string>
 </resources>

@@ -23,6 +23,8 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../settings/data_storage_service.dart';
+import '../settings/downloads_view.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -53,7 +55,14 @@ class _MediaTab {
   final bool musicOnly;
 }
 
-enum _SharedMediaFileFilter { all, downloaded, notDownloaded }
+enum SharedMediaFileFilter {
+  all,
+  cached,
+  downloaded,
+  downloading,
+  partial,
+  notDownloaded,
+}
 
 enum _SharedMediaMenuAction { openOriginal, deleteCache }
 
@@ -65,7 +74,7 @@ const double _videoGridHorizontalPadding = 20;
 const double _videoGridVerticalPadding = 16;
 const double _videoGridColumnGap = 16;
 const double _videoGridRowGap = 18;
-const double _videoGridMetadataHeight = 116;
+const double _videoGridMetadataHeight = 140;
 const int _sharedMediaPageSize = 80;
 const double _sharedMediaLoadMoreThreshold = 640;
 
@@ -112,6 +121,9 @@ class SharedMediaView extends StatefulWidget {
     this.displayTitle = AppStringKeys.sharedMediaChatFiles,
     this.lockedTab = false,
     this.showBackButton = true,
+    this.initialFileFilter = SharedMediaFileFilter.all,
+    this.embeddedInDownloads = false,
+    this.accountSlot,
   });
   final int chatId;
   final String title;
@@ -119,6 +131,9 @@ class SharedMediaView extends StatefulWidget {
   final String displayTitle;
   final bool lockedTab;
   final bool showBackButton;
+  final SharedMediaFileFilter initialFileFilter;
+  final bool embeddedInDownloads;
+  final int? accountSlot;
 
   @override
   State<SharedMediaView> createState() => _SharedMediaViewState();
@@ -162,10 +177,13 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   _MusicHubTab _musicHubTab = _MusicHubTab.music;
   final Map<int, List<ChatMessage>> _cache = {};
   final Map<int, int> _nextFromMessageId = {};
+  final Map<int, String> _nextGlobalOffset = {};
   final Set<int> _loading = {};
   final Set<int> _loadingMore = {};
+  final Set<int> _failedLoads = {};
   final Map<int, _SharedFileState> _files = {};
   final Set<int> _watchedFiles = {};
+  final Set<int> _loadingFiles = {};
   final Map<int, String> _sourceTitles = {};
   List<ChatMessage> _recentGlobalVideos = const [];
   final TextEditingController _search = TextEditingController();
@@ -174,7 +192,8 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   Timer? _searchDebounce;
   String _query = '';
   int _requestGeneration = 0;
-  _SharedMediaFileFilter _fileFilter = _SharedMediaFileFilter.all;
+  late SharedMediaFileFilter _fileFilter = widget.initialFileFilter;
+  final Set<int> _downloadActions = {};
 
   /// Minimum video duration for the video tab, persisted device-wide so the
   /// choice survives across chats and launches (phone/tablet/desktop alike).
@@ -220,8 +239,8 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   @override
   void initState() {
     super.initState();
-    _accountSlot = _client.activeSlot;
-    unawaited(_loadMinVideoDuration());
+    _accountSlot = widget.accountSlot ?? _client.activeSlot;
+    if (!widget.embeddedInDownloads) unawaited(_loadMinVideoDuration());
     _fileSub = _client
         .subscribeAll()
         .where((update) {
@@ -272,6 +291,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   Future<void> _load(int tab) async {
     if (_cache.containsKey(tab) || _loading.contains(tab)) return;
     _loading.add(tab);
+    _failedLoads.remove(tab);
     final query = _query.trim();
     final generation = _requestGeneration;
     try {
@@ -311,7 +331,15 @@ class _SharedMediaViewState extends State<SharedMediaView> {
       });
       _primeFileStates(parsed);
     } catch (_) {
-      if (mounted) setState(() => _loading.remove(tab));
+      if (mounted) {
+        setState(() {
+          _loading.remove(tab);
+          if (generation == _requestGeneration) _failedLoads.add(tab);
+        });
+        if (generation != _requestGeneration && tab == _tab) {
+          unawaited(_load(tab));
+        }
+      }
     }
   }
 
@@ -322,18 +350,22 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     String query, {
     required int generation,
   }) async {
-    final list = <Map<String, dynamic>>[
-      ...await _searchGlobalMessagesInList(
-        query: query,
-        filter: _tabs[tab].filter,
-        chatList: {'@type': 'chatListMain'},
-      ),
-      ...await _searchGlobalMessagesInList(
-        query: query,
-        filter: _tabs[tab].filter,
-        chatList: {'@type': 'chatListArchive'},
-      ),
-    ];
+    // A null chat list searches main and archived chats in one ordered stream.
+    // TDLib's opaque offset also lets the cache browser reach older media.
+    final response = await _searchGlobalMessages(
+      query: query,
+      filter: _tabs[tab].filter,
+    );
+    final list = response.objects('messages') ?? const <Map<String, dynamic>>[];
+    if (!mounted) {
+      _loading.remove(tab);
+      return;
+    }
+    if (generation != _requestGeneration) {
+      _loading.remove(tab);
+      if (tab == _tab) unawaited(_load(tab));
+      return;
+    }
     var parsed = list.map(TDParse.message).whereType<ChatMessage>().toList();
     if (_tabs[tab].videoOnly) {
       parsed = parsed.where((message) => message.video != null).toList();
@@ -352,18 +384,10 @@ class _SharedMediaViewState extends State<SharedMediaView> {
         in parsed.map((m) => m.chatId).whereType<int>().take(40)) {
       unawaited(_resolveSourceTitle(chatId));
     }
-    if (!mounted) {
-      _loading.remove(tab);
-      return;
-    }
-    if (generation != _requestGeneration) {
-      _loading.remove(tab);
-      if (tab == _tab) unawaited(_load(tab));
-      return;
-    }
     setState(() {
       _cache[tab] = parsed;
       _nextFromMessageId[tab] = 0;
+      _nextGlobalOffset[tab] = response.str('next_offset') ?? '';
       _loading.remove(tab);
     });
     _primeFileStates(parsed);
@@ -384,16 +408,18 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   }
 
   Future<void> _loadMore(int tab) async {
-    if (_usesGlobalSearch(tab) ||
-        _loadingMore.contains(tab) ||
-        _loading.contains(tab)) {
+    if (_loadingMore.contains(tab) || _loading.contains(tab)) {
+      return;
+    }
+    if (_usesGlobalSearch(tab)) {
+      await _loadMoreGlobal(tab);
       return;
     }
     final current = _cache[tab];
     final fromMessageId = _nextFromMessageId[tab] ?? 0;
     if (current == null || fromMessageId <= 0) return;
     final generation = _requestGeneration;
-    _loadingMore.add(tab);
+    setState(() => _loadingMore.add(tab));
     try {
       final res = await _client.queryForSlot({
         '@type': 'searchChatMessages',
@@ -428,33 +454,73 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     } catch (_) {
       // Keep the cursor so a later scroll can retry a transient TDLib error.
     } finally {
-      _loadingMore.remove(tab);
+      if (mounted) setState(() => _loadingMore.remove(tab));
     }
   }
 
-  Future<List<Map<String, dynamic>>> _searchGlobalMessagesInList({
-    required String query,
-    required String filter,
-    required Map<String, dynamic> chatList,
-  }) async {
+  Future<void> _loadMoreGlobal(int tab) async {
+    final offset = _nextGlobalOffset[tab] ?? '';
+    final current = _cache[tab];
+    if (offset.isEmpty || current == null) return;
+    final generation = _requestGeneration;
+    setState(() => _loadingMore.add(tab));
     try {
-      final res = await _client.queryForSlot({
-        '@type': 'searchMessages',
-        'chat_list': chatList,
-        'query': query,
-        'offset_date': 0,
-        'offset_chat_id': 0,
-        'offset_message_id': 0,
-        'limit': 80,
-        'filter': {'@type': filter},
-        'min_date': 0,
-        'max_date': 0,
-      }, _accountSlot);
-      return res.objects('messages') ?? const <Map<String, dynamic>>[];
-    } catch (_) {
-      return const <Map<String, dynamic>>[];
+      final response = await _searchGlobalMessages(
+        query: _query.trim(),
+        filter: _tabs[tab].filter,
+        offset: offset,
+      );
+      if (!mounted || generation != _requestGeneration) return;
+      final page =
+          (response.objects('messages') ?? const <Map<String, dynamic>>[])
+              .map(TDParse.message)
+              .whereType<ChatMessage>()
+              .toList();
+      final known = current
+          .map((message) => '${message.chatId}:${message.id}')
+          .toSet();
+      final next = response.str('next_offset') ?? '';
+      setState(() {
+        _cache[tab] = [
+          ...current,
+          ...page.where(
+            (message) => known.add('${message.chatId}:${message.id}'),
+          ),
+        ];
+        // A short or empty page isn't an end marker; only the cursor is.
+        _nextGlobalOffset[tab] = next == offset ? '' : next;
+        if (_tabs[tab].videoOnly && _query.trim().isEmpty) {
+          _recentGlobalVideos = _cache[tab]!;
+        }
+      });
+      _primeFileStates(page);
+      for (final chatId
+          in page.map((message) => message.chatId).whereType<int>().toSet()) {
+        unawaited(_resolveSourceTitle(chatId));
+      }
+    } catch (error) {
+      if (mounted && generation == _requestGeneration) {
+        showToast(context, error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore.remove(tab));
     }
   }
+
+  Future<Map<String, dynamic>> _searchGlobalMessages({
+    required String query,
+    required String filter,
+    String offset = '',
+  }) => _client.queryForSlot({
+    '@type': 'searchMessages',
+    'chat_list': null,
+    'query': query,
+    'offset': offset,
+    'limit': _sharedMediaPageSize,
+    'filter': {'@type': filter},
+    'min_date': 0,
+    'max_date': 0,
+  }, _accountSlot);
 
   Future<void> _resolveSourceTitle(int chatId) async {
     if (_sourceTitles.containsKey(chatId)) return;
@@ -483,12 +549,13 @@ class _SharedMediaViewState extends State<SharedMediaView> {
         _query = value;
         _cache.clear();
         _nextFromMessageId.clear();
+        _nextGlobalOffset.clear();
       });
       _load(_tab);
     });
   }
 
-  void _setFileFilter(_SharedMediaFileFilter filter) {
+  void _setFileFilter(SharedMediaFileFilter filter) {
     if (_fileFilter == filter) return;
     setState(() => _fileFilter = filter);
     _primeFileStates(_cache[_tab] ?? const <ChatMessage>[]);
@@ -504,7 +571,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final local = file.obj('local');
     final expected = file.integer('expected_size') ?? 0;
     final size = file.integer('size') ?? 0;
-    final total = expected > 0 ? expected : size;
+    final total = size > 0 ? size : expected;
     final downloadedSize = local?.integer('downloaded_size') ?? 0;
     final downloadedPrefix = local?.integer('downloaded_prefix_size') ?? 0;
     final completed = local?.boolean('is_downloading_completed') == true;
@@ -538,14 +605,122 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   }
 
   Future<void> _loadFileState(int fileId) async {
+    if (!_loadingFiles.add(fileId)) return;
     try {
       final file = await _client.queryForSlot({
         '@type': 'getFile',
         'file_id': fileId,
       }, _accountSlot);
       _applyFile(file);
-    } catch (_) {}
+    } catch (_) {
+      // Retry on a later filter refresh; never start a download to probe state.
+    } finally {
+      _loadingFiles.remove(fileId);
+    }
   }
+
+  Future<void> _toggleDownload(ChatMessage message) async {
+    final id = _fileId(message);
+    final chatId = _sourceChatIdFor(message);
+    if (id == null || chatId == 0 || !_downloadActions.add(id)) {
+      return;
+    }
+    setState(() {});
+    final service = DataStorageService(_client, _accountSlot);
+    try {
+      if (_files[id]?.active == true) {
+        await service.pauseDownload(id);
+      } else {
+        _applyFile(
+          await service.addDownload(
+            fileId: id,
+            chatId: chatId,
+            messageId: message.id,
+          ),
+        );
+      }
+      await _loadFileState(id);
+    } catch (error) {
+      if (mounted) showToast(context, error.toString());
+    } finally {
+      _downloadActions.remove(id);
+      if (mounted) setState(() {});
+    }
+  }
+
+  Widget _downloadControl(ChatMessage message) {
+    final state = _stateFor(message);
+    if (state == null || state.completed || _sourceChatIdFor(message) == 0) {
+      return const SizedBox.shrink();
+    }
+    final busy = _downloadActions.contains(state.fileId);
+    final label = AppStrings.t(
+      state.active
+          ? AppStringKeys.downloadsPause
+          : state.hasLocalBytes
+          ? AppStringKeys.downloadsResume
+          : AppStringKeys.musicPlayerDownload,
+    );
+    return AppInteractiveSurface(
+      key: ValueKey('shared-media-download-${state.fileId}'),
+      semanticLabel: label,
+      enabled: !busy,
+      onTap: () => unawaited(_toggleDownload(message)),
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Center(
+          child: busy
+              ? const AppActivityIndicator(size: 16)
+              : AppIcon(
+                  state.active ? HeroAppIcons.pause : HeroAppIcons.download,
+                  size: 18,
+                  color: context.colors.linkBlue,
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _downloadProgress(_SharedFileState? state) {
+    if (state == null ||
+        state.completed ||
+        (!state.active && !state.hasLocalBytes)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      key: ValueKey('shared-media-progress-${state.fileId}'),
+      padding: const EdgeInsets.only(top: 5),
+      child: state.total > 0
+          ? AppProgressBar(
+              value: (state.downloaded / state.total).clamp(0.0, 1.0),
+            )
+          : const Align(
+              alignment: Alignment.centerLeft,
+              child: AppActivityIndicator(size: 12),
+            ),
+    );
+  }
+
+  Widget _downloadsButton() => AppInteractiveSurface(
+    key: const ValueKey('shared-media-downloads'),
+    semanticLabel: AppStrings.t(AppStringKeys.generalDownloads),
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DownloadsView(accountSlot: _accountSlot),
+      ),
+    ),
+    borderRadius: BorderRadius.circular(AppRadius.control),
+    child: Padding(
+      padding: const EdgeInsets.all(8),
+      child: AppIcon(
+        HeroAppIcons.download,
+        size: 20,
+        color: context.colors.linkBlue,
+      ),
+    ),
+  );
 
   Future<void> _deleteLocalCache(ChatMessage message) async {
     final id = _fileId(message);
@@ -625,6 +800,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   }
 
   bool _hidesInnerHeader(BuildContext context) {
+    if (widget.embeddedInDownloads) return true;
     if (!_tabs[_tab].videoOnly && !_tabs[_tab].musicOnly) return false;
     return sharedMediaUsesHeaderlessHub(MediaQuery.sizeOf(context));
   }
@@ -1101,7 +1277,9 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   Widget _fileFilterBar() {
     final c = context.colors;
     final dense = isDesktopTargetPlatform();
-    final duration = _tabs[_tab].videoOnly ? _minDurationControl() : null;
+    final duration = _tabs[_tab].videoOnly && !widget.embeddedInDownloads
+        ? _minDurationControl()
+        : null;
 
     // Desktop keeps one row at the search field's own height. Touch splits it
     // so neither control ends up cramped.
@@ -1110,6 +1288,10 @@ class _SharedMediaViewState extends State<SharedMediaView> {
             Row(
               children: [
                 _fileFilterDropdown(),
+                if (!widget.embeddedInDownloads) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  _downloadsButton(),
+                ],
                 if (duration != null) ...[
                   const SizedBox(width: AppSpacing.lg),
                   Expanded(child: duration),
@@ -1118,7 +1300,13 @@ class _SharedMediaViewState extends State<SharedMediaView> {
             ),
           ]
         : [
-            Row(children: [_fileFilterDropdown()]),
+            Row(
+              children: [
+                _fileFilterDropdown(),
+                const Spacer(),
+                if (!widget.embeddedInDownloads) _downloadsButton(),
+              ],
+            ),
             if (duration != null) ...[
               const SizedBox(height: AppSpacing.md),
               duration,
@@ -1196,20 +1384,28 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     );
   }
 
-  String _fileFilterLabel(_SharedMediaFileFilter filter) => switch (filter) {
-    _SharedMediaFileFilter.all => AppStrings.t(
+  String _fileFilterLabel(SharedMediaFileFilter filter) => switch (filter) {
+    SharedMediaFileFilter.all => AppStrings.t(
       AppStringKeys.sharedMediaFilterAll,
     ),
-    _SharedMediaFileFilter.downloaded => AppStrings.t(
+    SharedMediaFileFilter.cached => AppStrings.t(
+      AppStringKeys.sharedMediaFilterCached,
+    ),
+    SharedMediaFileFilter.downloaded => AppStrings.t(
       AppStringKeys.sharedMediaFilterDownloaded,
     ),
-    _SharedMediaFileFilter.notDownloaded => AppStrings.t(
+    SharedMediaFileFilter.downloading => AppStrings.t(
+      AppStringKeys.sharedMediaFilterDownloading,
+    ),
+    SharedMediaFileFilter.partial => AppStrings.t(
+      AppStringKeys.sharedMediaFilterPartial,
+    ),
+    SharedMediaFileFilter.notDownloaded => AppStrings.t(
       AppStringKeys.sharedMediaFilterNotDownloaded,
     ),
   };
 
-  /// The three states as a dropdown rather than a row of pills: only one can
-  /// be active, and three stadium chips took the width of the whole bar.
+  /// One download-state dropdown keeps the toolbar compact on narrow windows.
   Widget _fileFilterDropdown() {
     final c = context.colors;
     final dense = isDesktopTargetPlatform();
@@ -1251,7 +1447,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   }
 
   Future<void> _pickFileFilter() async {
-    final chosen = await showAppModalSheet<_SharedMediaFileFilter>(
+    final chosen = await showAppModalSheet<SharedMediaFileFilter>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => SafeArea(
@@ -1259,7 +1455,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
         child: SettingsCard(
           margin: const EdgeInsets.all(10),
           children: [
-            for (final filter in _SharedMediaFileFilter.values)
+            for (final filter in SharedMediaFileFilter.values)
               SettingsRow(
                 key: ValueKey('shared-media-filter-${filter.name}'),
                 title: _fileFilterLabel(filter),
@@ -1284,6 +1480,23 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final c = context.colors;
     final items = _cache[_tab];
     if (items == null) {
+      if (_failedLoads.contains(_tab)) {
+        return Center(
+          child: AppInteractiveSurface(
+            onTap: () {
+              setState(() {});
+              unawaited(_load(_tab));
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                AppStrings.t(AppStringKeys.downloadsRefreshDownloads),
+                style: TextStyle(color: c.linkBlue),
+              ),
+            ),
+          ),
+        );
+      }
       return const Center(
         child: SizedBox(
           width: 24,
@@ -1292,21 +1505,24 @@ class _SharedMediaViewState extends State<SharedMediaView> {
         ),
       );
     }
-    if (items.isEmpty) {
-      return Center(
-        child: Text(
-          AppStringKeys.sharedMediaEmpty.l10n(context),
-          style: TextStyle(fontSize: 14, color: c.textSecondary),
-        ),
-      );
-    }
     final filtered = _filteredItems(items);
     if (filtered.isEmpty) {
-      return Center(
-        child: Text(
-          AppStrings.t(AppStringKeys.sharedMediaNoMatches),
-          style: TextStyle(fontSize: 14, color: c.textSecondary),
-        ),
+      return Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Text(
+                AppStrings.t(
+                  items.isEmpty
+                      ? AppStringKeys.sharedMediaEmpty
+                      : AppStringKeys.sharedMediaNoMatches,
+                ),
+                style: TextStyle(fontSize: 14, color: c.textSecondary),
+              ),
+            ),
+          ),
+          if (_hasMore) _loadMoreButton(),
+        ],
       );
     }
     final content = _tabs[_tab].videoOnly && _usesWideMediaPresentation(context)
@@ -1314,16 +1530,46 @@ class _SharedMediaViewState extends State<SharedMediaView> {
         : _tabs[_tab].grid && !_tabs[_tab].videoOnly
         ? _grid(filtered)
         : _list(filtered);
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification.metrics.extentAfter < _sharedMediaLoadMoreThreshold) {
-          unawaited(_loadMore(_tab));
-        }
-        return false;
-      },
-      child: content,
+    return Column(
+      children: [
+        Expanded(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollUpdateNotification &&
+                  notification.metrics.extentAfter <
+                      _sharedMediaLoadMoreThreshold) {
+                unawaited(_loadMore(_tab));
+              }
+              return false;
+            },
+            child: content,
+          ),
+        ),
+        if (_hasMore) _loadMoreButton(),
+      ],
     );
   }
+
+  bool get _hasMore => _usesGlobalSearch(_tab)
+      ? (_nextGlobalOffset[_tab] ?? '').isNotEmpty
+      : (_nextFromMessageId[_tab] ?? 0) > 0;
+
+  Widget _loadMoreButton() => AppInteractiveSurface(
+    key: const ValueKey('shared-media-load-more'),
+    enabled: !_loadingMore.contains(_tab),
+    onTap: () => unawaited(_loadMore(_tab)),
+    child: SizedBox(
+      height: 44,
+      child: Center(
+        child: _loadingMore.contains(_tab)
+            ? const AppActivityIndicator(size: 18)
+            : Text(
+                AppStrings.t(AppStringKeys.publicDiscoveryLoadMore),
+                style: TextStyle(color: context.colors.linkBlue),
+              ),
+      ),
+    ),
+  );
 
   List<ChatMessage> _filteredItems(List<ChatMessage> items) {
     final query = _query.trim().toLowerCase();
@@ -1352,7 +1598,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     // completion updates must not move a card out from under the user's
     // pointer or make it appear to switch lists; only filtered views need
     // download-priority ordering.
-    if (_tabs[_tab].videoOnly && _fileFilter != _SharedMediaFileFilter.all) {
+    if (_tabs[_tab].videoOnly && _fileFilter != SharedMediaFileFilter.all) {
       filtered.sort((a, b) {
         final byPriority = _videoPriority(b).compareTo(_videoPriority(a));
         if (byPriority != 0) return byPriority;
@@ -1398,9 +1644,16 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final id = _fileId(message);
     final state = id == null ? null : _files[id];
     return switch (_fileFilter) {
-      _SharedMediaFileFilter.all => true,
-      _SharedMediaFileFilter.downloaded => state?.completed == true,
-      _SharedMediaFileFilter.notDownloaded => state?.completed != true,
+      SharedMediaFileFilter.all => true,
+      SharedMediaFileFilter.cached =>
+        state?.hasLocalBytes == true || state?.active == true,
+      SharedMediaFileFilter.downloaded => state?.completed == true,
+      SharedMediaFileFilter.downloading =>
+        state?.completed == false && state?.active == true,
+      SharedMediaFileFilter.partial =>
+        state?.completed == false && state?.hasLocalBytes == true,
+      SharedMediaFileFilter.notDownloaded =>
+        state != null && !state.hasLocalBytes && !state.active,
     };
   }
 
@@ -1475,6 +1728,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                   ? const SizedBox.expand()
                   : TDImage(
                       photo: message.image,
+                      accountSlot: _accountSlot,
                       cornerRadius: 0,
                       fit: BoxFit.contain,
                     ),
@@ -1583,11 +1837,11 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final state = _stateFor(message);
     final title = _videoTitle(message);
     final duration = message.videoDuration ?? 0;
-    final source = _videoSourceLabel(message);
-    final status = [
+    final source = [
       DateText.listLabel(message.date),
-      _downloadLabel(message, state),
+      _videoSourceLabel(message),
     ].where((value) => value.isNotEmpty).join(' · ');
+    final status = _downloadLabel(message, state, multiline: true);
     final semanticsLabel = [
       title,
       if (duration > 0) _duration(duration),
@@ -1635,6 +1889,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                             ? const SizedBox.expand()
                             : TDImage(
                                 photo: message.image,
+                                accountSlot: _accountSlot,
                                 cornerRadius: 0,
                                 fit: BoxFit.contain,
                               ),
@@ -1698,12 +1953,23 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                         ),
                       ),
                       const Spacer(),
-                      Text(
-                        status,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: c.textTertiary),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              status,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: c.textTertiary,
+                              ),
+                            ),
+                          ),
+                          _downloadControl(message),
+                        ],
                       ),
+                      _downloadProgress(state),
                       const SizedBox(height: 4),
                       Text(
                         source,
@@ -1742,13 +2008,20 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final isLink = m.document == null && !isVoice;
     final title = m.document?.fileName ?? _linkTitle(m);
     final subtitle = m.document != null ? _fileSubtitle(m) : _linkUrl(m);
-    final meta = m.document == null ? _messageMeta(m) : '';
+    final meta = _messageMeta(m);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
         if (m.document != null) {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => FileDetailView(doc: m.document!)),
+            MaterialPageRoute(
+              builder: (_) => FileDetailView(
+                doc: m.document!,
+                chatId: _sourceChatIdFor(m),
+                messageId: m.id,
+                accountSlot: _accountSlot,
+              ),
+            ),
           );
         } else if (isLink && subtitle.isNotEmpty) {
           openLink(context, subtitle);
@@ -1777,7 +2050,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    maxLines: isLink ? 2 : 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 12, color: c.textTertiary),
                   ),
@@ -1790,9 +2063,11 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                       style: TextStyle(fontSize: 12, color: c.textTertiary),
                     ),
                   ],
+                  if (m.document != null) _downloadProgress(_stateFor(m)),
                 ],
               ),
             ),
+            _downloadControl(m),
             _rowMenu(m),
           ],
         ),
@@ -2036,14 +2311,14 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final subtitle = [
       DateText.listLabel(message.date),
       if ((message.videoDuration ?? 0) > 0) _duration(message.videoDuration!),
-      _downloadLabel(message, state),
     ].join(' · ');
+    final downloadLabel = _downloadLabel(message, state, multiline: true);
     final caption = message.text.trim();
     final source = _videoSourceLabel(message);
     return Semantics(
       container: true,
       button: true,
-      label: [title, subtitle, source].join(', '),
+      label: [title, subtitle, downloadLabel, source].join(', '),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _openVideoPlayer(message, items),
@@ -2073,6 +2348,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                               ? const SizedBox.expand()
                               : TDImage(
                                   photo: message.image,
+                                  accountSlot: _accountSlot,
                                   cornerRadius: 0,
                                   fit: BoxFit.contain,
                                 ),
@@ -2136,7 +2412,16 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 12, color: c.textTertiary),
                     ),
-                    if (caption.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      downloadLabel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: c.textSecondary),
+                    ),
+                    _downloadProgress(state),
+                    if (caption.isNotEmpty &&
+                        caption.replaceAll('\n', ' ') != title) ...[
                       const SizedBox(height: 3),
                       Text(
                         caption,
@@ -2155,6 +2440,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                   ],
                 ),
               ),
+              _downloadControl(message),
               _rowMenu(message),
             ],
           ),
@@ -2434,18 +2720,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   }
 
   String _fileSubtitle(ChatMessage message) {
-    final state = _stateFor(message);
-    final source = _sourceTitleFor(message);
-    return [
-      DateText.listLabel(message.date),
-      _downloadLabel(message, state),
-      if (_usesGlobalSearch(_tab) && source.isNotEmpty)
-        AppStrings.t(AppStringKeys.sharedMediaFromSource, {'value1': source}),
-      if (!_usesGlobalSearch(_tab) && (message.senderName ?? '').isNotEmpty)
-        AppStrings.t(AppStringKeys.sharedMediaFromSource, {
-          'value1': message.senderName,
-        }),
-    ].join(' · ');
+    return _downloadLabel(message, _stateFor(message), multiline: true);
   }
 
   String _linkTitle(ChatMessage message) {
@@ -2491,7 +2766,11 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     return AppStrings.t(AppStringKeys.sharedMediaVoiceMessages);
   }
 
-  String _downloadLabel(ChatMessage message, _SharedFileState? state) {
+  String _downloadLabel(
+    ChatMessage message,
+    _SharedFileState? state, {
+    bool multiline = false,
+  }) {
     final declared = _declaredSize(message);
     final total = state?.total == 0 ? declared : (state?.total ?? declared);
     final downloaded = state?.completed == true
@@ -2503,10 +2782,12 @@ class _SharedMediaViewState extends State<SharedMediaView> {
       });
     }
     if (downloaded > 0) {
-      return AppStrings.t(AppStringKeys.sharedMediaDownloadProgress, {
-        'value1': _fileSize(downloaded),
-        'value2': _fileSize(total),
-      });
+      final progress =
+          '${_fileSize(downloaded)} / ${total > 0 ? _fileSize(total) : '—'}';
+      return '${AppStrings.t(state?.active == true ? AppStringKeys.sharedMediaFilterDownloading : AppStringKeys.sharedMediaFilterPartial)}${multiline ? '\n' : ' · '}$progress';
+    }
+    if (state?.active == true) {
+      return AppStrings.t(AppStringKeys.sharedMediaFilterDownloading);
     }
     return AppStrings.t(AppStringKeys.sharedMediaNotDownloadedSize, {
       'value1': _fileSize(total),
@@ -2530,7 +2811,9 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   }
 
   bool _canOpenSourceMessage(ChatMessage message) =>
-      _sourceChatIdFor(message) != 0 && message.id != 0;
+      _client.activeSlot == _accountSlot &&
+      _sourceChatIdFor(message) != 0 &&
+      message.id != 0;
 
   void _openSourceMessage(ChatMessage message) {
     if (!_canOpenSourceMessage(message)) return;

@@ -1289,12 +1289,14 @@
     <string name="downloadsMediaVideoMessage">ビデオメッセージ</string>
     <string name="downloadsMediaVoiceMessage">ボイスメッセージ</string>
     <string name="downloadsNoDownloadsFound">ダウンロードが見つかりませんでした。</string>
+    <string name="downloadsPause">ダウンロードを一時停止</string>
     <string name="downloadsPauseAllDownloads">すべてのダウンロードを一時停止</string>
     <string name="downloadsPausedProgress">一時停止中 · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">ダウンロードを更新する</string>
     <string name="downloadsRemoveAndDeleteFile">ファイルの削除と削除</string>
     <string name="downloadsRemoveAndKeepCachedFile">キャッシュされたファイルを削除して保持する</string>
     <string name="downloadsRemoveFromDownloads">ダウンロードから削除しますか?</string>
+    <string name="downloadsResume">ダウンロードを再開</string>
     <string name="downloadsResumeAllDownloads">すべてのダウンロードを再開</string>
     <string name="downloadsSearchDownloads">ダウンロードの検索</string>
     <string name="editProfileAddPhoto">写真を追加</string>
@@ -2670,7 +2672,9 @@
     <string name="sharedMediaEmpty">コンテンツはありません</string>
     <string name="sharedMediaFilterAll">すべて</string>
     <string name="sharedMediaFilterDownloaded">ダウンロード済み</string>
+    <string name="sharedMediaFilterDownloading">ダウンロード中</string>
     <string name="sharedMediaFilterNotDownloaded">未ダウンロード</string>
+    <string name="sharedMediaFilterPartial">一部ダウンロード済み</string>
     <string name="sharedMediaFromSource">{value1}から</string>
     <string name="sharedMediaLinks">リンク</string>
     <string name="sharedMediaMinDuration">最短再生時間</string>
@@ -3426,4 +3430,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">送信する前に録音を確認してください。送信オプションには、サイレント配信、スケジュール、エフェクト、ビューワンスが含まれます。</string>
     <string name="voiceNotePreviewVoiceMessage">音声</string>
     <string name="mediaSpoilerReveal">ネタバレ。タップして表示</string>
+    <string name="downloadsTasks">ダウンロードタスク</string>
+    <string name="downloadsCacheHint">チャットとアーカイブ内のキャッシュです。古い項目を探すにはさらに読み込んでください。</string>
+    <string name="sharedMediaFilterCached">キャッシュ／転送中</string>
 </resources>

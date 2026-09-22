@@ -64,6 +64,8 @@ class TopicPostContent extends StatelessWidget {
     if (message.document != null) {
       children.add(
         _TopicFileCard(
+          chatId: chatId,
+          messageId: message.id,
           document: message.document!,
           caption: documentCaption,
           captionEntities: message.textEntities,
@@ -126,6 +128,8 @@ class _TopicContentImage extends StatelessWidget {
 
 class _TopicFileCard extends StatelessWidget {
   const _TopicFileCard({
+    required this.chatId,
+    required this.messageId,
     required this.document,
     required this.caption,
     required this.captionEntities,
@@ -133,6 +137,8 @@ class _TopicFileCard extends StatelessWidget {
   });
 
   final MessageDocument document;
+  final int chatId;
+  final int messageId;
   final String caption;
   final List<MessageTextEntity> captionEntities;
   final TextStyle captionStyle;
@@ -142,9 +148,15 @@ class _TopicFileCard extends StatelessWidget {
     final c = context.colors;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => FileDetailView(doc: document))),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FileDetailView(
+            doc: document,
+            chatId: chatId,
+            messageId: messageId,
+          ),
+        ),
+      ),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),

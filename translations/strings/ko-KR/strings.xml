@@ -1289,12 +1289,14 @@
     <string name="downloadsMediaVideoMessage">동영상 메시지</string>
     <string name="downloadsMediaVoiceMessage">음성 메시지</string>
     <string name="downloadsNoDownloadsFound">다운로드를 찾을 수 없습니다.</string>
+    <string name="downloadsPause">다운로드 일시 중지</string>
     <string name="downloadsPauseAllDownloads">모든 다운로드 일시정지</string>
     <string name="downloadsPausedProgress">일시정지됨 · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">다운로드 새로 고침</string>
     <string name="downloadsRemoveAndDeleteFile">파일 제거 및 삭제</string>
     <string name="downloadsRemoveAndKeepCachedFile">캐시된 파일 제거 및 보관</string>
     <string name="downloadsRemoveFromDownloads">다운로드에서 삭제하시겠습니까?</string>
+    <string name="downloadsResume">다운로드 계속</string>
     <string name="downloadsResumeAllDownloads">모든 다운로드 다시 시작</string>
     <string name="downloadsSearchDownloads">다운로드 검색</string>
     <string name="editProfileAddPhoto">사진 추가</string>
@@ -2670,7 +2672,9 @@
     <string name="sharedMediaEmpty">내용 없음</string>
     <string name="sharedMediaFilterAll">전체</string>
     <string name="sharedMediaFilterDownloaded">다운로드됨</string>
+    <string name="sharedMediaFilterDownloading">다운로드 중</string>
     <string name="sharedMediaFilterNotDownloaded">다운로드 안 됨</string>
+    <string name="sharedMediaFilterPartial">일부 다운로드됨</string>
     <string name="sharedMediaFromSource">출처: {value1}</string>
     <string name="sharedMediaLinks">링크</string>
     <string name="sharedMediaMinDuration">최소 길이</string>
@@ -3426,4 +3430,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">보내기 전에 녹음 내용을 검토하세요. 보내기 옵션에는 자동 전달, 예약, 효과 및 일회 보기가 포함됩니다.</string>
     <string name="voiceNotePreviewVoiceMessage">음성 메시지</string>
     <string name="mediaSpoilerReveal">스포일러. 탭하여 표시</string>
+    <string name="downloadsTasks">다운로드 작업</string>
+    <string name="downloadsCacheHint">채팅과 보관함의 캐시 미디어입니다. 이전 항목을 찾으려면 더 불러오세요.</string>
+    <string name="sharedMediaFilterCached">캐시 / 진행 중</string>
 </resources>

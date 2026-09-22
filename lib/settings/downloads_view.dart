@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:open_filex/open_filex.dart';
 
+import '../chat/shared_media_view.dart';
 import '../components/app_icons.dart';
+import '../components/app_interactive_surface.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../tdlib/json_helpers.dart';
@@ -16,6 +18,8 @@ import 'data_storage_service.dart';
 
 enum _DownloadFilter { all, active, completed }
 
+enum _DownloadsSection { tasks, files, videos }
+
 enum _RemoveDownloadAction { keepFile, deleteFile }
 
 class _DownloadItem {
@@ -26,6 +30,8 @@ class _DownloadItem {
     required this.title,
     required this.isPaused,
     required this.completeDate,
+    required this.completed,
+    required this.active,
     this.size = 0,
     this.downloaded = 0,
     this.path = '',
@@ -36,33 +42,41 @@ class _DownloadItem {
   final int messageId;
   final String title;
   bool isPaused;
-  final int completeDate;
+  int completeDate;
+  bool completed;
+  bool active;
   int size;
   int downloaded;
   String path;
+
+  bool get needsResume => isPaused || !active;
 
   /// Bumped per updateFile chunk. TDLib emits those tens of times a second per
   /// active download, and only this row's progress moves — the page-wide
   /// setState rebuilt the header, the search field and every visible row.
   final ValueNotifier<int> revision = ValueNotifier(0);
-
-  bool get completed => completeDate > 0 || (size > 0 && downloaded >= size);
 }
 
 class DownloadsView extends StatefulWidget {
-  const DownloadsView({super.key});
+  const DownloadsView({super.key, this.accountSlot});
+  final int? accountSlot;
 
   @override
   State<DownloadsView> createState() => _DownloadsViewState();
 }
 
 class _DownloadsViewState extends State<DownloadsView> {
-  final _service = const DataStorageService();
+  late final int _accountSlot;
+  late final DataStorageService _service;
   final _search = TextEditingController();
   final List<_DownloadItem> _items = [];
   StreamSubscription<Map<String, dynamic>>? _updates;
   Timer? _searchTimer;
+  Timer? _refreshTimer;
+  int _generation = 0;
   _DownloadFilter _filter = _DownloadFilter.all;
+  _DownloadsSection _section = _DownloadsSection.tasks;
+  final Set<int> _toggling = {};
   String _nextOffset = '';
   bool _loading = true;
   bool _loadingMore = false;
@@ -70,8 +84,19 @@ class _DownloadsViewState extends State<DownloadsView> {
   @override
   void initState() {
     super.initState();
+    _accountSlot = widget.accountSlot ?? TdClient.shared.activeSlot;
+    _service = DataStorageService(TdClient.shared, _accountSlot);
     _search.addListener(_queueSearch);
-    _updates = TdClient.shared.subscribe().listen(_handleUpdate);
+    _updates = TdClient.shared
+        .subscribeAll()
+        .where(
+          (update) =>
+              TdClient.shared.slotForClient(
+                update.integer('@client_id') ?? -1,
+              ) ==
+              _accountSlot,
+        )
+        .listen(_handleUpdate);
     unawaited(_load(reset: true));
   }
 
@@ -79,6 +104,7 @@ class _DownloadsViewState extends State<DownloadsView> {
   void dispose() {
     _updates?.cancel();
     _searchTimer?.cancel();
+    _refreshTimer?.cancel();
     for (final item in _items) {
       item.revision.dispose();
     }
@@ -89,6 +115,7 @@ class _DownloadsViewState extends State<DownloadsView> {
   }
 
   void _queueSearch() {
+    _generation++;
     _searchTimer?.cancel();
     _searchTimer = Timer(
       const Duration(milliseconds: 280),
@@ -96,9 +123,11 @@ class _DownloadsViewState extends State<DownloadsView> {
     );
   }
 
-  Future<void> _load({required bool reset}) async {
+  Future<void> _load({required bool reset, bool quiet = false}) async {
+    if (!mounted) return;
+    final generation = reset ? ++_generation : _generation;
     if (reset) {
-      setState(() => _loading = true);
+      if (!quiet) setState(() => _loading = true);
     } else {
       if (_nextOffset.isEmpty || _loadingMore) return;
       setState(() => _loadingMore = true);
@@ -116,17 +145,35 @@ class _DownloadsViewState extends State<DownloadsView> {
         final item = _parse(raw);
         if (item != null) next.add(item);
       }
-      if (!mounted) return;
+      if (!mounted || generation != _generation) {
+        for (final item in next) {
+          item.revision.dispose();
+        }
+        return;
+      }
       setState(() {
-        if (reset) _items.clear();
+        if (reset) {
+          for (final item in _items) {
+            item.revision.dispose();
+          }
+          _items.clear();
+        }
         final known = _items.map((item) => item.fileId).toSet();
-        _items.addAll(next.where((item) => known.add(item.fileId)));
+        for (final item in next) {
+          if (known.add(item.fileId)) {
+            _items.add(item);
+          } else {
+            item.revision.dispose();
+          }
+        }
         _nextOffset = result.str('next_offset') ?? '';
       });
     } catch (error) {
-      if (mounted) showToast(context, error.toString());
+      if (mounted && generation == _generation) {
+        showToast(context, error.toString());
+      }
     } finally {
-      if (mounted) {
+      if (mounted && generation == _generation) {
         setState(() {
           _loading = false;
           _loadingMore = false;
@@ -149,7 +196,11 @@ class _DownloadsViewState extends State<DownloadsView> {
       title: _title(message, messageRaw),
       isPaused: raw.boolean('is_paused') ?? false,
       completeDate: raw.integer('complete_date') ?? 0,
-      size: file?.int64('size') ?? file?.int64('expected_size') ?? 0,
+      completed: local?.boolean('is_downloading_completed') == true,
+      active: local?.boolean('is_downloading_active') == true,
+      size: (file?.int64('size') ?? 0) > 0
+          ? file!.int64('size')!
+          : file?.int64('expected_size') ?? 0,
       downloaded:
           local?.int64('downloaded_size') ??
           local?.int64('downloaded_prefix_size') ??
@@ -178,6 +229,12 @@ class _DownloadsViewState extends State<DownloadsView> {
   String _title(ChatMessage? message, Map<String, dynamic> raw) {
     final document = message?.document?.fileName.trim();
     if (document != null && document.isNotEmpty) return document;
+    final videoName = raw
+        .obj('content')
+        ?.obj('video')
+        ?.str('file_name')
+        ?.trim();
+    if (videoName != null && videoName.isNotEmpty) return videoName;
     final music = message?.music;
     if (music != null) {
       final value = [
@@ -207,23 +264,79 @@ class _DownloadsViewState extends State<DownloadsView> {
       final index = _items.indexWhere((item) => item.fileId == fileId);
       if (index < 0 || !mounted) return;
       final item = _items[index];
-      item.size = file?.int64('size') ?? item.size;
+      final completedBefore = item.completed;
+      final size = file?.int64('size') ?? 0;
+      item.size = size > 0 ? size : file?.int64('expected_size') ?? item.size;
       item.downloaded = local?.int64('downloaded_size') ?? item.downloaded;
       item.path = local?.str('path') ?? item.path;
+      item.completed =
+          local?.boolean('is_downloading_completed') ?? item.completed;
+      item.active = local?.boolean('is_downloading_active') ?? item.active;
       item.revision.value++;
-    } else if (update.type == 'updateFileAddedToDownloads' ||
-        update.type == 'updateFileDownloads') {
-      unawaited(_load(reset: true));
+      if (completedBefore != item.completed && _filter != _DownloadFilter.all) {
+        _refresh();
+      }
+    } else if (update.type == 'updateFileDownload') {
+      final item = _items
+          .where((item) => item.fileId == update.integer('file_id'))
+          .firstOrNull;
+      if (item != null) {
+        item.isPaused = update.boolean('is_paused') ?? item.isPaused;
+        item.completeDate =
+            update.integer('complete_date') ?? item.completeDate;
+        item.revision.value++;
+      }
+      if (_filter != _DownloadFilter.all) _refresh();
+    } else if (update.type == 'updateFileRemovedFromDownloads') {
+      final removed = _items
+          .where((item) => item.fileId == update.integer('file_id'))
+          .toList();
+      if (mounted) setState(() => _items.removeWhere(removed.contains));
+      for (final item in removed) {
+        item.revision.dispose();
+      }
+    } else if (update.type == 'updateFileAddedToDownloads') {
+      _refresh();
     }
   }
 
+  void _refresh() {
+    _refreshTimer ??= Timer(const Duration(milliseconds: 180), () {
+      _refreshTimer = null;
+      if (mounted) unawaited(_load(reset: true, quiet: true));
+    });
+  }
+
   Future<void> _toggle(_DownloadItem item) async {
-    final paused = !item.isPaused;
+    if (!_toggling.add(item.fileId)) return;
+    item.revision.value++;
+    final paused = !item.needsResume;
     try {
-      await _service.toggleDownload(item.fileId, paused: paused);
-      if (mounted) setState(() => item.isPaused = paused);
+      if (paused) {
+        await _service.pauseDownload(item.fileId);
+      } else if (item.completeDate > 0 && !item.completed) {
+        // Completed download history can outlive the cached file. Unpausing
+        // that historical task is a no-op in TDLib; re-register it explicitly.
+        final file = await _service.addDownload(
+          fileId: item.fileId,
+          chatId: item.chatId,
+          messageId: item.messageId,
+        );
+        item.completeDate = 0;
+        _handleUpdate({'@type': 'updateFile', 'file': file});
+      } else {
+        await _service.toggleDownload(item.fileId, paused: false);
+      }
+      if (mounted && _items.contains(item)) {
+        item.isPaused = paused;
+        item.active = !paused && !item.completed;
+        item.revision.value++;
+      }
     } catch (error) {
       if (mounted) showToast(context, error.toString());
+    } finally {
+      _toggling.remove(item.fileId);
+      if (mounted && _items.contains(item)) item.revision.value++;
     }
   }
 
@@ -300,7 +413,10 @@ class _DownloadsViewState extends State<DownloadsView> {
         item.fileId,
         deleteFromCache: action == _RemoveDownloadAction.deleteFile,
       );
-      setState(() => _items.remove(item));
+      if (mounted && _items.contains(item)) {
+        setState(() => _items.remove(item));
+        item.revision.dispose();
+      }
     } catch (error) {
       if (mounted) showToast(context, error.toString());
     }
@@ -317,7 +433,6 @@ class _DownloadsViewState extends State<DownloadsView> {
   }
 
   Future<void> _showActions() async {
-    final hasRunning = _items.any((item) => !item.completed && !item.isPaused);
     await showAppModalSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -337,22 +452,29 @@ class _DownloadsViewState extends State<DownloadsView> {
                 },
               ),
               Divider(height: 1, color: c.divider),
-              SettingsRow(
-                leading: AppIcon(
-                  hasRunning ? HeroAppIcons.pause : HeroAppIcons.play,
+              for (final paused in [true, false]) ...[
+                SettingsRow(
+                  key: ValueKey('downloads-toggle-all-$paused'),
+                  leading: AppIcon(
+                    paused ? HeroAppIcons.pause : HeroAppIcons.play,
+                  ),
+                  title: AppStrings.t(
+                    paused
+                        ? AppStringKeys.downloadsPauseAllDownloads
+                        : AppStringKeys.downloadsResumeAllDownloads,
+                  ),
+                  onTap: () async {
+                    Navigator.of(sheetContext).pop();
+                    try {
+                      await _service.toggleAllDownloads(paused: paused);
+                      await _load(reset: true);
+                    } catch (error) {
+                      if (mounted) showToast(context, error.toString());
+                    }
+                  },
                 ),
-                title: AppStrings.t(
-                  hasRunning
-                      ? AppStringKeys.downloadsPauseAllDownloads
-                      : AppStringKeys.downloadsResumeAllDownloads,
-                ),
-                onTap: () async {
-                  Navigator.of(sheetContext).pop();
-                  await _service.toggleAllDownloads(paused: hasRunning);
-                  await _load(reset: true);
-                },
-              ),
-              Divider(height: 1, color: c.divider),
+                Divider(height: 1, color: c.divider),
+              ],
               SettingsRow(
                 leading: const AppIcon(HeroAppIcons.trash),
                 title: AppStrings.t(
@@ -389,80 +511,134 @@ class _DownloadsViewState extends State<DownloadsView> {
     return SettingsPageScaffold(
       title: AppStrings.t(AppStringKeys.generalDownloads),
       onBack: () => Navigator.of(context).pop(),
-      trailing: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _showActions,
-        child: const Padding(
-          padding: EdgeInsets.all(AppSpacing.sm),
-          child: AppIcon(HeroAppIcons.ellipsis, size: 22),
-        ),
-      ),
+      trailing: _section != _DownloadsSection.tasks
+          ? null
+          : GestureDetector(
+              key: const ValueKey('downloads-actions'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _showActions,
+              child: const Padding(
+                padding: EdgeInsets.all(AppSpacing.sm),
+                child: AppIcon(HeroAppIcons.ellipsis, size: 22),
+              ),
+            ),
       child: Column(
         children: [
-          Padding(
-            padding: AppInsets.screen.copyWith(bottom: AppSpacing.sm),
-            child: SettingsSearchField(
-              controller: _search,
-              hintText: AppStringKeys.downloadsSearchDownloads,
+          _sections(),
+          if (_section != _DownloadsSection.tasks) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text(
+                AppStrings.t(AppStringKeys.downloadsCacheHint),
+                style: TextStyle(fontSize: 12, color: c.textSecondary),
+              ),
             ),
-          ),
-          _filters(),
-          Expanded(
-            child: _loading
-                ? const Center(child: AppActivityIndicator())
-                : _items.isEmpty
-                ? ListView(
-                    children: [
-                      const SizedBox(height: 160),
-                      Center(
-                        child: Text(
-                          AppStrings.t(AppStringKeys.downloadsNoDownloadsFound),
-                          style: TextStyle(color: c.textSecondary),
-                        ),
-                      ),
-                    ],
-                  )
-                : ListView.builder(
-                    padding: AppInsets.screen.copyWith(top: AppSpacing.sm),
-                    itemCount: _items.length + (_nextOffset.isEmpty ? 0 : 1),
-                    itemBuilder: (context, index) {
-                      if (index == _items.length) {
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _loadingMore
-                              ? null
-                              : () => _load(reset: false),
-                          child: Container(
-                            height: 46,
-                            alignment: Alignment.center,
-                            child: _loadingMore
-                                ? const AppActivityIndicator(size: 20)
-                                : Text(
-                                    AppStrings.t(
-                                      AppStringKeys.publicDiscoveryLoadMore,
-                                    ),
-                                    style: TextStyle(
-                                      color: AppTheme.brand,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+            Expanded(
+              child: SharedMediaView(
+                key: ValueKey('downloads-${_section.name}'),
+                chatId: 0,
+                title: '',
+                initialTab: _section == _DownloadsSection.files ? 1 : 4,
+                initialFileFilter: SharedMediaFileFilter.cached,
+                lockedTab: true,
+                embeddedInDownloads: true,
+                accountSlot: _accountSlot,
+              ),
+            ),
+          ] else ...[
+            Padding(
+              padding: AppInsets.screen.copyWith(bottom: AppSpacing.sm),
+              child: SettingsSearchField(
+                controller: _search,
+                hintText: AppStringKeys.downloadsSearchDownloads,
+              ),
+            ),
+            _filters(),
+            Expanded(
+              child: _loading
+                  ? const Center(child: AppActivityIndicator())
+                  : _items.isEmpty
+                  ? ListView(
+                      children: [
+                        const SizedBox(height: 160),
+                        Center(
+                          child: Text(
+                            AppStrings.t(
+                              AppStringKeys.downloadsNoDownloadsFound,
+                            ),
+                            style: TextStyle(color: c.textSecondary),
                           ),
-                        );
-                      }
-                      return _row(_items[index]);
-                    },
-                  ),
-          ),
+                        ),
+                        if (_nextOffset.isNotEmpty) _loadMoreButton(),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: AppInsets.screen.copyWith(top: AppSpacing.sm),
+                      itemCount: _items.length + (_nextOffset.isEmpty ? 0 : 1),
+                      itemBuilder: (context, index) {
+                        if (index == _items.length) {
+                          return _loadMoreButton();
+                        }
+                        return _row(_items[index]);
+                      },
+                    ),
+            ),
+          ],
         ],
       ),
     );
   }
 
+  Widget _loadMoreButton() => AppInteractiveSurface(
+    key: const ValueKey('downloads-load-more'),
+    enabled: !_loadingMore,
+    onTap: () => unawaited(_load(reset: false)),
+    child: SizedBox(
+      height: 46,
+      child: Center(
+        child: _loadingMore
+            ? const AppActivityIndicator(size: 20)
+            : Text(
+                AppStrings.t(AppStringKeys.publicDiscoveryLoadMore),
+                style: TextStyle(
+                  color: AppTheme.brand,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      ),
+    ),
+  );
+
+  Widget _sections() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final section in _DownloadsSection.values)
+            SettingsFilterChip(
+              key: ValueKey('downloads-section-${section.name}'),
+              label: AppStrings.t(switch (section) {
+                _DownloadsSection.tasks => AppStringKeys.downloadsTasks,
+                _DownloadsSection.files => AppStringKeys.searchTabFiles,
+                _DownloadsSection.videos => AppStringKeys.sharedMediaVideos,
+              }),
+              selected: _section == section,
+              onTap: () => setState(() => _section = section),
+            ),
+        ],
+      ),
+    ),
+  );
+
   Widget _filters() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
+      child: Wrap(
+        runSpacing: 7,
         children: [
           for (final entry in const {
             _DownloadFilter.all: AppStringKeys.downloadsFilterAll,
@@ -485,6 +661,7 @@ class _DownloadsViewState extends State<DownloadsView> {
   }
 
   Widget _row(_DownloadItem item) => ValueListenableBuilder<int>(
+    key: ValueKey('download-row-${item.fileId}'),
     valueListenable: item.revision,
     builder: (_, _, _) => _rowContent(item),
   );
@@ -539,7 +716,7 @@ class _DownloadsViewState extends State<DownloadsView> {
                     const SizedBox(height: 3),
                     Text(
                       item.completed
-                          ? _bytes(item.size)
+                          ? '${AppStrings.t(AppStringKeys.downloadsFilterCompleted)} · ${_bytes(item.size)}'
                           : item.isPaused
                           ? AppStrings.t(
                               AppStringKeys.downloadsPausedProgress,
@@ -548,7 +725,11 @@ class _DownloadsViewState extends State<DownloadsView> {
                                 'value2': _bytes(item.size),
                               },
                             )
-                          : '${_bytes(item.downloaded)} / ${_bytes(item.size)}',
+                          : '${AppStrings.t(item.active
+                                ? AppStringKeys.sharedMediaFilterDownloading
+                                : item.downloaded > 0
+                                ? AppStringKeys.sharedMediaFilterPartial
+                                : AppStringKeys.sharedMediaFilterNotDownloaded)} · ${_bytes(item.downloaded)} / ${_bytes(item.size)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: c.textSecondary, fontSize: 12),
@@ -562,16 +743,26 @@ class _DownloadsViewState extends State<DownloadsView> {
               ),
               const SizedBox(width: 6),
               if (!item.completed)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
+                AppInteractiveSurface(
+                  key: ValueKey('download-toggle-${item.fileId}'),
+                  semanticLabel: AppStrings.t(
+                    item.needsResume
+                        ? AppStringKeys.downloadsResume
+                        : AppStringKeys.downloadsPause,
+                  ),
+                  enabled: !_toggling.contains(item.fileId),
                   onTap: () => _toggle(item),
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: AppIcon(
-                      item.isPaused ? HeroAppIcons.play : HeroAppIcons.pause,
-                      size: 19,
-                      color: AppTheme.brand,
-                    ),
+                    child: _toggling.contains(item.fileId)
+                        ? const AppActivityIndicator(size: 19)
+                        : AppIcon(
+                            item.needsResume
+                                ? HeroAppIcons.play
+                                : HeroAppIcons.pause,
+                            size: 19,
+                            color: AppTheme.brand,
+                          ),
                   ),
                 ),
               GestureDetector(

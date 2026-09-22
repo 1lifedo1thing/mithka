@@ -1293,12 +1293,14 @@
     <string name="downloadsMediaVideoMessage">Video message</string>
     <string name="downloadsMediaVoiceMessage">Voice message</string>
     <string name="downloadsNoDownloadsFound">No downloads found.</string>
+    <string name="downloadsPause">Pause download</string>
     <string name="downloadsPauseAllDownloads">Pause all downloads</string>
     <string name="downloadsPausedProgress">Paused · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Refresh downloads</string>
     <string name="downloadsRemoveAndDeleteFile">Remove and delete file</string>
     <string name="downloadsRemoveAndKeepCachedFile">Remove and keep cached file</string>
     <string name="downloadsRemoveFromDownloads">Remove from downloads?</string>
+    <string name="downloadsResume">Continue download</string>
     <string name="downloadsResumeAllDownloads">Resume all downloads</string>
     <string name="downloadsSearchDownloads">Search downloads</string>
     <string name="editProfileAddPhoto">Add photo</string>
@@ -2677,7 +2679,9 @@
     <string name="sharedMediaEmpty">No content yet</string>
     <string name="sharedMediaFilterAll">All</string>
     <string name="sharedMediaFilterDownloaded">Downloaded</string>
+    <string name="sharedMediaFilterDownloading">Downloading</string>
     <string name="sharedMediaFilterNotDownloaded">Not downloaded</string>
+    <string name="sharedMediaFilterPartial">Partially downloaded</string>
     <string name="sharedMediaFromSource">From {value1}</string>
     <string name="sharedMediaLinks">Links</string>
     <string name="sharedMediaMinDuration">Min duration</string>
@@ -3434,4 +3438,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Review the recording before sending. Send options include silent delivery, scheduling, effects and view-once.</string>
     <string name="voiceNotePreviewVoiceMessage">Voice message</string>
     <string name="mediaSpoilerReveal">Spoiler. Tap to reveal</string>
+    <string name="downloadsTasks">Download tasks</string>
+    <string name="downloadsCacheHint">Cached media from chats and the archive. Load more to find older items.</string>
+    <string name="sharedMediaFilterCached">Cached / active</string>
 </resources>

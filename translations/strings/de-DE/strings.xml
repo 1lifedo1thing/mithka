@@ -1293,12 +1293,14 @@
     <string name="downloadsMediaVideoMessage">Videonachricht</string>
     <string name="downloadsMediaVoiceMessage">Sprachnachricht</string>
     <string name="downloadsNoDownloadsFound">Keine Downloads gefunden.</string>
+    <string name="downloadsPause">Download pausieren</string>
     <string name="downloadsPauseAllDownloads">Alle Downloads pausieren</string>
     <string name="downloadsPausedProgress">Pausiert · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Downloads aktualisieren</string>
     <string name="downloadsRemoveAndDeleteFile">Datei entfernen und löschen</string>
     <string name="downloadsRemoveAndKeepCachedFile">Entfernen Sie die zwischengespeicherte Datei und behalten Sie sie bei</string>
     <string name="downloadsRemoveFromDownloads">Aus Downloads entfernen?</string>
+    <string name="downloadsResume">Download fortsetzen</string>
     <string name="downloadsResumeAllDownloads">Alle Downloads fortsetzen</string>
     <string name="downloadsSearchDownloads">Downloads suchen</string>
     <string name="editProfileAddPhoto">Foto hinzufügen</string>
@@ -2677,7 +2679,9 @@
     <string name="sharedMediaEmpty">Keine Inhalte</string>
     <string name="sharedMediaFilterAll">Alle</string>
     <string name="sharedMediaFilterDownloaded">Heruntergeladen</string>
+    <string name="sharedMediaFilterDownloading">Wird heruntergeladen</string>
     <string name="sharedMediaFilterNotDownloaded">Nicht heruntergeladen</string>
+    <string name="sharedMediaFilterPartial">Teilweise heruntergeladen</string>
     <string name="sharedMediaFromSource">Von {value1}</string>
     <string name="sharedMediaLinks">Links</string>
     <string name="sharedMediaMinDuration">Mindestdauer</string>
@@ -3434,4 +3438,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Überprüfen Sie die Aufnahme vor dem Senden. Zu den Sendeoptionen gehören stille Zustellung, Planung, Effekte und einmalige Ansicht.</string>
     <string name="voiceNotePreviewVoiceMessage">Sprachnachricht</string>
     <string name="mediaSpoilerReveal">Spoiler. Zum Anzeigen tippen</string>
+    <string name="downloadsTasks">Download-Aufgaben</string>
+    <string name="downloadsCacheHint">Cache-Dateien aus Chats und dem Archiv. Lade weitere Ergebnisse, um ältere Dateien zu finden.</string>
+    <string name="sharedMediaFilterCached">Im Cache / aktiv</string>
 </resources>

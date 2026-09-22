@@ -5927,9 +5927,15 @@ class _MessageBubbleState extends State<MessageBubble>
     return GestureDetector(
       key: ValueKey('messageDocumentAlbumFile-${source.id}'),
       behavior: HitTestBehavior.opaque,
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => FileDetailView(doc: doc))),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FileDetailView(
+            doc: doc,
+            chatId: source.chatId ?? message.chatId,
+            messageId: source.id,
+          ),
+        ),
+      ),
       onLongPress: () => _handleGroupedFileLongPress(source, itemKey),
       onSecondaryTapUp: (details) =>
           _handleGroupedFileSecondaryTap(source, details.globalPosition),

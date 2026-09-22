@@ -1293,12 +1293,14 @@
     <string name="downloadsMediaVideoMessage">Videomensaje</string>
     <string name="downloadsMediaVoiceMessage">Mensaje de voz</string>
     <string name="downloadsNoDownloadsFound">No se encontraron descargas.</string>
+    <string name="downloadsPause">Pausar descarga</string>
     <string name="downloadsPauseAllDownloads">Pausar todas las descargas</string>
     <string name="downloadsPausedProgress">En pausa · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Actualizar descargas</string>
     <string name="downloadsRemoveAndDeleteFile">Quitar y eliminar archivo</string>
     <string name="downloadsRemoveAndKeepCachedFile">Eliminar y mantener el archivo en caché</string>
     <string name="downloadsRemoveFromDownloads">¿Eliminar de las descargas?</string>
+    <string name="downloadsResume">Continuar descarga</string>
     <string name="downloadsResumeAllDownloads">Reanudar todas las descargas</string>
     <string name="downloadsSearchDownloads">Buscar descargas</string>
     <string name="editProfileAddPhoto">Añadir foto</string>
@@ -2677,7 +2679,9 @@
     <string name="sharedMediaEmpty">Sin contenido</string>
     <string name="sharedMediaFilterAll">Todo</string>
     <string name="sharedMediaFilterDownloaded">Descargado</string>
+    <string name="sharedMediaFilterDownloading">Descargando</string>
     <string name="sharedMediaFilterNotDownloaded">Sin descargar</string>
+    <string name="sharedMediaFilterPartial">Descargado parcialmente</string>
     <string name="sharedMediaFromSource">De {value1}</string>
     <string name="sharedMediaLinks">Enlaces</string>
     <string name="sharedMediaMinDuration">Duración mín.</string>
@@ -3434,4 +3438,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Revise la grabación antes de enviarla. Las opciones de envío incluyen entrega silenciosa, programación, efectos y visualización única.</string>
     <string name="voiceNotePreviewVoiceMessage">Mensaje de voz</string>
     <string name="mediaSpoilerReveal">Spoiler. Toca para mostrar</string>
+    <string name="downloadsTasks">Tareas de descarga</string>
+    <string name="downloadsCacheHint">Archivos en caché de chats y del archivo. Carga más para encontrar elementos anteriores.</string>
+    <string name="sharedMediaFilterCached">En caché / activos</string>
 </resources>

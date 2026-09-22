@@ -4,8 +4,8 @@
 //  Full-screen file page shown when a document bubble is tapped, modeled on the reference app's
 //  file viewer: a large type glyph + name + size, a live download progress bar
 //  (downloaded / total) with a cancel button, then an 打开 (open) button once the
-//  download completes. Drives TDLib downloadFile / cancelDownloadFile directly
-//  and tracks progress from updateFile.
+//  download completes. Explicit message downloads join the global task list;
+//  progress is tracked from updateFile.
 //
 
 import 'dart:async';
@@ -17,6 +17,7 @@ import 'package:open_filex/open_filex.dart';
 import '../components/app_icons.dart';
 import '../components/document_file_icon.dart';
 import '../components/toast.dart';
+import '../settings/data_storage_service.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
@@ -24,8 +25,17 @@ import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
 
 class FileDetailView extends StatefulWidget {
-  const FileDetailView({super.key, required this.doc});
+  const FileDetailView({
+    super.key,
+    required this.doc,
+    this.chatId,
+    this.messageId,
+    this.accountSlot,
+  });
   final MessageDocument doc;
+  final int? chatId;
+  final int? messageId;
+  final int? accountSlot;
 
   @override
   State<FileDetailView> createState() => _FileDetailViewState();
@@ -37,57 +47,102 @@ class _FileDetailViewState extends State<FileDetailView> {
   int _total = 0;
   bool _done = false;
   String? _path;
+  late final int _accountSlot;
+  late final Future<void> _startFuture;
+  bool _canceling = false;
 
   int get _fileId => widget.doc.file?.id ?? 0;
 
   @override
   void initState() {
     super.initState();
+    _accountSlot = widget.accountSlot ?? TdClient.shared.activeSlot;
     _total = widget.doc.size;
-    _start();
+    _startFuture = _start();
   }
 
   Future<void> _start() async {
     final id = _fileId;
     if (id == 0) return;
-    _sub = TdClient.shared.updatesOf('updateFile').listen((u) {
-      final f = u.obj('file');
-      if (f != null && f.integer('id') == id) _apply(f);
-    });
+    _sub = TdClient.shared
+        .subscribeAll()
+        .where(
+          (u) =>
+              u.type == 'updateFile' &&
+              TdClient.shared.slotForClient(u.integer('@client_id') ?? -1) ==
+                  _accountSlot,
+        )
+        .listen((u) {
+          final f = u.obj('file');
+          if (f != null && f.integer('id') == id) _apply(f);
+        });
     try {
-      final resp = await TdFileCenter.shared.downloadPriorityFile(id);
+      final existing = await TdClient.shared.queryForSlot({
+        '@type': 'getFile',
+        'file_id': id,
+      }, _accountSlot);
+      _apply(existing);
+      if (existing.obj('local')?.boolean('is_downloading_completed') == true) {
+        return;
+      }
+      final chatId = widget.chatId;
+      final messageId = widget.messageId;
+      final managed =
+          chatId != null && chatId != 0 && messageId != null && messageId > 0;
+      final resp = managed
+          ? await DataStorageService(
+              TdClient.shared,
+              _accountSlot,
+            ).addDownload(fileId: id, chatId: chatId, messageId: messageId)
+          : await TdFileCenter.shared.downloadPriorityFile(
+              id,
+              accountSlot: _accountSlot,
+            );
       if (resp != null) _apply(resp);
-    } catch (_) {}
+    } catch (error) {
+      if (mounted) showToast(context, error.toString());
+    }
   }
 
   void _apply(Map<String, dynamic> file) {
     if (!mounted) return;
     final local = file.obj('local');
-    final exp = file.integer('expected_size') ?? file.integer('size') ?? 0;
+    final size = file.int64('size') ?? 0;
+    final exp = size > 0 ? size : file.int64('expected_size') ?? 0;
     final dl = local?.integer('downloaded_size') ?? 0;
     final done = local?.boolean('is_downloading_completed') == true;
     final path = local?.str('path');
     setState(() {
       if (exp > 0) _total = exp;
-      if (dl > _downloaded) _downloaded = dl;
+      _downloaded = dl;
+      _done = done && path != null && path.isNotEmpty;
+      _path = _done ? path : null;
       if (done && path != null && path.isNotEmpty) {
-        _done = true;
         _downloaded = _total;
-        _path = path;
       }
     });
   }
 
-  void _cancel() {
+  Future<void> _cancel() async {
+    if (_canceling) return;
+    setState(() => _canceling = true);
     final id = _fileId;
-    if (id != 0) {
-      TdClient.shared.send({
-        '@type': 'cancelDownloadFile',
-        'file_id': id,
-        'only_if_pending': false,
-      });
+    try {
+      // A fast cancel must not race the addFileToDownloads response and leave
+      // a newly registered task running after this page closes.
+      await _startFuture;
+      if (id != 0) {
+        await DataStorageService(
+          TdClient.shared,
+          _accountSlot,
+        ).pauseDownload(id);
+      }
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) showToast(context, error.toString());
+    } finally {
+      if (mounted) setState(() => _canceling = false);
     }
-    Navigator.of(context).pop();
   }
 
   Future<void> _open() async {
@@ -263,7 +318,8 @@ class _FileDetailViewState extends State<FileDetailView> {
             ),
             const SizedBox(width: 18),
             GestureDetector(
-              onTap: _cancel,
+              key: const ValueKey('file-detail-pause'),
+              onTap: _canceling ? null : _cancel,
               child: Container(
                 width: 34,
                 height: 34,

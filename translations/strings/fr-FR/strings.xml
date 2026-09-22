@@ -1293,12 +1293,14 @@
     <string name="downloadsMediaVideoMessage">Message vidéo</string>
     <string name="downloadsMediaVoiceMessage">Message vocal</string>
     <string name="downloadsNoDownloadsFound">Aucun téléchargement trouvé.</string>
+    <string name="downloadsPause">Suspendre le téléchargement</string>
     <string name="downloadsPauseAllDownloads">Suspendre tous les téléchargements</string>
     <string name="downloadsPausedProgress">En pause · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Actualiser les téléchargements</string>
     <string name="downloadsRemoveAndDeleteFile">Supprimer et supprimer le fichier</string>
     <string name="downloadsRemoveAndKeepCachedFile">Supprimer et conserver le fichier en cache</string>
     <string name="downloadsRemoveFromDownloads">Supprimer des téléchargements ?</string>
+    <string name="downloadsResume">Reprendre le téléchargement</string>
     <string name="downloadsResumeAllDownloads">Reprendre tous les téléchargements</string>
     <string name="downloadsSearchDownloads">Rechercher des téléchargements</string>
     <string name="editProfileAddPhoto">Ajouter une photo</string>
@@ -2677,7 +2679,9 @@
     <string name="sharedMediaEmpty">Aucun contenu</string>
     <string name="sharedMediaFilterAll">Tout</string>
     <string name="sharedMediaFilterDownloaded">Téléchargés</string>
+    <string name="sharedMediaFilterDownloading">Téléchargement en cours</string>
     <string name="sharedMediaFilterNotDownloaded">Non téléchargés</string>
+    <string name="sharedMediaFilterPartial">Téléchargé en partie</string>
     <string name="sharedMediaFromSource">De {value1}</string>
     <string name="sharedMediaLinks">Liens</string>
     <string name="sharedMediaMinDuration">Durée min.</string>
@@ -3434,4 +3438,7 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Vérifiez l’enregistrement avant de l’envoyer. Les options d'envoi incluent la livraison silencieuse, la planification, les effets et la visualisation unique.</string>
     <string name="voiceNotePreviewVoiceMessage">Message vocal</string>
     <string name="mediaSpoilerReveal">Spoiler. Touchez pour afficher</string>
+    <string name="downloadsTasks">Téléchargements</string>
+    <string name="downloadsCacheHint">Médias en cache des discussions et des archives. Chargez davantage pour trouver les éléments plus anciens.</string>
+    <string name="sharedMediaFilterCached">En cache / actifs</string>
 </resources>
