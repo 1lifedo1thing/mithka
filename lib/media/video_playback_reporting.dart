@@ -238,6 +238,9 @@ SentryEvent sanitizeVideoPlaybackEvent(SentryEvent event) {
   if (event.logger != videoPlaybackLogger) return event;
   final original = event.contexts;
   final device = original.device?.toJson();
+  final os = original.operatingSystem;
+  final app = original.app;
+  final gpu = original.gpu;
   event.contexts = Contexts(
     device: device == null
         ? null
@@ -263,10 +266,44 @@ SentryEvent sanitizeVideoPlaybackEvent(SentryEvent event) {
             ])
               if (device[key] != null) key: device[key],
           }),
-    operatingSystem: original.operatingSystem,
-    runtimes: original.runtimes,
-    app: original.app,
-    gpu: original.gpu,
+    operatingSystem: os == null
+        ? null
+        : SentryOperatingSystem(
+            name: os.name,
+            version: os.version,
+            build: os.build,
+            rooted: os.rooted,
+          ),
+    runtimes: [
+      for (final runtime in original.runtimes)
+        SentryRuntime(
+          name: runtime.name,
+          version: runtime.version,
+          compiler: runtime.compiler,
+        ),
+    ],
+    // App context also contains a device-specific hash and visible view names.
+    // Rebuild allowlisted contexts so neither these nor future SDK fields leak.
+    app: app == null
+        ? null
+        : SentryApp(
+            identifier: app.identifier,
+            version: app.version,
+            build: app.build,
+            buildType: app.buildType,
+            appMemory: app.appMemory,
+            inForeground: app.inForeground,
+          ),
+    gpu: gpu == null
+        ? null
+        : SentryGpu(
+            name: gpu.name,
+            vendorName: gpu.vendorName,
+            version: gpu.version,
+            memorySize: gpu.memorySize,
+            apiType: gpu.apiType,
+            maxTextureSize: gpu.maxTextureSize,
+          ),
   )..['video_playback'] = original['video_playback'];
   event.tags = {
     for (final entry in (event.tags ?? <String, String>{}).entries)
