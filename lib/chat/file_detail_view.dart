@@ -18,6 +18,7 @@ import '../components/app_icons.dart';
 import '../components/document_file_icon.dart';
 import '../components/toast.dart';
 import '../settings/data_storage_service.dart';
+import '../settings/retain_download_button.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
@@ -282,7 +283,23 @@ class _FileDetailViewState extends State<FileDetailView> {
             const Spacer(),
             Padding(
               padding: const EdgeInsets.fromLTRB(28, 0, 28, 52),
-              child: _done ? _openButton() : _progress(progress),
+              child: _done
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _openButton(),
+                        const SizedBox(height: 10),
+                        RetainDownloadButton(
+                          key: ValueKey('file-detail-retain-$_fileId'),
+                          accountSlot: _accountSlot,
+                          fileId: _fileId,
+                          title: widget.doc.fileName,
+                          isVideo: false,
+                          showLabel: true,
+                        ),
+                      ],
+                    )
+                  : _progress(progress),
             ),
           ],
         ),

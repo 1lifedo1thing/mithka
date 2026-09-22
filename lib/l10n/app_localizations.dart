@@ -3380,6 +3380,17 @@ abstract final class AppStringKeys {
   static const downloadsFilterActive = 'downloadsFilterActive';
   static const downloadsTasks = 'downloadsTasks';
   static const downloadsCacheHint = 'downloadsCacheHint';
+  static const downloadsKeepOnDevice = 'downloadsKeepOnDevice';
+  static const downloadsKeptOnDevice = 'downloadsKeptOnDevice';
+  static const downloadsKeepExplanation = 'downloadsKeepExplanation';
+  static const downloadsKeepFailed = 'downloadsKeepFailed';
+  static const downloadsRetained = 'downloadsRetained';
+  static const downloadsRetainedHint = 'downloadsRetainedHint';
+  static const downloadsRemoveRetained = 'downloadsRemoveRetained';
+  static const downloadsRemoveRetainedConfirm =
+      'downloadsRemoveRetainedConfirm';
+  static const downloadsRetainedUnavailable = 'downloadsRetainedUnavailable';
+  static const downloadsNoRetained = 'downloadsNoRetained';
   static const sharedMediaFilterCached = 'sharedMediaFilterCached';
   static const downloadsFilterAll = 'downloadsFilterAll';
   static const downloadsFilterCompleted = 'downloadsFilterCompleted';

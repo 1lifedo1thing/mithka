@@ -25,6 +25,7 @@ import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../settings/data_storage_service.dart';
 import '../settings/downloads_view.dart';
+import '../settings/retain_download_button.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -650,8 +651,23 @@ class _SharedMediaViewState extends State<SharedMediaView> {
 
   Widget _downloadControl(ChatMessage message) {
     final state = _stateFor(message);
-    if (state == null || state.completed || _sourceChatIdFor(message) == 0) {
+    if (state == null || _sourceChatIdFor(message) == 0) {
       return const SizedBox.shrink();
+    }
+    if (state.completed) {
+      if (message.document == null && message.video == null) {
+        return const SizedBox.shrink();
+      }
+      return RetainDownloadButton(
+        key: ValueKey('shared-media-retain-${state.fileId}'),
+        accountSlot: _accountSlot,
+        fileId: state.fileId,
+        title:
+            message.document?.fileName ??
+            message.video?.fileName ??
+            'video.mp4',
+        isVideo: message.video != null,
+      );
     }
     final busy = _downloadActions.contains(state.fileId);
     final label = AppStrings.t(

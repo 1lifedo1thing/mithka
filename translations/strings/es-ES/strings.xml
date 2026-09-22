@@ -3441,4 +3441,14 @@
     <string name="downloadsTasks">Tareas de descarga</string>
     <string name="downloadsCacheHint">Archivos en caché de chats y del archivo. Carga más para encontrar elementos anteriores.</string>
     <string name="sharedMediaFilterCached">En caché / activos</string>
+    <string name="downloadsKeepOnDevice">Conservar en el dispositivo</string>
+    <string name="downloadsKeptOnDevice">Conservado en el dispositivo</string>
+    <string name="downloadsKeepExplanation">Guarda una copia independiente que ocupa espacio adicional y no se elimina al limpiar la caché. Elimínala por separado desde la lista de archivos conservados.</string>
+    <string name="downloadsKeepFailed">No se pudo conservar el archivo. Comprueba que la descarga esté completa y que haya espacio libre suficiente e inténtalo de nuevo.</string>
+    <string name="downloadsRetained">Archivos conservados</string>
+    <string name="downloadsRetainedHint">Estas copias no son caché. Desinstalar la aplicación o borrar sus datos puede eliminarlas.</string>
+    <string name="downloadsRemoveRetained">Eliminar copia conservada</string>
+    <string name="downloadsRemoveRetainedConfirm">¿Eliminar la copia conservada de «{name}»? No se modificarán los mensajes ni la caché de descarga.</string>
+    <string name="downloadsRetainedUnavailable">No se puede acceder a los archivos conservados. Inténtalo de nuevo.</string>
+    <string name="downloadsNoRetained">Aún no hay archivos conservados. Cuando termine la descarga de un archivo o vídeo, usa el botón del escudo para conservarlo.</string>
 </resources>

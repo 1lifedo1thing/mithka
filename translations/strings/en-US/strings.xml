@@ -3441,4 +3441,14 @@
     <string name="downloadsTasks">Download tasks</string>
     <string name="downloadsCacheHint">Cached media from chats and the archive. Load more to find older items.</string>
     <string name="sharedMediaFilterCached">Cached / active</string>
+    <string name="downloadsKeepOnDevice">Keep on device</string>
+    <string name="downloadsKeptOnDevice">Kept on device</string>
+    <string name="downloadsKeepExplanation">Save a separate copy that uses extra space and is excluded from cache cleanup. Remove it separately from the Kept on device list.</string>
+    <string name="downloadsKeepFailed">Could not keep this file. Check that the download is complete and there is enough free space, then retry.</string>
+    <string name="downloadsRetained">Kept on device</string>
+    <string name="downloadsRetainedHint">These copies are not cache. Uninstalling the app or clearing app data can still remove them.</string>
+    <string name="downloadsRemoveRetained">Delete retained copy</string>
+    <string name="downloadsRemoveRetainedConfirm">Delete the retained copy of “{name}”? Chat messages and the download cache are not affected.</string>
+    <string name="downloadsRetainedUnavailable">Cannot access retained files. Please retry.</string>
+    <string name="downloadsNoRetained">No retained files yet. After a file or video finishes downloading, use its shield button to keep it.</string>
 </resources>

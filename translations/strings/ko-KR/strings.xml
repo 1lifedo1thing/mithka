@@ -3433,4 +3433,14 @@
     <string name="downloadsTasks">다운로드 작업</string>
     <string name="downloadsCacheHint">채팅과 보관함의 캐시 미디어입니다. 이전 항목을 찾으려면 더 불러오세요.</string>
     <string name="sharedMediaFilterCached">캐시 / 진행 중</string>
+    <string name="downloadsKeepOnDevice">기기에 보관</string>
+    <string name="downloadsKeptOnDevice">기기에 보관됨</string>
+    <string name="downloadsKeepExplanation">캐시 정리에서 제외되는 별도 사본을 저장하며 추가 공간을 사용합니다. 삭제하려면 기기에 보관 목록에서 개별적으로 삭제하세요.</string>
+    <string name="downloadsKeepFailed">파일을 보관하지 못했습니다. 다운로드가 완료되었고 여유 공간이 충분한지 확인한 후 다시 시도하세요.</string>
+    <string name="downloadsRetained">기기에 보관</string>
+    <string name="downloadsRetainedHint">이 사본은 캐시가 아닙니다. 앱을 삭제하거나 앱 데이터를 지우면 삭제될 수 있습니다.</string>
+    <string name="downloadsRemoveRetained">보관된 사본 삭제</string>
+    <string name="downloadsRemoveRetainedConfirm">“{name}”의 보관된 사본을 삭제할까요? 채팅 메시지와 다운로드 캐시에는 영향을 주지 않습니다.</string>
+    <string name="downloadsRetainedUnavailable">보관된 파일에 접근할 수 없습니다. 다시 시도하세요.</string>
+    <string name="downloadsNoRetained">보관된 파일이 없습니다. 파일이나 동영상 다운로드가 완료되면 방패 버튼을 눌러 보관하세요.</string>
 </resources>

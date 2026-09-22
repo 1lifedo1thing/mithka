@@ -3433,4 +3433,14 @@
     <string name="downloadsTasks">下载任务</string>
     <string name="downloadsCacheHint">聊天与归档中的缓存内容。可加载更多，查找更早的文件。</string>
     <string name="sharedMediaFilterCached">已缓存／下载中</string>
+    <string name="downloadsKeepOnDevice">永久保留</string>
+    <string name="downloadsKeptOnDevice">已永久保留</string>
+    <string name="downloadsKeepExplanation">保存不参与缓存清理的独立副本，会占用额外空间。需要删除时，请在“永久保留”列表单独操作。</string>
+    <string name="downloadsKeepFailed">无法保留此文件。请确认下载完整且存储空间充足，然后重试。</string>
+    <string name="downloadsRetained">永久保留</string>
+    <string name="downloadsRetainedHint">这些副本不属于缓存。卸载应用或清除应用数据仍可能删除它们。</string>
+    <string name="downloadsRemoveRetained">删除保留副本</string>
+    <string name="downloadsRemoveRetainedConfirm">删除“{name}”的保留副本？不会影响聊天消息和下载缓存。</string>
+    <string name="downloadsRetainedUnavailable">无法访问保留的文件，请重试。</string>
+    <string name="downloadsNoRetained">暂无保留的文件。文件或视频下载完成后，点击盾牌按钮即可保留。</string>
 </resources>

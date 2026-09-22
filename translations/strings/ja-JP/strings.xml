@@ -3433,4 +3433,14 @@
     <string name="downloadsTasks">ダウンロードタスク</string>
     <string name="downloadsCacheHint">チャットとアーカイブ内のキャッシュです。古い項目を探すにはさらに読み込んでください。</string>
     <string name="sharedMediaFilterCached">キャッシュ／転送中</string>
+    <string name="downloadsKeepOnDevice">端末に保持</string>
+    <string name="downloadsKeptOnDevice">端末に保持済み</string>
+    <string name="downloadsKeepExplanation">キャッシュ削除の対象外となる独立したコピーを保存します。追加の容量を使用します。削除する場合は「端末に保持」一覧から個別に操作してください。</string>
+    <string name="downloadsKeepFailed">保持できませんでした。ダウンロードが完了し、空き容量が十分にあることを確認して再試行してください。</string>
+    <string name="downloadsRetained">端末に保持</string>
+    <string name="downloadsRetainedHint">これらのコピーはキャッシュではありません。アプリの削除やアプリデータの消去では削除される場合があります。</string>
+    <string name="downloadsRemoveRetained">保持したコピーを削除</string>
+    <string name="downloadsRemoveRetainedConfirm">「{name}」の保持したコピーを削除しますか？チャットのメッセージとダウンロードキャッシュには影響しません。</string>
+    <string name="downloadsRetainedUnavailable">保持したファイルにアクセスできません。再試行してください。</string>
+    <string name="downloadsNoRetained">保持したファイルはありません。ファイルや動画のダウンロード完了後、盾のボタンで保持できます。</string>
 </resources>

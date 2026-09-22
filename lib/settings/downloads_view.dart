@@ -15,10 +15,12 @@ import '../tdlib/td_models.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import 'data_storage_service.dart';
+import 'retain_download_button.dart';
+import 'retained_downloads_panel.dart';
 
 enum _DownloadFilter { all, active, completed }
 
-enum _DownloadsSection { tasks, files, videos }
+enum _DownloadsSection { tasks, files, videos, retained }
 
 enum _RemoveDownloadAction { keepFile, deleteFile }
 
@@ -35,6 +37,8 @@ class _DownloadItem {
     this.size = 0,
     this.downloaded = 0,
     this.path = '',
+    this.canRetain = false,
+    this.isVideo = false,
   });
 
   final int fileId;
@@ -48,6 +52,8 @@ class _DownloadItem {
   int size;
   int downloaded;
   String path;
+  final bool canRetain;
+  final bool isVideo;
 
   bool get needsResume => isPaused || !active;
 
@@ -194,6 +200,11 @@ class _DownloadsViewState extends State<DownloadsView> {
       chatId: messageRaw.int64('chat_id') ?? 0,
       messageId: messageRaw.int64('id') ?? 0,
       title: _title(message, messageRaw),
+      canRetain: const [
+        'messageVideo',
+        'messageDocument',
+      ].contains(messageRaw.obj('content')?.type),
+      isVideo: messageRaw.obj('content')?.type == 'messageVideo',
       isPaused: raw.boolean('is_paused') ?? false,
       completeDate: raw.integer('complete_date') ?? 0,
       completed: local?.boolean('is_downloading_completed') == true,
@@ -525,7 +536,9 @@ class _DownloadsViewState extends State<DownloadsView> {
       child: Column(
         children: [
           _sections(),
-          if (_section != _DownloadsSection.tasks) ...[
+          if (_section == _DownloadsSection.retained)
+            Expanded(child: RetainedDownloadsPanel(accountSlot: _accountSlot))
+          else if (_section != _DownloadsSection.tasks) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Text(
@@ -625,6 +638,7 @@ class _DownloadsViewState extends State<DownloadsView> {
                 _DownloadsSection.tasks => AppStringKeys.downloadsTasks,
                 _DownloadsSection.files => AppStringKeys.searchTabFiles,
                 _DownloadsSection.videos => AppStringKeys.sharedMediaVideos,
+                _DownloadsSection.retained => AppStringKeys.downloadsRetained,
               }),
               selected: _section == section,
               onTap: () => setState(() => _section = section),
@@ -742,6 +756,14 @@ class _DownloadsViewState extends State<DownloadsView> {
                 ),
               ),
               const SizedBox(width: 6),
+              if (item.completed && item.canRetain)
+                RetainDownloadButton(
+                  key: ValueKey('download-retain-${item.fileId}'),
+                  accountSlot: _accountSlot,
+                  fileId: item.fileId,
+                  title: item.title,
+                  isVideo: item.isVideo,
+                ),
               if (!item.completed)
                 AppInteractiveSurface(
                   key: ValueKey('download-toggle-${item.fileId}'),

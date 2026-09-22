@@ -3441,4 +3441,14 @@
     <string name="downloadsTasks">Download-Aufgaben</string>
     <string name="downloadsCacheHint">Cache-Dateien aus Chats und dem Archiv. Lade weitere Ergebnisse, um ältere Dateien zu finden.</string>
     <string name="sharedMediaFilterCached">Im Cache / aktiv</string>
+    <string name="downloadsKeepOnDevice">Auf Gerät behalten</string>
+    <string name="downloadsKeptOnDevice">Auf Gerät behalten</string>
+    <string name="downloadsKeepExplanation">Eine separate Kopie speichern, die zusätzlichen Speicher belegt und von der Cache-Bereinigung ausgenommen ist. Entferne sie bei Bedarf einzeln aus der Liste „Auf Gerät behalten“.</string>
+    <string name="downloadsKeepFailed">Datei konnte nicht behalten werden. Prüfe, ob der Download vollständig und genügend Speicher frei ist, und versuche es erneut.</string>
+    <string name="downloadsRetained">Auf Gerät behalten</string>
+    <string name="downloadsRetainedHint">Diese Kopien sind kein Cache. Durch Deinstallation der App oder Löschen der App-Daten können sie dennoch entfernt werden.</string>
+    <string name="downloadsRemoveRetained">Behaltene Kopie löschen</string>
+    <string name="downloadsRemoveRetainedConfirm">Behaltene Kopie von „{name}“ löschen? Chatnachrichten und Download-Cache bleiben unverändert.</string>
+    <string name="downloadsRetainedUnavailable">Kein Zugriff auf behaltene Dateien. Bitte erneut versuchen.</string>
+    <string name="downloadsNoRetained">Noch keine behaltenen Dateien. Nach Abschluss eines Datei- oder Video-Downloads kannst du sie über das Schildsymbol behalten.</string>
 </resources>

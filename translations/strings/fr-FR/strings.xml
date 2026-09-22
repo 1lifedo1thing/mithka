@@ -3441,4 +3441,14 @@
     <string name="downloadsTasks">Téléchargements</string>
     <string name="downloadsCacheHint">Médias en cache des discussions et des archives. Chargez davantage pour trouver les éléments plus anciens.</string>
     <string name="sharedMediaFilterCached">En cache / actifs</string>
+    <string name="downloadsKeepOnDevice">Conserver sur l’appareil</string>
+    <string name="downloadsKeptOnDevice">Conservé sur l’appareil</string>
+    <string name="downloadsKeepExplanation">Enregistrer une copie distincte, qui occupe de l’espace supplémentaire et n’est pas supprimée lors du nettoyage du cache. Supprimez-la séparément depuis la liste des fichiers conservés.</string>
+    <string name="downloadsKeepFailed">Impossible de conserver ce fichier. Vérifiez que le téléchargement est terminé et que l’espace libre est suffisant, puis réessayez.</string>
+    <string name="downloadsRetained">Fichiers conservés</string>
+    <string name="downloadsRetainedHint">Ces copies ne font pas partie du cache. Désinstaller l’application ou effacer ses données peut toutefois les supprimer.</string>
+    <string name="downloadsRemoveRetained">Supprimer la copie conservée</string>
+    <string name="downloadsRemoveRetainedConfirm">Supprimer la copie conservée de « {name} » ? Les messages et le cache de téléchargement ne seront pas modifiés.</string>
+    <string name="downloadsRetainedUnavailable">Impossible d’accéder aux fichiers conservés. Réessayez.</string>
+    <string name="downloadsNoRetained">Aucun fichier conservé. Une fois le téléchargement d’un fichier ou d’une vidéo terminé, utilisez son bouton bouclier pour le conserver.</string>
 </resources>
