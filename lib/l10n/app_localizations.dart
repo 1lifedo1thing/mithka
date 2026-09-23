@@ -325,6 +325,7 @@ abstract final class AppStringKeys {
   static const aiServerApiKey = 'aiServerApiKey';
   static const aiServerApiKeyOptional = 'aiServerApiKeyOptional';
   static const aiServerEndpoint = 'aiServerEndpoint';
+  static const aiServerEndpointHelp = 'aiServerEndpointHelp';
   static const aiServerEndpointHint = 'aiServerEndpointHint';
   static const aiServerModel = 'aiServerModel';
   static const aiServerModelHint = 'aiServerModelHint';
@@ -2525,6 +2526,8 @@ abstract final class AppStringKeys {
   static const sharedMediaEmpty = 'sharedMediaEmpty';
   static const sharedMediaFilterAll = 'sharedMediaFilterAll';
   static const sharedMediaFilterDownloaded = 'sharedMediaFilterDownloaded';
+  static const sharedMediaFilterDownloading = 'sharedMediaFilterDownloading';
+  static const sharedMediaFilterPartial = 'sharedMediaFilterPartial';
   static const sharedMediaFilterNotDownloaded =
       'sharedMediaFilterNotDownloaded';
   static const sharedMediaFromSource = 'sharedMediaFromSource';
@@ -3376,6 +3379,20 @@ abstract final class AppStringKeys {
   static const downloadsClearCompletedDownloads =
       'downloadsClearCompletedDownloads';
   static const downloadsFilterActive = 'downloadsFilterActive';
+  static const downloadsTasks = 'downloadsTasks';
+  static const downloadsCacheHint = 'downloadsCacheHint';
+  static const downloadsKeepOnDevice = 'downloadsKeepOnDevice';
+  static const downloadsKeptOnDevice = 'downloadsKeptOnDevice';
+  static const downloadsKeepExplanation = 'downloadsKeepExplanation';
+  static const downloadsKeepFailed = 'downloadsKeepFailed';
+  static const downloadsRetained = 'downloadsRetained';
+  static const downloadsRetainedHint = 'downloadsRetainedHint';
+  static const downloadsRemoveRetained = 'downloadsRemoveRetained';
+  static const downloadsRemoveRetainedConfirm =
+      'downloadsRemoveRetainedConfirm';
+  static const downloadsRetainedUnavailable = 'downloadsRetainedUnavailable';
+  static const downloadsNoRetained = 'downloadsNoRetained';
+  static const sharedMediaFilterCached = 'sharedMediaFilterCached';
   static const downloadsFilterAll = 'downloadsFilterAll';
   static const downloadsFilterCompleted = 'downloadsFilterCompleted';
   static const downloadsKeepTheCachedFileOrDeleteItFrom =
@@ -3388,6 +3405,8 @@ abstract final class AppStringKeys {
   static const downloadsMediaVoiceMessage = 'downloadsMediaVoiceMessage';
   static const downloadsNoDownloadsFound = 'downloadsNoDownloadsFound';
   static const downloadsPauseAllDownloads = 'downloadsPauseAllDownloads';
+  static const downloadsPause = 'downloadsPause';
+  static const downloadsResume = 'downloadsResume';
   static const downloadsPausedProgress = 'downloadsPausedProgress';
   static const downloadsRefreshDownloads = 'downloadsRefreshDownloads';
   static const downloadsRemoveAndDeleteFile = 'downloadsRemoveAndDeleteFile';

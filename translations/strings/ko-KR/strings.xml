@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">모델 직접 입력</string>
-    <string name="aiInvalidEndpoint">선택한 API 형식과 일치하는 HTTPS URL을 사용하세요. HTTP는 localhost에서만 허용됩니다.</string>
+    <string name="aiInvalidEndpoint">선택한 API 형식의 요청 경로를 포함한 전체 HTTPS API URL을 입력하세요. HTTP는 localhost에서만 허용됩니다.</string>
     <string name="aiInvalidModel">모델 이름과 올바른 컨텍스트 토큰 수를 입력하세요.</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute, Apple 온디바이스 모델 및 저장된 서버 모델을 번역이나 요약에 각각 선택할 수 있습니다.</string>
     <string name="aiModelConfiguration">모델 설정</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API 키</string>
     <string name="aiServerApiKeyOptional">로컬 또는 키가 필요 없는 서버에서는 선택 사항</string>
     <string name="aiServerEndpoint">API 엔드포인트</string>
+    <string name="aiServerEndpointHelp">Base URL만 입력하지 말고 프로토콜, 호스트, 요청 경로를 포함한 전체 API URL을 입력하세요. 경로는 자동으로 완성되지 않습니다. 예: {value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">모델</string>
     <string name="aiServerModelHint">모델 이름</string>
@@ -1289,12 +1290,14 @@
     <string name="downloadsMediaVideoMessage">동영상 메시지</string>
     <string name="downloadsMediaVoiceMessage">음성 메시지</string>
     <string name="downloadsNoDownloadsFound">다운로드를 찾을 수 없습니다.</string>
+    <string name="downloadsPause">다운로드 일시 중지</string>
     <string name="downloadsPauseAllDownloads">모든 다운로드 일시정지</string>
     <string name="downloadsPausedProgress">일시정지됨 · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">다운로드 새로 고침</string>
     <string name="downloadsRemoveAndDeleteFile">파일 제거 및 삭제</string>
     <string name="downloadsRemoveAndKeepCachedFile">캐시된 파일 제거 및 보관</string>
     <string name="downloadsRemoveFromDownloads">다운로드에서 삭제하시겠습니까?</string>
+    <string name="downloadsResume">다운로드 계속</string>
     <string name="downloadsResumeAllDownloads">모든 다운로드 다시 시작</string>
     <string name="downloadsSearchDownloads">다운로드 검색</string>
     <string name="editProfileAddPhoto">사진 추가</string>
@@ -2670,7 +2673,9 @@
     <string name="sharedMediaEmpty">내용 없음</string>
     <string name="sharedMediaFilterAll">전체</string>
     <string name="sharedMediaFilterDownloaded">다운로드됨</string>
+    <string name="sharedMediaFilterDownloading">다운로드 중</string>
     <string name="sharedMediaFilterNotDownloaded">다운로드 안 됨</string>
+    <string name="sharedMediaFilterPartial">일부 다운로드됨</string>
     <string name="sharedMediaFromSource">출처: {value1}</string>
     <string name="sharedMediaLinks">링크</string>
     <string name="sharedMediaMinDuration">최소 길이</string>
@@ -3426,4 +3431,17 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">보내기 전에 녹음 내용을 검토하세요. 보내기 옵션에는 자동 전달, 예약, 효과 및 일회 보기가 포함됩니다.</string>
     <string name="voiceNotePreviewVoiceMessage">음성 메시지</string>
     <string name="mediaSpoilerReveal">스포일러. 탭하여 표시</string>
+    <string name="downloadsTasks">다운로드 작업</string>
+    <string name="downloadsCacheHint">채팅과 보관함의 캐시 미디어입니다. 이전 항목을 찾으려면 더 불러오세요.</string>
+    <string name="sharedMediaFilterCached">캐시 / 진행 중</string>
+    <string name="downloadsKeepOnDevice">기기에 보관</string>
+    <string name="downloadsKeptOnDevice">기기에 보관됨</string>
+    <string name="downloadsKeepExplanation">캐시 정리에서 제외되는 별도 사본을 저장하며 추가 공간을 사용합니다. 삭제하려면 기기에 보관 목록에서 개별적으로 삭제하세요.</string>
+    <string name="downloadsKeepFailed">파일을 보관하지 못했습니다. 다운로드가 완료되었고 여유 공간이 충분한지 확인한 후 다시 시도하세요.</string>
+    <string name="downloadsRetained">기기에 보관</string>
+    <string name="downloadsRetainedHint">이 사본은 캐시가 아닙니다. 앱을 삭제하거나 앱 데이터를 지우면 삭제될 수 있습니다.</string>
+    <string name="downloadsRemoveRetained">보관된 사본 삭제</string>
+    <string name="downloadsRemoveRetainedConfirm">“{name}”의 보관된 사본을 삭제할까요? 채팅 메시지와 다운로드 캐시에는 영향을 주지 않습니다.</string>
+    <string name="downloadsRetainedUnavailable">보관된 파일에 접근할 수 없습니다. 다시 시도하세요.</string>
+    <string name="downloadsNoRetained">보관된 파일이 없습니다. 파일이나 동영상 다운로드가 완료되면 방패 버튼을 눌러 보관하세요.</string>
 </resources>

@@ -811,6 +811,13 @@ class ReadableLinkStyle {
   final bool underline;
 }
 
+/// Preserve theme ink, but add a non-color cue when links resemble body copy.
+bool linkNeedsUnderline({required Color body, required Color link}) {
+  final lighter = math.max(link.computeLuminance(), body.computeLuminance());
+  final darker = math.min(link.computeLuminance(), body.computeLuminance());
+  return (lighter + 0.05) / (darker + 0.05) < 3.0;
+}
+
 /// Resolves a message-link treatment that remains readable on its surface and
 /// distinguishable from adjacent body copy.
 ///
@@ -831,12 +838,10 @@ ReadableLinkStyle readableLinkStyle({
     background: surface,
     preferred: preferredColor,
   );
-  final colorLuminance = color.computeLuminance();
-  final bodyLuminance = bodyColor.computeLuminance();
-  final lighter = math.max(colorLuminance, bodyLuminance);
-  final darker = math.min(colorLuminance, bodyLuminance);
-  final bodyContrast = (lighter + 0.05) / (darker + 0.05);
-  return ReadableLinkStyle(color: color, underline: bodyContrast < 3.0);
+  return ReadableLinkStyle(
+    color: color,
+    underline: linkNeedsUnderline(body: bodyColor, link: color),
+  );
 }
 
 extension AppColorsContext on BuildContext {

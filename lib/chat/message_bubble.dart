@@ -643,9 +643,9 @@ class _MessageBubbleState extends State<MessageBubble>
     preferred: _colors.linkBlue,
   );
 
-  bool get _underlinesDisabledThemeLinks =>
-      !_theme.themingEnabled &&
-      _disabledThemeLinkStyle(message.isOutgoing).underline;
+  bool _underlinesLinks(Color body, Color link) => _theme.themingEnabled
+      ? linkNeedsUnderline(body: body, link: link)
+      : _disabledThemeLinkStyle(message.isOutgoing).underline;
 
   Color _messageQuoteColor(bool outgoing) {
     if (_usesDecorativeBubbleBackground) {
@@ -4827,7 +4827,7 @@ class _MessageBubbleState extends State<MessageBubble>
     final fallbackUnderline =
         isLink &&
         !active.any((entity) => entity.type == 'textEntityTypeSpoiler') &&
-        _underlinesDisabledThemeLinks;
+        _underlinesLinks(base, link);
     if (fallbackUnderline && !decorations.contains(TextDecoration.underline)) {
       decorations.add(TextDecoration.underline);
     }
@@ -4938,7 +4938,7 @@ class _MessageBubbleState extends State<MessageBubble>
   }
 
   TextStyle _autoLinkStyle(TextStyle baseStyle, Color link) {
-    if (!_underlinesDisabledThemeLinks) {
+    if (!_underlinesLinks(baseStyle.color ?? _colors.textPrimary, link)) {
       return baseStyle.copyWith(color: link);
     }
     final existing = baseStyle.decoration;
@@ -5927,9 +5927,15 @@ class _MessageBubbleState extends State<MessageBubble>
     return GestureDetector(
       key: ValueKey('messageDocumentAlbumFile-${source.id}'),
       behavior: HitTestBehavior.opaque,
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => FileDetailView(doc: doc))),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FileDetailView(
+            doc: doc,
+            chatId: source.chatId ?? message.chatId,
+            messageId: source.id,
+          ),
+        ),
+      ),
       onLongPress: () => _handleGroupedFileLongPress(source, itemKey),
       onSecondaryTapUp: (details) =>
           _handleGroupedFileSecondaryTap(source, details.globalPosition),

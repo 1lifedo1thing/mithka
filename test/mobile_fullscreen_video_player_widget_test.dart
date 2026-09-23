@@ -14,7 +14,9 @@ import 'package:mithka/app/video_split_controller.dart';
 import 'package:mithka/chat/video_playback_queue.dart';
 import 'package:mithka/chat/video_player_view.dart';
 import 'package:mithka/l10n/app_localizations.dart';
+import 'package:mithka/media/video_playback_reporting.dart';
 import 'package:mithka/tdlib/td_models.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Used only to install a deterministic fake for the public video_player API.
 // ignore: depend_on_referenced_packages
@@ -1856,9 +1858,108 @@ void main() {
     }
   });
 
+  for (final failsAfterInitialization in [false, true]) {
+    testWidgets(
+      'reports ${failsAfterInitialization ? 'startup play' : 'initialization'} failure only after every fallback fails',
+      (tester) async {
+        final videoFailures = _captureVideoFailures();
+        final previousPlatform = VideoPlayerPlatform.instance;
+        final platform = _FakeMobileVideoPlatform(
+          initializationFailures: failsAfterInitialization ? 0 : 20,
+          playFailures: failsAfterInitialization ? 20 : 0,
+          initializationFailureMessage:
+              'MediaCodecVideoRenderer decoder errorCode=4003 video/hevc',
+        );
+        VideoPlayerPlatform.instance = platform;
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          SharedPreferences.setMockInitialValues(const {});
+          final path = File('pubspec.yaml').absolute.path;
+          final query = _completedVideoQuery(path, fileId: 888);
+          await tester.pumpWidget(
+            MaterialApp(
+              locale: const Locale('en'),
+              localizationsDelegates: const [AppLocalizations.delegate],
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: VideoPlayerView(
+                video: TdFileRef(
+                  id: 888,
+                  localPath: path,
+                  mimeType: 'video/mp4',
+                ),
+                width: 3840,
+                height: 2160,
+                streamQuery: (request) => query({'@type': 'getFile'}),
+              ),
+            ),
+          );
+          for (
+            var i = 0;
+            i < 80 && find.text('Try again').evaluate().isEmpty;
+            i++
+          ) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 5)),
+            );
+            await tester.pump(const Duration(milliseconds: 10));
+          }
+          expect(find.text('Try again'), findsOneWidget);
+          expect(platform.createCalls, 5);
+          expect(platform.disposeCalls, 5);
+          expect(videoFailures, hasLength(1));
+          final event = videoFailures.single;
+          expect(event.tags!['video.stage'], 'initialization');
+          expect(event.tags!['video.reason'], 'decoder');
+          expect(event.contexts['video_playback']['attempts'], 5);
+          expect(
+            event.contexts['video_playback']['width'],
+            failsAfterInitialization ? 1920 : 3840,
+          );
+          expect(
+            event.contexts['video_playback']['ever_initialized'],
+            failsAfterInitialization,
+          );
+          expect(
+            event.contexts['video_playback']['completed_file_fallback'],
+            isTrue,
+          );
+          expect(jsonEncode(event.toJson()), isNot(contains(path)));
+          await tester.pumpWidget(const SizedBox.shrink());
+          expect(tester.takeException(), isNull);
+        } finally {
+          VideoPlayerPlatform.instance = previousPlatform;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'closing while source lookup is pending does not report a failure',
+    (tester) async {
+      final videoFailures = _captureVideoFailures();
+      final pending = Completer<Map<String, dynamic>>();
+      SharedPreferences.setMockInitialValues(const {});
+      await tester.pumpWidget(
+        MaterialApp(
+          home: VideoPlayerView(
+            video: TdFileRef(id: 889),
+            streamQuery: (_) => pending.future,
+          ),
+        ),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      pending.complete({'@type': 'file', 'id': 889});
+      await tester.pump();
+      expect(videoFailures, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'Android stream initialization failures fall back to one completed-file download',
     (tester) async {
+      final videoFailures = _captureVideoFailures();
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(390, 844);
       addTearDown(() {
@@ -1945,6 +2046,11 @@ void main() {
           find.byType(FVideoPlayer),
         );
         expect(completedFilePlayer.controller?.value.position, initialPosition);
+        expect(
+          videoFailures,
+          isEmpty,
+          reason: 'Completed-file fallback recovered',
+        );
 
         await tester.pumpWidget(const SizedBox.shrink());
         await _pumpUntilDisposed(tester, platform, expectedCalls: 3);
@@ -1962,6 +2068,7 @@ void main() {
   testWidgets(
     'Android completed-file decoder errors change to the fullscreen platform view',
     (tester) async {
+      final videoFailures = _captureVideoFailures();
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(390, 844);
       addTearDown(() {
@@ -2031,6 +2138,7 @@ void main() {
         );
         expect(replacement.controller?.value.position, resumePosition);
         expect(replacement.controller?.value.isPlaying, isTrue);
+        expect(videoFailures, isEmpty, reason: 'Surface fallback recovered');
 
         platform.emitRuntimeError(
           platform.createdPlayerIds.last,
@@ -2049,6 +2157,10 @@ void main() {
         expect(find.text('Try again'), findsOneWidget);
         expect(find.byType(FVideoPlayer), findsNothing);
         expect(platform.disposedPlayerIds, [1, 2]);
+        expect(videoFailures, hasLength(1));
+        expect(videoFailures.single.tags!['video.stage'], 'playback');
+        expect(videoFailures.single.tags!['video.view_type'], 'platformView');
+        expect(videoFailures.single.contexts['video_playback']['attempts'], 2);
 
         await tester.tap(find.text('Try again'));
         await _pumpUntilPlayerReady(tester);
@@ -2062,6 +2174,11 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
         await _pumpUntilDisposed(tester, platform, expectedCalls: 3);
         expect(platform.disposedPlayerIds, [1, 2, 3]);
+        expect(
+          videoFailures,
+          hasLength(1),
+          reason: 'Retry and disposal are silent',
+        );
       } finally {
         VideoPlayerPlatform.instance = previousPlatform;
         debugDefaultTargetPlatformOverride = null;
@@ -2638,6 +2755,17 @@ Finder _selectedSemanticsWidget(String label) => find.byWidgetPredicate(
       widget.properties.selected == true,
 );
 
+List<SentryEvent> _captureVideoFailures() {
+  final events = <SentryEvent>[];
+  final previous = VideoFailureReporter.instance;
+  VideoFailureReporter.instance = VideoFailureReporter(
+    enabled: () => true,
+    capture: (event) async => events.add(event),
+  );
+  addTearDown(() => VideoFailureReporter.instance = previous);
+  return events;
+}
+
 Matcher closeToDuration(Duration expected) => predicate<Duration>(
   (actual) => (actual - expected).abs() <= const Duration(milliseconds: 50),
   'within 50ms of $expected',
@@ -2743,12 +2871,14 @@ final class _SparseVideoQuery {
 class _FakeMobileVideoPlatform extends VideoPlayerPlatform {
   _FakeMobileVideoPlatform({
     this.initializationFailures = 0,
+    this.playFailures = 0,
     this.initializationFailureMessage =
         'The loopback source could not be opened.',
   });
 
   static const duration = Duration(minutes: 2);
   final int initializationFailures;
+  final int playFailures;
   final String initializationFailureMessage;
   final Map<int, StreamController<VideoEvent>> _events = {};
   final Map<int, Duration> _positions = {};
@@ -2842,6 +2972,12 @@ class _FakeMobileVideoPlatform extends VideoPlayerPlatform {
   @override
   Future<void> play(int playerId) async {
     playCalls++;
+    if (playerId <= playFailures) {
+      throw PlatformException(
+        code: 'VideoError',
+        message: initializationFailureMessage,
+      );
+    }
   }
 
   @override

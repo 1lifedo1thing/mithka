@@ -671,6 +671,70 @@ void main() {
       await fixture.close();
     }
   });
+
+  test('a seek stops the range the player left behind', () async {
+    final fixture = await _SeekContentionFixture.create();
+    try {
+      final leftBehind = await fixture.open('bytes=0-');
+      await _waitFor(() => fixture.backend.calls.length >= 2);
+
+      fixture.backend.calls.clear();
+      final seeked = await fixture.open(
+        'bytes=${_SeekContentionFixture.seek}-',
+      );
+      await Future<void>.delayed(const Duration(seconds: 3));
+
+      expect(
+        fixture.backend.calls.where(
+          (call) => call.offset < _SeekContentionFixture.seek,
+        ),
+        isEmpty,
+        reason:
+            'the abandoned response kept moving TDLib away from the range the '
+            'player is reading: ${fixture.backend.calls}',
+      );
+      await leftBehind.cancel();
+      await seeked.cancel();
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  test(
+    'a seek does not queue behind the range the player left behind',
+    () async {
+      final fixture = await _SeekContentionFixture.create();
+      try {
+        final leftBehind = await fixture.open('bytes=0-');
+        await _waitFor(() => fixture.backend.calls.length >= 2);
+
+        final seekedAt = DateTime.now();
+        final seeked = await fixture.open(
+          'bytes=${_SeekContentionFixture.seek}-',
+        );
+        await _waitFor(
+          () => fixture.backend.calls.any(
+            (call) => call.offset >= _SeekContentionFixture.seek,
+          ),
+        );
+
+        final first = fixture.backend.calls.firstWhere(
+          (call) => call.offset >= _SeekContentionFixture.seek,
+        );
+        expect(
+          first.startedAt.difference(seekedAt),
+          lessThan(_SeekContentionFixture.downloadDuration ~/ 2),
+          reason:
+              'the seek waited for a download that no response was reading any '
+              'more',
+        );
+        await leftBehind.cancel();
+        await seeked.cancel();
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
 }
 
 Future<List<int>> _readBody(HttpClientResponse response) =>
@@ -684,6 +748,138 @@ Future<void> _waitFor(bool Function() predicate) async {
     }
     await Future<void>.delayed(const Duration(milliseconds: 2));
   }
+}
+
+/// A whole-file response that is still streaming when the viewer seeks, served
+/// from a backend whose range downloads take measurable time.
+final class _SeekContentionFixture {
+  _SeekContentionFixture._({
+    required this.directory,
+    required this.backend,
+    required this.server,
+    required this.uri,
+  });
+
+  static const totalBytes = 40 * 1024 * 1024;
+  static const seek = 20 * 1024 * 1024;
+  static const downloadDuration = Duration(milliseconds: 1500);
+
+  final Directory directory;
+  final _TimedRangeBackend backend;
+  final TdVideoStreamServer server;
+  final Uri uri;
+  final HttpClient _client = HttpClient();
+
+  static Future<_SeekContentionFixture> create() async {
+    final directory = await Directory.systemTemp.createTemp(
+      'mithka-video-seek-test-',
+    );
+    final file = File('${directory.path}/video.mp4');
+    await file.writeAsBytes(List<int>.filled(totalBytes, 7), flush: true);
+    final backend = _TimedRangeBackend(
+      file: file,
+      totalBytes: totalBytes,
+      downloadDuration: downloadDuration,
+    );
+    final server = TdVideoStreamServer(
+      42,
+      query: backend.query,
+      rangePollInterval: const Duration(milliseconds: 5),
+    );
+    final uri = await server.start();
+    if (uri == null) {
+      await directory.delete(recursive: true);
+      throw StateError('The video stream server did not start');
+    }
+    return _SeekContentionFixture._(
+      directory: directory,
+      backend: backend,
+      server: server,
+      uri: uri,
+    );
+  }
+
+  /// Opens a range and keeps draining it, the way a player reads a stream it
+  /// has not finished with.
+  Future<StreamSubscription<List<int>>> open(String range) async {
+    final request = await _client.getUrl(uri);
+    request.headers.set(HttpHeaders.rangeHeader, range);
+    final response = await request.close();
+    return response.listen(null, onError: (_) {});
+  }
+
+  Future<void> close() async {
+    _client.close(force: true);
+    await server.close();
+    if (await directory.exists()) await directory.delete(recursive: true);
+  }
+}
+
+final class _TimedRangeBackend {
+  _TimedRangeBackend({
+    required this.file,
+    required this.totalBytes,
+    required this.downloadDuration,
+  });
+
+  final File file;
+  final int totalBytes;
+  final Duration downloadDuration;
+  final calls = <({int offset, int limit, DateTime startedAt})>[];
+  final _downloaded = <({int start, int end})>[];
+
+  Future<Map<String, dynamic>> query(Map<String, dynamic> request) async {
+    switch (request['@type']) {
+      case 'getFile':
+        return _fileInfo(0);
+      case 'getFileDownloadedPrefixSize':
+        return {
+          '@type': 'fileDownloadedPrefixSize',
+          'size': _prefixFrom(request['offset'] as int? ?? 0),
+        };
+      case 'downloadFile':
+        final offset = request['offset'] as int? ?? 0;
+        final limit = request['limit'] as int? ?? 0;
+        calls.add((offset: offset, limit: limit, startedAt: DateTime.now()));
+        await Future<void>.delayed(downloadDuration);
+        _downloaded.add((
+          start: offset,
+          end: limit == 0 ? totalBytes : math.min(totalBytes, offset + limit),
+        ));
+        return _fileInfo(offset);
+      default:
+        throw UnsupportedError('Unexpected TDLib query ${request['@type']}');
+    }
+  }
+
+  int _prefixFrom(int offset) {
+    var end = offset;
+    var progressed = true;
+    while (progressed) {
+      progressed = false;
+      for (final range in _downloaded) {
+        if (range.start <= end && range.end > end) {
+          end = range.end;
+          progressed = true;
+        }
+      }
+    }
+    return end - offset;
+  }
+
+  Map<String, dynamic> _fileInfo(int offset) => {
+    '@type': 'file',
+    'id': 42,
+    'size': totalBytes,
+    'expected_size': totalBytes,
+    'local': {
+      '@type': 'localFile',
+      'path': file.path,
+      'download_offset': offset,
+      'downloaded_prefix_size': _prefixFrom(offset),
+      'is_downloading_completed': false,
+    },
+  };
 }
 
 final class _VideoServerFixture {

@@ -118,11 +118,15 @@ class TdVideoStreamServer {
   int _playbackPreparationCount = 0;
   Future<bool>? _pendingPreparation;
   int? _continuousDownloadOffset;
+  int _streamGeneration = 0;
+  int _playbackReadOffset = 0;
   Future<void> _downloadQueue = Future<void>.value();
   final Map<(int, int), Future<Map<String, dynamic>?>> _rangeDownloads = {};
+  final Map<(int, int), List<bool Function()>> _rangeDownloadWaiters = {};
 
   static const _chunkSize = 2 * 1024 * 1024;
   static const _defaultReadChunkBytes = 2 * 1024 * 1024;
+  static const _openingReadChunkBytes = 256 * 1024;
   static const _metadataTailSize = 4 * 1024 * 1024;
 
   Future<Uri?> start() async {
@@ -183,7 +187,7 @@ class TdVideoStreamServer {
       if (_playbackPreparationCount == 0 &&
           _backgroundDownloadRequested &&
           _rangeDownloads.isEmpty) {
-        unawaited(_startContinuousDownload(0));
+        unawaited(_startContinuousDownload(_playbackReadOffset));
       }
     }
   }
@@ -214,7 +218,7 @@ class TdVideoStreamServer {
     if (_closed || _downloadComplete) return;
     _backgroundDownloadRequested = true;
     if (_playbackPreparationCount == 0 && _rangeDownloads.isEmpty) {
-      unawaited(_startContinuousDownload(0));
+      unawaited(_startContinuousDownload(_playbackReadOffset));
     }
   }
 
@@ -363,7 +367,21 @@ class TdVideoStreamServer {
         return;
       }
       final (start, end) = range ?? (0, _total - 1);
-      var chunkEnd = _readChunkEnd(start, end);
+      // TDLib keeps one download position per file, so two responses streaming
+      // different parts of it halve each other's throughput. A player that
+      // seeks opens a new range and abandons the previous response without
+      // closing it, so a response that is still streaming when a newer range
+      // arrives stops after its current read chunk.
+      final generation = ++_streamGeneration;
+      bool superseded() => generation != _streamGeneration;
+      _releaseAbandonedDownloads();
+      _playbackReadOffset = start;
+      // A read chunk reaches the player only once all of it is downloaded, so
+      // the full bound would keep a seek silent for however long those bytes
+      // take to arrive. Open small and grow back to the bound, which costs the
+      // extra TDLib round trips only while the player has nothing to decode.
+      var readChunkBytes = math.min(_readChunkBytes, _openingReadChunkBytes);
+      var chunkEnd = _readChunkEnd(start, end, readChunkBytes);
       var bytes = await _loadRange(
         start,
         chunkEnd,
@@ -386,13 +404,17 @@ class TdVideoStreamServer {
       while (true) {
         request.response.add(bytes!);
         await request.response.flush();
-        if (chunkEnd == end || requestFinished || _closed) break;
+        if (chunkEnd == end || requestFinished || superseded() || _closed) {
+          break;
+        }
         final chunkStart = chunkEnd + 1;
-        chunkEnd = _readChunkEnd(chunkStart, end);
+        _playbackReadOffset = chunkStart;
+        readChunkBytes = math.min(_readChunkBytes, readChunkBytes * 2);
+        chunkEnd = _readChunkEnd(chunkStart, end, readChunkBytes);
         bytes = await _loadRange(
           chunkStart,
           chunkEnd,
-          isCancelled: () => requestFinished,
+          isCancelled: () => requestFinished || superseded(),
         );
         if (requestFinished) return;
         if (bytes == null) {
@@ -462,8 +484,8 @@ class TdVideoStreamServer {
     await request.response.close();
   }
 
-  int _readChunkEnd(int start, int requestedEnd) =>
-      math.min(requestedEnd, math.min(_total - 1, start + _readChunkBytes - 1));
+  int _readChunkEnd(int start, int requestedEnd, int chunkBytes) =>
+      math.min(requestedEnd, math.min(_total - 1, start + chunkBytes - 1));
 
   Future<void> _closeEmptyResponse(
     HttpResponse response,
@@ -567,7 +589,11 @@ class TdVideoStreamServer {
     if (isCancelled?.call() == true) return false;
     final length = end - start + 1;
     try {
-      final file = await _downloadPlaybackRange(start, length);
+      final file = await _downloadPlaybackRange(
+        start,
+        length,
+        isCancelled: isCancelled,
+      );
       if (file != null) _updateFileInfo(file);
       if (_path == null || _path!.isEmpty) {
         await _primePlaybackRange(start, length);
@@ -578,14 +604,25 @@ class TdVideoStreamServer {
     }
   }
 
-  Future<Map<String, dynamic>?> _downloadPlaybackRange(int offset, int length) {
+  Future<Map<String, dynamic>?> _downloadPlaybackRange(
+    int offset,
+    int length, {
+    bool Function()? isCancelled,
+  }) {
     if (_closed) return Future<Map<String, dynamic>?>.value();
     final key = (offset, length);
+    if (isCancelled != null) {
+      _rangeDownloadWaiters.putIfAbsent(key, () => []).add(isCancelled);
+    }
     final existing = _rangeDownloads[key];
     if (existing != null) return existing;
 
     final task = _downloadQueue.then((_) async {
-      if (_closed) return null;
+      // Queued work runs behind whatever was already downloading, by which
+      // time every response that wanted this range can be gone. Moving TDLib's
+      // single download position there would only take bytes away from the
+      // range the player moved to.
+      if (_closed || _rangeIsAbandoned(key)) return null;
       _continuousDownloadOffset = null;
       try {
         return await _query({
@@ -606,17 +643,40 @@ class TdVideoStreamServer {
       task.whenComplete(() {
         if (identical(_rangeDownloads[key], task)) {
           _rangeDownloads.remove(key);
+          _rangeDownloadWaiters.remove(key);
         }
         if (!_closed &&
             _backgroundDownloadRequested &&
             _playbackPreparationCount == 0 &&
             _rangeDownloads.isEmpty &&
             !_downloadComplete) {
-          unawaited(_startContinuousDownload(0));
+          unawaited(_startContinuousDownload(_playbackReadOffset));
         }
       }),
     );
     return task;
+  }
+
+  /// Whether every response that asked for this range has stopped waiting.
+  ///
+  /// Bootstrap ranges register no waiter, so they are never abandoned.
+  bool _rangeIsAbandoned((int, int) key) {
+    final waiters = _rangeDownloadWaiters[key];
+    if (waiters == null || waiters.isEmpty) return false;
+    return waiters.every((isCancelled) => isCancelled());
+  }
+
+  /// Stops new ranges from queueing behind downloads nothing is waiting for.
+  ///
+  /// TDLib holds a synchronous range request until its bytes land, so a seek
+  /// that queues normally would first wait out however long the abandoned
+  /// stream's current chunk takes. Ranges that a live response is still
+  /// waiting on keep their place in the queue.
+  void _releaseAbandonedDownloads() {
+    if (_rangeDownloads.isNotEmpty &&
+        _rangeDownloads.keys.every(_rangeIsAbandoned)) {
+      _downloadQueue = Future<void>.value();
+    }
   }
 
   Future<bool> _waitForReadableRange(

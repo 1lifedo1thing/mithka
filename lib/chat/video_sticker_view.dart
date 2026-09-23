@@ -16,6 +16,7 @@ import 'package:video_player/video_player.dart';
 
 import '../components/photo_avatar.dart';
 import '../media/looping_media_playback.dart';
+import '../media/video_playback_reporting.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
 import '../tdlib/td_models.dart';
@@ -56,6 +57,7 @@ class _VideoStickerViewState extends State<VideoStickerView>
   LoopingMediaPlayerLease? _lease;
   LoopingMediaPlayerWaiter? _leaseWaiter;
   VideoPlayerController? _initializingController;
+  VideoPlaybackDiagnostics? _playbackDiagnostics;
 
   static Future<bool>? _androidNeedsStaticFallback;
 
@@ -109,6 +111,10 @@ class _VideoStickerViewState extends State<VideoStickerView>
     }
     if (!_isEligible) return;
     if (sourceChanged) {
+      _playbackDiagnostics = VideoPlaybackDiagnostics(
+        location: VideoPlaybackLocation.sticker,
+        mimeType: 'video/webm',
+      );
       _loadedId = widget.file.id;
       _loadedLocalPath = widget.file.localPath;
       _loadedSlot = slot;
@@ -205,8 +211,14 @@ class _VideoStickerViewState extends State<VideoStickerView>
       videoPlayerOptions: mutedLoopingVideoPlayerOptions(),
     );
     _initializingController = c;
+    final diagnostics = _playbackDiagnostics!;
+    diagnostics.beginAttempt(
+      source: VideoPlaybackSource.file,
+      viewType: c.viewType,
+    );
     try {
       await c.initialize();
+      diagnostics.initialized(value: c.value);
       await c.setLooping(true);
       await c.setVolume(0);
       disableLoopingMediaAudioTracks(c);
@@ -215,9 +227,14 @@ class _VideoStickerViewState extends State<VideoStickerView>
         return;
       }
       await c.play();
-    } catch (_) {
+    } catch (error) {
       final ownsCurrentSource = _ownsLoad(generation, ref, slot, lease);
       if (ownsCurrentSource) {
+        diagnostics.recordFailure(
+          error,
+          stage: VideoFailureStage.initialization,
+        );
+        diagnostics.reportTerminal();
         _fallbackOnly = true;
       }
       await _disposeInitializingLoad(c, lease);
@@ -235,6 +252,14 @@ class _VideoStickerViewState extends State<VideoStickerView>
       _initializingController = null;
     }
     _loadPending = false;
+    c.addListener(() {
+      if (!_ownsAttempt(generation, ref, slot) || !c.value.hasError) return;
+      diagnostics.recordFailure(
+        c.value.errorDescription,
+        stage: VideoFailureStage.playback,
+      );
+      diagnostics.reportTerminal();
+    });
     setState(() => _controller = c);
     widget.onReady?.call();
   }

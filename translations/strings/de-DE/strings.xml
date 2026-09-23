@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">Modell manuell eingeben</string>
-    <string name="aiInvalidEndpoint">Verwende eine HTTPS-URL, die zum ausgewählten API-Stil passt. HTTP ist nur für localhost erlaubt.</string>
+    <string name="aiInvalidEndpoint">Gib die vollständige HTTPS-API-URL einschließlich des Anfragepfads für den ausgewählten API-Stil ein. HTTP ist nur für localhost erlaubt.</string>
     <string name="aiInvalidModel">Modellname und gültige Kontext-Tokenanzahl eingeben.</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute, das Apple-On-Device-Modell und gespeicherte Servermodelle können jeweils für Übersetzungen oder Zusammenfassungen ausgewählt werden.</string>
     <string name="aiModelConfiguration">Modellkonfiguration</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API-Schlüssel</string>
     <string name="aiServerApiKeyOptional">Optional für lokale oder schlüssellose Server</string>
     <string name="aiServerEndpoint">API-Endpunkt</string>
+    <string name="aiServerEndpointHelp">Gib die vollständige API-URL mit Protokoll, Host und Anfragepfad ein, nicht nur die Basis-URL. Der Pfad wird nicht automatisch ergänzt. Beispiel: {value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">Modell</string>
     <string name="aiServerModelHint">Modellname</string>
@@ -1293,12 +1294,14 @@
     <string name="downloadsMediaVideoMessage">Videonachricht</string>
     <string name="downloadsMediaVoiceMessage">Sprachnachricht</string>
     <string name="downloadsNoDownloadsFound">Keine Downloads gefunden.</string>
+    <string name="downloadsPause">Download pausieren</string>
     <string name="downloadsPauseAllDownloads">Alle Downloads pausieren</string>
     <string name="downloadsPausedProgress">Pausiert · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Downloads aktualisieren</string>
     <string name="downloadsRemoveAndDeleteFile">Datei entfernen und löschen</string>
     <string name="downloadsRemoveAndKeepCachedFile">Entfernen Sie die zwischengespeicherte Datei und behalten Sie sie bei</string>
     <string name="downloadsRemoveFromDownloads">Aus Downloads entfernen?</string>
+    <string name="downloadsResume">Download fortsetzen</string>
     <string name="downloadsResumeAllDownloads">Alle Downloads fortsetzen</string>
     <string name="downloadsSearchDownloads">Downloads suchen</string>
     <string name="editProfileAddPhoto">Foto hinzufügen</string>
@@ -2677,7 +2680,9 @@
     <string name="sharedMediaEmpty">Keine Inhalte</string>
     <string name="sharedMediaFilterAll">Alle</string>
     <string name="sharedMediaFilterDownloaded">Heruntergeladen</string>
+    <string name="sharedMediaFilterDownloading">Wird heruntergeladen</string>
     <string name="sharedMediaFilterNotDownloaded">Nicht heruntergeladen</string>
+    <string name="sharedMediaFilterPartial">Teilweise heruntergeladen</string>
     <string name="sharedMediaFromSource">Von {value1}</string>
     <string name="sharedMediaLinks">Links</string>
     <string name="sharedMediaMinDuration">Mindestdauer</string>
@@ -3434,4 +3439,17 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Überprüfen Sie die Aufnahme vor dem Senden. Zu den Sendeoptionen gehören stille Zustellung, Planung, Effekte und einmalige Ansicht.</string>
     <string name="voiceNotePreviewVoiceMessage">Sprachnachricht</string>
     <string name="mediaSpoilerReveal">Spoiler. Zum Anzeigen tippen</string>
+    <string name="downloadsTasks">Download-Aufgaben</string>
+    <string name="downloadsCacheHint">Cache-Dateien aus Chats und dem Archiv. Lade weitere Ergebnisse, um ältere Dateien zu finden.</string>
+    <string name="sharedMediaFilterCached">Im Cache / aktiv</string>
+    <string name="downloadsKeepOnDevice">Auf Gerät behalten</string>
+    <string name="downloadsKeptOnDevice">Auf Gerät behalten</string>
+    <string name="downloadsKeepExplanation">Eine separate Kopie speichern, die zusätzlichen Speicher belegt und von der Cache-Bereinigung ausgenommen ist. Entferne sie bei Bedarf einzeln aus der Liste „Auf Gerät behalten“.</string>
+    <string name="downloadsKeepFailed">Datei konnte nicht behalten werden. Prüfe, ob der Download vollständig und genügend Speicher frei ist, und versuche es erneut.</string>
+    <string name="downloadsRetained">Auf Gerät behalten</string>
+    <string name="downloadsRetainedHint">Diese Kopien sind kein Cache. Durch Deinstallation der App oder Löschen der App-Daten können sie dennoch entfernt werden.</string>
+    <string name="downloadsRemoveRetained">Behaltene Kopie löschen</string>
+    <string name="downloadsRemoveRetainedConfirm">Behaltene Kopie von „{name}“ löschen? Chatnachrichten und Download-Cache bleiben unverändert.</string>
+    <string name="downloadsRetainedUnavailable">Kein Zugriff auf behaltene Dateien. Bitte erneut versuchen.</string>
+    <string name="downloadsNoRetained">Noch keine behaltenen Dateien. Nach Abschluss eines Datei- oder Video-Downloads kannst du sie über das Schildsymbol behalten.</string>
 </resources>

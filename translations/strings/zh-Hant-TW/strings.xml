@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">手動輸入模型</string>
-    <string name="aiInvalidEndpoint">請使用與所選 API 格式相符的 HTTPS 網址。只有 localhost 可使用 HTTP。</string>
+    <string name="aiInvalidEndpoint">請輸入完整的 HTTPS API URL，包含所選 API 格式對應的請求路徑。只有 localhost 可使用 HTTP。</string>
     <string name="aiInvalidModel">請輸入模型名稱和有效的上下文 Token 數量。</string>
     <string name="aiModelCandidatesDescription">Apple 私有雲端運算、Apple 裝置端模型和已儲存的服務商模型均可分別用於翻譯或摘要。</string>
     <string name="aiModelConfiguration">模型設定</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API 金鑰</string>
     <string name="aiServerApiKeyOptional">本機或無金鑰伺服器可留空</string>
     <string name="aiServerEndpoint">API 端點</string>
+    <string name="aiServerEndpointHelp">請輸入完整 API URL，包含通訊協定、網域和請求路徑，不要只填 Base URL。路徑不會自動補齊。範例：{value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">模型</string>
     <string name="aiServerModelHint">模型名稱</string>
@@ -1289,12 +1290,14 @@
     <string name="downloadsMediaVideoMessage">視訊訊息</string>
     <string name="downloadsMediaVoiceMessage">語音訊息</string>
     <string name="downloadsNoDownloadsFound">沒有找到下載。</string>
+    <string name="downloadsPause">暫停下載</string>
     <string name="downloadsPauseAllDownloads">暫停所有下載</string>
     <string name="downloadsPausedProgress">已暫停 · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">重新整理下載</string>
     <string name="downloadsRemoveAndDeleteFile">刪除並刪除文件</string>
     <string name="downloadsRemoveAndKeepCachedFile">刪除並保留快取文件</string>
     <string name="downloadsRemoveFromDownloads">從下載中刪除？</string>
+    <string name="downloadsResume">繼續下載</string>
     <string name="downloadsResumeAllDownloads">繼續所有下載</string>
     <string name="downloadsSearchDownloads">搜尋下載</string>
     <string name="editProfileAddPhoto">新增照片</string>
@@ -2670,7 +2673,9 @@
     <string name="sharedMediaEmpty">暫無內容</string>
     <string name="sharedMediaFilterAll">全部</string>
     <string name="sharedMediaFilterDownloaded">已下載</string>
+    <string name="sharedMediaFilterDownloading">下載中</string>
     <string name="sharedMediaFilterNotDownloaded">未下載</string>
+    <string name="sharedMediaFilterPartial">部分下載</string>
     <string name="sharedMediaFromSource">來自 {value1}</string>
     <string name="sharedMediaLinks">連結</string>
     <string name="sharedMediaMinDuration">最短時長</string>
@@ -3426,4 +3431,17 @@
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">發送前查看錄音。發送選項包括靜默傳送、調度、效果和一次性檢視。</string>
     <string name="voiceNotePreviewVoiceMessage">語音訊息</string>
     <string name="mediaSpoilerReveal">劇透內容，點擊顯示</string>
+    <string name="downloadsTasks">下載任務</string>
+    <string name="downloadsCacheHint">聊天與封存中的快取內容。可載入更多，尋找更早的檔案。</string>
+    <string name="sharedMediaFilterCached">已快取／下載中</string>
+    <string name="downloadsKeepOnDevice">永久保留</string>
+    <string name="downloadsKeptOnDevice">已永久保留</string>
+    <string name="downloadsKeepExplanation">儲存不參與快取清理的獨立副本，會佔用額外空間。需要刪除時，請在「永久保留」列表單獨操作。</string>
+    <string name="downloadsKeepFailed">無法保留此檔案。請確認下載完整且儲存空間充足，然後重試。</string>
+    <string name="downloadsRetained">永久保留</string>
+    <string name="downloadsRetainedHint">這些副本不屬於快取。移除應用程式或清除應用程式資料仍可能刪除它們。</string>
+    <string name="downloadsRemoveRetained">刪除保留副本</string>
+    <string name="downloadsRemoveRetainedConfirm">刪除「{name}」的保留副本？不會影響聊天訊息和下載快取。</string>
+    <string name="downloadsRetainedUnavailable">無法存取保留的檔案，請重試。</string>
+    <string name="downloadsNoRetained">尚無保留的檔案。檔案或影片下載完成後，點擊盾牌按鈕即可保留。</string>
 </resources>

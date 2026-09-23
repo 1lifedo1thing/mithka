@@ -509,7 +509,7 @@ void main() {
 
     await tester.drag(
       find.byKey(const ValueKey('shared-video-grid')),
-      const Offset(0, -12000),
+      const Offset(0, -20000),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
