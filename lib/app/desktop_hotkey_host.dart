@@ -78,11 +78,11 @@ class PluginDesktopSystemHotkeyBackend implements DesktopSystemHotkeyBackend {
   }
 }
 
-/// Installs system-wide and focused-window shortcuts only for actions that
-/// currently have a live handler.
+/// Installs focused-window shortcuts for actions with a live handler. Only
+/// screenshot capture also registers a system-wide hotkey.
 ///
-/// This keeps a configurable shortcut from swallowing an ordinary platform or
-/// text-editing command while its destination is not mounted.
+/// Search, new chat, and settings are ordinary application commands and must
+/// never swallow another application's keyboard shortcuts.
 class DesktopHotkeyHost extends StatefulWidget {
   const DesktopHotkeyHost({
     super.key,
@@ -153,12 +153,10 @@ class _DesktopHotkeyHostState extends State<DesktopHotkeyHost> {
         .then((_) async {
           if (!mounted) return;
           final bindings = <DesktopHotkeyAction, DesktopHotkeyGesture>{};
-          if (widget.controller.available) {
-            for (final action in DesktopHotkeyAction.values) {
-              if (_registry.hasHandler(action)) {
-                bindings[action] = widget.controller.bindingFor(action);
-              }
-            }
+          if (widget.controller.available &&
+              _registry.hasHandler(DesktopHotkeyAction.screenshot)) {
+            bindings[DesktopHotkeyAction.screenshot] = widget.controller
+                .bindingFor(DesktopHotkeyAction.screenshot);
           }
           await _systemBackend.replaceAll(bindings, _invokeSystemHotkey);
         })

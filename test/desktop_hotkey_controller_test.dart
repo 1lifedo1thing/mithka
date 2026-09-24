@@ -129,16 +129,13 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(systemBackend.bindings.keys, {DesktopHotkeyAction.openSettings});
-    systemBackend.trigger(DesktopHotkeyAction.openSettings);
-    await tester.pump();
-    expect(invocations, 1);
+    expect(systemBackend.bindings, isEmpty);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.comma);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
-    expect(invocations, 2);
+    expect(invocations, 1);
 
     registration.dispose();
     await tester.pump();
@@ -148,9 +145,98 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.comma);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
-    expect(invocations, 2);
+    expect(invocations, 1);
     debugDefaultTargetPlatformOverride = null;
   });
+
+  for (final platform in [
+    TargetPlatform.macOS,
+    TargetPlatform.windows,
+    TargetPlatform.linux,
+  ]) {
+    testWidgets('window commands stay local on ${platform.name}', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final prefs = await SharedPreferences.getInstance();
+      final controller = DesktopHotkeyController(prefs, platform: platform);
+      final registry = DesktopHotkeyRegistry();
+      final systemBackend = _FakeSystemHotkeyBackend();
+      final invocations = <DesktopHotkeyAction, int>{};
+      final registrations = {
+        for (final action in DesktopHotkeyAction.values)
+          action: registry.register(
+            action,
+            () => invocations.update(
+              action,
+              (count) => count + 1,
+              ifAbsent: () => 1,
+            ),
+          ),
+      };
+      addTearDown(controller.dispose);
+      addTearDown(registry.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DesktopHotkeyHost(
+            controller: controller,
+            registry: registry,
+            systemBackend: systemBackend,
+            child: const Focus(autofocus: true, child: SizedBox.expand()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(systemBackend.bindings.keys, {DesktopHotkeyAction.screenshot});
+      systemBackend.trigger(DesktopHotkeyAction.screenshot);
+      await tester.pump();
+      expect(invocations, {DesktopHotkeyAction.screenshot: 1});
+
+      final modifier = platform == TargetPlatform.macOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pump();
+      expect(invocations, {
+        for (final action in DesktopHotkeyAction.values) action: 1,
+      });
+
+      if (platform == TargetPlatform.macOS) {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pump();
+        expect(invocations[DesktopHotkeyAction.focusSearch], 1);
+      }
+
+      // A customized search shortcut must not become a system-wide hotkey.
+      controller.assign(
+        DesktopHotkeyAction.focusSearch,
+        const DesktopHotkeyGesture(key: LogicalKeyboardKey.keyF, control: true),
+      );
+      await tester.pump();
+      expect(systemBackend.bindings.keys, {DesktopHotkeyAction.screenshot});
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(invocations[DesktopHotkeyAction.focusSearch], 2);
+
+      for (final registration in registrations.values) {
+        registration.dispose();
+      }
+      await tester.pump();
+      expect(systemBackend.bindings, isEmpty);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 
   testWidgets('descendant registration does not notify during build', (
     tester,
