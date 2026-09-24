@@ -2040,6 +2040,20 @@ class ThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Leave automatic mode by reversing the appearance currently on screen.
+  /// Once explicit, use the selected mode so repeated clicks also work while
+  /// the animated theme or the switch's build callback still has old data.
+  void toggleDayNight(Brightness currentBrightness) {
+    mode = switch (_mode) {
+      AppearanceMode.light => AppearanceMode.dark,
+      AppearanceMode.dark => AppearanceMode.light,
+      AppearanceMode.system =>
+        currentBrightness == Brightness.dark
+            ? AppearanceMode.light
+            : AppearanceMode.dark,
+    };
+  }
+
   /// The active scope's accent / brand color.
   set brandColor(Color value) {
     if (_brandColor == value) return;

@@ -105,11 +105,14 @@ import 'media_album_layout.dart';
 import 'media_download_service.dart';
 import 'media_library_saver.dart';
 import 'media_send_preview_view.dart';
+import 'media_spoiler.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import 'message_bubble_repository_view.dart';
+import 'message_quote_selection_dialog.dart';
 import 'message_reaction_availability.dart';
 import 'message_replies_sheet.dart';
+import 'message_text_quote.dart';
 import 'message_translation_cache.dart';
 import 'music_player_controller.dart';
 import 'openai_compatible_unread_summary_provider.dart';
@@ -1173,6 +1176,9 @@ class _ChatViewState extends State<ChatView> {
   bool _modelDirtyWhileInactive = false;
   bool _reactivationSyncScheduled = false;
   ChatMessage? _actionTarget;
+  int? _desktopQuoteMessageId;
+  MessageTextQuote? _desktopQuote;
+  MessageTextQuote? _actionQuote;
   Rect? _actionRect; // bounds in the action-overlay Stack's coordinate space
   final GlobalKey _actionOverlayKey = GlobalKey();
   GlobalKey<SelectionAreaState>? _mobileTextSelectionAreaKey;
@@ -1630,7 +1636,13 @@ class _ChatViewState extends State<ChatView> {
         isNearOldest(pos, threshold: 500)) {
       unawaited(_loadOlderFromScroll());
     }
-    final nearBottom = _isNearBottom(80);
+    if (_initialTranscriptReady &&
+        _scrollTargetId == null &&
+        pos.userScrollDirection == ScrollDirection.reverse &&
+        _isNearBottom(500)) {
+      unawaited(_vm.loadNewer());
+    }
+    final nearBottom = _vm.historyReachesLatest && _isNearBottom(80);
     if (_isAtLoadedBottom(1)) {
       _autoScrollPolicy.returnToBottom();
       if (!_hasTranscriptPointerDown) {
@@ -1662,7 +1674,7 @@ class _ChatViewState extends State<ChatView> {
           .finishUserScroll();
       _returnToLatestCoordinator.userDragEnded();
       if (endedTowardLatest && !protectedRestoredPosition) {
-        _requestAutomaticReturnToLatestIfNearLatest();
+        unawaited(_continueHistoryIfNearLatest());
       }
     } else if (_initialTranscriptReady) {
       // Once an older-page request is in flight, a turn toward the latest
@@ -2142,7 +2154,9 @@ class _ChatViewState extends State<ChatView> {
   }
 
   bool _isAtLoadedBottom([double threshold = 24]) {
-    return !_vm.anchoredHistory && _isNearBottom(threshold);
+    return _vm.historyReachesLatest &&
+        !_vm.anchoredHistory &&
+        _isNearBottom(threshold);
   }
 
   void _clearBottomIndicatorsIfNeeded() {
@@ -2354,9 +2368,9 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
-  void _requestAutomaticReturnToLatestIfNearLatest() {
-    if (!shouldRequestAutomaticReturnToLatest(
-      anchoredHistory: _vm.anchoredHistory,
+  Future<void> _continueHistoryIfNearLatest() async {
+    if (!shouldContinueAnchoredHistory(
+      anchoredHistory: _vm.anchoredHistory || !_vm.historyReachesLatest,
       restoredPositionProtected: _restoredPositionGuard.blocksAutomaticReturn,
       pointerDown: _hasTranscriptPointerDown,
       hasScrollTarget: _scrollTargetId != null,
@@ -2366,7 +2380,12 @@ class _ChatViewState extends State<ChatView> {
     )) {
       return;
     }
-    _requestReturnToLatest();
+    if (!_vm.historyReachesLatest) {
+      await _vm.loadNewer();
+      return;
+    }
+    _vm.resumeLatestHistoryIfLoaded();
+    _onScroll();
   }
 
   void _markReadAtBottomIfNeeded() {
@@ -4204,6 +4223,7 @@ class _ChatViewState extends State<ChatView> {
       showRepeat: _vm.canForwardContent && _isRepeatTail(messageIndex),
       onRepeat: () => _vm.repeatMessage(message),
       onLongPress: _isSelecting ? null : _showActionMenuForMessage,
+      onDesktopQuoteChanged: _handleDesktopQuoteChanged,
       mobileTextSelectionAreaKey: mobileSelectionKey,
       onMobileTextSelectionChanged: _handleMobileTextSelectionChanged,
       onMobileTextSelectionDisposed: mobileSelectionKey == null
@@ -4608,7 +4628,11 @@ class _ChatViewState extends State<ChatView> {
 
   VideoSplitSession _videoSession(ChatMessage message) {
     final videoMessages = _vm.messages
-        .where((candidate) => candidate.video != null)
+        .where(
+          (candidate) =>
+              candidate.video != null &&
+              canPreviewMediaAlongside(candidate, message),
+        )
         .toList();
     if (!videoMessages.any((candidate) => candidate.id == message.id)) {
       videoMessages.add(message);
@@ -4664,7 +4688,12 @@ class _ChatViewState extends State<ChatView> {
 
   void _openImage(ChatMessage message) {
     final pairs = _vm.messages
-        .where((m) => m.isPhoto && m.image != null)
+        .where(
+          (m) =>
+              m.isPhoto &&
+              m.image != null &&
+              canPreviewMediaAlongside(m, message),
+        )
         .toList();
     final items = pairs.map((m) => m.image!).toList();
     final start = pairs.indexWhere((m) => m.id == message.id);
@@ -4857,8 +4886,10 @@ class _ChatViewState extends State<ChatView> {
   }
 
   Future<void> _perform(MessageAction action, ChatMessage message) async {
+    final selectedQuote = _actionQuote;
     setState(() {
       _actionTarget = null;
+      _actionQuote = null;
       _actionRect = null;
       _clearMobileTextSelectionState();
       _actionSource = MessageActionSource.normal;
@@ -4877,7 +4908,13 @@ class _ChatViewState extends State<ChatView> {
       case MessageAction.displayTranslation:
         setState(() => _showOriginalTranslationMessageIds.remove(message.id));
       case MessageAction.reply:
-        _vm.setReply(message);
+        if (selectedQuote != null && _vm.canQuoteText) {
+          await _quoteMessageText(message, selectedQuote: selectedQuote);
+        } else {
+          _vm.setReply(message);
+        }
+      case MessageAction.quote:
+        await _quoteMessageText(message, selectedQuote: selectedQuote);
       case MessageAction.replies:
         await _openMessageComments(message);
       case MessageAction.forward:
@@ -6656,7 +6693,7 @@ class _ChatViewState extends State<ChatView> {
     if (_showEntryUnreadBanner) return true;
     if (_liveNewMessageCount > 0) return !_isAtLoadedBottom();
     if (_isAtLoadedBottom()) return false;
-    return _openAtLatest || !_isNearBottom(80);
+    return _openAtLatest || !_vm.historyReachesLatest || !_isNearBottom(80);
   }
 
   /// Small button (bottom-right of the transcript) to return to the newest
@@ -9266,6 +9303,20 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
+  void _handleDesktopQuoteChanged(
+    ChatMessage message,
+    MessageTextQuote? quote,
+  ) {
+    if (!mounted) return;
+    if (quote != null) {
+      _desktopQuoteMessageId = message.id;
+      _desktopQuote = quote;
+    } else if (_desktopQuoteMessageId == message.id) {
+      _desktopQuoteMessageId = null;
+      _desktopQuote = null;
+    }
+  }
+
   void _showActionMenuForMessage(
     ChatMessage message,
     Rect? rect, [
@@ -9299,6 +9350,12 @@ class _ChatViewState extends State<ChatView> {
     final oldSelectionState = _mobileTextSelectionAreaKey?.currentState;
     setState(() {
       _actionTarget = message;
+      // Keep the quote while the menu takes focus and clears Flutter's live
+      // selection. Each newly opened menu replaces this snapshot.
+      _actionQuote =
+          desktop && _vm.canQuoteText && _desktopQuoteMessageId == message.id
+          ? _desktopQuote
+          : null;
       _actionRect = overlayRect;
       _mobileTextSelectionAreaKey = enableMobileTextSelection
           ? GlobalKey<SelectionAreaState>()
@@ -9609,6 +9666,7 @@ class _ChatViewState extends State<ChatView> {
       onEditCaption: (message) => unawaited(_editMessageText(message)),
       onOpenComments: _openMessageComments,
       onLongPress: _showActionMenuForMessage,
+      onDesktopQuoteChanged: _handleDesktopQuoteChanged,
       mobileTextSelectionAreaKey: mobileSelectionKey,
       onMobileTextSelectionChanged: _handleMobileTextSelectionChanged,
       onMobileTextSelectionDisposed:
@@ -9675,6 +9733,47 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  Future<void> _quoteMessageText(
+    ChatMessage message, {
+    MessageTextQuote? selectedQuote,
+  }) async {
+    if (!_vm.canQuoteText || !canQuoteMessageText(message)) return;
+    final limit = await _vm.messageQuoteLengthLimit();
+    if (!mounted || !_vm.canQuoteText) return;
+    // Desktop quotes are chosen directly in the transcript, not in a second
+    // window. Touch keeps the explicit quote-selection flow.
+    if (selectedQuote == null &&
+        isDesktopTargetPlatform(Theme.of(context).platform)) {
+      return;
+    }
+    final quote =
+        selectedQuote ??
+        await showGeneralDialog<MessageTextQuote>(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: AppStringKeys.confirmCancel.l10n(context),
+          barrierColor: Colors.black.withValues(alpha: 0.52),
+          transitionDuration: AppMotion.duration(context, AppMotion.responsive),
+          transitionBuilder: AppMotion.dialogTransition,
+          pageBuilder: (_, _, _) =>
+              MessageQuoteSelectionDialog(message: message, maxLength: limit),
+        );
+    if (!mounted || quote == null || !_vm.canQuoteText) return;
+    final current = _vm.messages.where((m) => m.id == message.id).firstOrNull;
+    if (current == null) return;
+    final validated = quoteMessageRange(
+      current,
+      start: quote.position,
+      end: quote.position + quote.text.length,
+      maxLength: limit,
+    );
+    if (validated == null || validated.text != quote.text) {
+      showToast(context, AppStringKeys.topicPostContentActionFailed);
+      return;
+    }
+    _vm.setReply(current, quote: validated);
+  }
+
   Future<void> _toggleMessageReaction(
     ChatMessage message,
     MessageReaction reaction,
@@ -9712,6 +9811,8 @@ class _ChatViewState extends State<ChatView> {
       isPinned: _vm.pinnedMessage?.id == _actionTarget!.id,
       allowForwarding: _vm.canForwardContent,
       allowTranslation: _hasAvailableTranslationOption,
+      allowQuote: _vm.canQuoteText,
+      hasSelectedQuote: _actionQuote != null,
       allowSuggestedPostOffer:
           _vm.isDirectMessagesGroup && !_vm.isAdministeredDirectMessagesGroup,
       source: _actionSource,

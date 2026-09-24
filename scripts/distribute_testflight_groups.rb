@@ -118,6 +118,7 @@ module TestFlightGroupDistributor
       client:,
       app_id:,
       build_number:,
+      marketing_version:,
       platform:,
       internal_group:,
       external_group:,
@@ -127,6 +128,7 @@ module TestFlightGroupDistributor
       @client = client
       @app_id = app_id
       @build_number = build_number
+      @marketing_version = marketing_version
       @platform = platform
       @internal_group = internal_group
       @external_group = external_group
@@ -145,7 +147,7 @@ module TestFlightGroupDistributor
         build_id,
         await_external: !review_state.nil?
       )
-      summary = "Verified #{platform_name} build #{@build_number}: " \
+      summary = "Verified #{platform_name} #{@marketing_version} build #{@build_number}: " \
                 "Internal is #{internal_state}; External is #{external_state}."
       unless EXTERNAL_SUBMITTED_STATES.include?(external_state)
         summary += " Beta App Review did not take this build; that is not a failure."
@@ -163,12 +165,13 @@ module TestFlightGroupDistributor
           "filter[app]" => @app_id,
           "filter[version]" => @build_number,
           "sort" => "-uploadedDate",
-          "limit" => "10"
+          "limit" => "200"
         )
         builds = response.fetch("data").select do |candidate|
-          build_platform(candidate.fetch("id")) == @platform
+          train = @client.get("/builds/#{candidate.fetch('id')}/preReleaseVersion").dig("data", "attributes")
+          train && train["platform"] == @platform && train["version"] == @marketing_version
         end
-        raise Error, "multiple App Store builds use number #{@build_number}" if builds.length > 1
+        raise Error, "multiple App Store builds use #{@marketing_version} (#{@build_number}) on #{@platform}" if builds.length > 1
 
         build = builds.first
         return build if build&.dig("attributes", "processingState") == "VALID"
@@ -180,10 +183,6 @@ module TestFlightGroupDistributor
         puts "Waiting for App Store build #{@build_number} (#{state})..."
         sleep 45
       end
-    end
-
-    def build_platform(build_id)
-      @client.get("/builds/#{build_id}/preReleaseVersion").dig("data", "attributes", "platform")
     end
 
     def platform_name
@@ -319,6 +318,7 @@ if $PROGRAM_NAME == __FILE__
     parser.on("--issuer-id VALUE") { |value| options[:issuer_id] = value }
     parser.on("--key-path VALUE") { |value| options[:key_path] = value }
     parser.on("--app-id VALUE") { |value| options[:app_id] = value }
+    parser.on("--marketing-version VALUE") { |value| options[:marketing_version] = value }
     parser.on("--build-number VALUE") { |value| options[:build_number] = value }
     parser.on("--platform VALUE") { |value| options[:platform] = value }
     parser.on("--internal-group VALUE") { |value| options[:internal_group] = value }
@@ -329,7 +329,7 @@ if $PROGRAM_NAME == __FILE__
     end
   end.parse!
 
-  required = %i[key_id issuer_id key_path app_id build_number platform internal_group external_group]
+  required = %i[key_id issuer_id key_path app_id build_number marketing_version platform internal_group external_group]
   missing = required.select { |key| options[key].to_s.empty? }
   raise TestFlightGroupDistributor::Error, "missing options: #{missing.join(', ')}" unless missing.empty?
   raise TestFlightGroupDistributor::Error, "build number must be numeric" unless options[:build_number].match?(/\A\d+\z/)
@@ -343,6 +343,7 @@ if $PROGRAM_NAME == __FILE__
     client: client,
     app_id: options[:app_id],
     build_number: options[:build_number],
+    marketing_version: options[:marketing_version],
     platform: options[:platform],
     internal_group: options[:internal_group],
     external_group: options[:external_group],

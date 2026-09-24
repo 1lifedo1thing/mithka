@@ -13,6 +13,10 @@ class ChatDeleteCapabilities {
     : canDeleteForSelf = true,
       canDeleteForAllUsers = false;
 
+  const ChatDeleteCapabilities.none()
+    : canDeleteForSelf = false,
+      canDeleteForAllUsers = false;
+
   final bool canDeleteForSelf;
   final bool canDeleteForAllUsers;
 
@@ -22,13 +26,24 @@ class ChatDeleteCapabilities {
 ChatDeleteCapabilities chatDeleteCapabilities(Map<String, dynamic> chat) {
   final self = chat.boolean('can_be_deleted_only_for_self');
   final allUsers = chat.boolean('can_be_deleted_for_all_users');
-  if (self == null && allUsers == null) {
-    // Compatibility with older TDLib responses which predate these fields.
-    return const ChatDeleteCapabilities.selfOnly();
-  }
+  // Missing capabilities must not grant permission to delete history.
   return ChatDeleteCapabilities(
     canDeleteForSelf: self ?? false,
     canDeleteForAllUsers: allUsers ?? false,
+  );
+}
+
+/// The list's self action leaves groups/channels; it does not clear their
+/// shared history. History-deletion permissions must not block that action.
+ChatDeleteCapabilities chatListDeleteCapabilities(Map<String, dynamic> chat) {
+  final history = chatDeleteCapabilities(chat);
+  final type = chat.obj('type')?.type;
+  return ChatDeleteCapabilities(
+    canDeleteForSelf:
+        type == 'chatTypeBasicGroup' ||
+        type == 'chatTypeSupergroup' ||
+        history.canDeleteForSelf,
+    canDeleteForAllUsers: history.canDeleteForAllUsers,
   );
 }
 

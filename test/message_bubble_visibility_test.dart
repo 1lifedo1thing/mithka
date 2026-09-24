@@ -148,15 +148,15 @@ void main() {
     final entityLink = _textSpans(
       messageText.text,
     ).singleWhere((span) => span.text == 'site');
-    // Links inside an outgoing bubble follow the bubble's own ink rather than
-    // the page link colour, which would not carry on this fill.
+    // Preserve the bubble's readable ink, but distinguish links with a thin
+    // underline when their color would otherwise match the body.
     expect(link.style?.color, AppColors.light.bubbleOutgoingText);
     expect(entityLink.style?.color, AppColors.light.bubbleOutgoingText);
     for (final enabledLink in [link, entityLink]) {
       expect(
         enabledLink.style?.decoration?.contains(TextDecoration.underline) ??
             false,
-        isFalse,
+        isTrue,
       );
     }
 

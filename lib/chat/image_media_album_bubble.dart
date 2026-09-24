@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:provider/provider.dart';
@@ -16,8 +17,10 @@ import '../theme/message_name_colors.dart';
 import '../theme/telegram_cloud_theme.dart';
 import '../theme/theme_controller.dart';
 import 'chat_appearance_preview.dart';
+import 'desktop_message_quote_source.dart';
 import 'media_album_layout.dart';
 import 'media_preview_geometry.dart';
+import 'media_spoiler.dart';
 import 'message_action_menu.dart';
 import 'message_reply_count_badge.dart';
 import 'mobile_message_text_selection.dart';
@@ -66,6 +69,7 @@ class ImageMediaAlbumBubble extends StatelessWidget {
     this.mobileTextSelectionAreaKey,
     this.onMobileTextSelectionChanged,
     this.onMobileTextSelectionDisposed,
+    this.onDesktopQuoteChanged,
     this.onToggleSelection,
     this.onBotCommandTap,
     this.onHashtagTap,
@@ -109,6 +113,7 @@ class ImageMediaAlbumBubble extends StatelessWidget {
   final GlobalKey<SelectionAreaState>? mobileTextSelectionAreaKey;
   final ValueChanged<SelectedContent?>? onMobileTextSelectionChanged;
   final VoidCallback? onMobileTextSelectionDisposed;
+  final DesktopQuoteChanged? onDesktopQuoteChanged;
   final ValueChanged<ChatMessage>? onToggleSelection;
   final ValueChanged<String>? onBotCommandTap;
   final ValueChanged<String>? onHashtagTap;
@@ -442,12 +447,23 @@ class ImageMediaAlbumBubble extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _captionText(
-                                  captionText,
-                                  captionEntities,
-                                  displayedTextColor,
-                                  displayedLinkColor,
-                                  replacesOriginal: replacesOriginal,
+                                DesktopMessageQuoteSource(
+                                  key: ValueKey((
+                                    captionMessage.id,
+                                    captionText,
+                                  )),
+                                  message: captionMessage,
+                                  displayedText: replacesOriginal
+                                      ? ''
+                                      : captionText,
+                                  onChanged: onDesktopQuoteChanged,
+                                  child: _captionText(
+                                    captionText,
+                                    captionEntities,
+                                    displayedTextColor,
+                                    displayedLinkColor,
+                                    replacesOriginal: replacesOriginal,
+                                  ),
                                 ),
                                 if (showsTranslationBlock) ...[
                                   const SizedBox(height: 7),
@@ -461,6 +477,32 @@ class ImageMediaAlbumBubble extends StatelessWidget {
                                 ],
                               ],
                             );
+                            if (!selecting &&
+                                isDesktopTargetPlatform(
+                                  Theme.of(context).platform,
+                                )) {
+                              return Listener(
+                                onPointerDown: (event) {
+                                  if (event.buttons == kSecondaryMouseButton) {
+                                    onLongPress?.call(
+                                      captionMessage,
+                                      Rect.fromLTWH(
+                                        event.position.dx,
+                                        event.position.dy,
+                                        0,
+                                        0,
+                                      ),
+                                      MessageActionSource.normal,
+                                    );
+                                  }
+                                },
+                                child: SelectionArea(
+                                  contextMenuBuilder: (_, _) =>
+                                      const SizedBox.shrink(),
+                                  child: selectionContent,
+                                ),
+                              );
+                            }
                             final selectionKey = mobileTextSelectionAreaKey;
                             if (selectionKey == null) return selectionContent;
                             return MobileMessageTextSelectionArea(
@@ -527,6 +569,7 @@ class ImageMediaAlbumBubble extends StatelessWidget {
     entities: entities,
     style: TextStyle(fontSize: 15, height: 1.25, color: textColor),
     linkColor: linkColor,
+    underlineLinks: linkNeedsUnderline(body: textColor, link: linkColor),
     onBotCommandTap: onBotCommandTap,
     onHashtagTap: onHashtagTap,
     onMentionTap: onMentionTap,
@@ -727,47 +770,59 @@ class ImageMediaAlbumBubble extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                imageBuilder?.call(context, message, width, height) ??
-                    TDImage(
-                      photo: message.image,
-                      cornerRadius: 5,
-                      cacheWidth: _cachePx(context, width),
-                      cacheHeight: _cachePx(context, height),
-                      showProgress: true,
-                    ),
-                if (message.video != null)
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const AppIcon(
-                        HeroAppIcons.play,
-                        color: Colors.white,
-                        size: 21,
-                      ),
+                IgnorePointer(
+                  ignoring: selecting,
+                  child: MessageMediaSpoiler(
+                    message: message,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        imageBuilder?.call(context, message, width, height) ??
+                            TDImage(
+                              photo: message.image,
+                              cornerRadius: AppRadius.sm,
+                              cacheWidth: _cachePx(context, width),
+                              cacheHeight: _cachePx(context, height),
+                              showProgress: true,
+                            ),
+                        if (message.video != null)
+                          Center(
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const AppIcon(
+                                HeroAppIcons.play,
+                                color: Colors.white,
+                                size: 21,
+                              ),
+                            ),
+                          ),
+                        if (extraCount > 0)
+                          Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                            child: Text(
+                              '+$extraCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                if (extraCount > 0)
-                  Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                    ),
-                    child: Text(
-                      '+$extraCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                ),
                 if (selecting)
                   Positioned(
                     top: 6,

@@ -71,7 +71,7 @@ class TestFlightGroupDistributorTest < Minitest::Test
           }]
         }
       when "/builds/build/preReleaseVersion"
-        { "data" => { "attributes" => { "platform" => "MAC_OS" } } }
+        { "data" => { "attributes" => { "platform" => "MAC_OS", "version" => "1.4.10" } } }
       when "/apps/app/betaGroups"
         {
           "data" => [
@@ -124,6 +124,7 @@ class TestFlightGroupDistributorTest < Minitest::Test
       client: client,
       app_id: "app",
       build_number: "123",
+      marketing_version: "1.4.10",
       platform: "MAC_OS",
       internal_group: "Internal",
       external_group: "External",
@@ -242,7 +243,7 @@ class TestFlightGroupDistributorTest < Minitest::Test
           }]
         }
       when "/builds/build/preReleaseVersion"
-        { "data" => { "attributes" => { "platform" => "MAC_OS" } } }
+        { "data" => { "attributes" => { "platform" => "MAC_OS", "version" => "1.4.10" } } }
       when "/apps/app/betaGroups"
         {
           "data" => [
@@ -312,6 +313,7 @@ class TestFlightGroupDistributorTest < Minitest::Test
       client: client,
       app_id: "app",
       build_number: "123",
+      marketing_version: "1.4.10",
       platform: "MAC_OS",
       internal_group: "Internal",
       external_group: "External",
@@ -329,13 +331,65 @@ class TestFlightGroupDistributorTest < Minitest::Test
     assert_includes output, "External: Beta App Review already WAITING_FOR_REVIEW"
   end
 
+  def test_reused_build_number_selects_only_the_requested_version_and_platform
+    client = build_lookup_client([
+      ["old", "1.4.0", "MAC_OS", "VALID"],
+      ["ios", "1.4.10", "IOS", "VALID"],
+      ["release", "1.4.10", "MAC_OS", "VALID"]
+    ])
+
+    assert_equal "release", runner_for(client).send(:wait_for_build).fetch("id")
+  end
+
+  def test_processing_release_never_falls_back_to_an_older_valid_version
+    client = build_lookup_client([
+      ["old", "1.4.0", "MAC_OS", "VALID"],
+      ["release", "1.4.10", "MAC_OS", "PROCESSING"]
+    ])
+
+    error = assert_raises(TestFlightGroupDistributor::Error) do
+      runner_for(client).send(:wait_for_build)
+    end
+    assert_includes error.message, "was not valid"
+  end
+
+  def test_duplicate_builds_in_the_same_version_still_fail
+    client = build_lookup_client([
+      ["first", "1.4.10", "MAC_OS", "VALID"],
+      ["second", "1.4.10", "MAC_OS", "VALID"]
+    ])
+
+    error = assert_raises(TestFlightGroupDistributor::Error) do
+      runner_for(client).send(:wait_for_build)
+    end
+    assert_includes error.message, "multiple App Store builds"
+  end
+
   private
+
+  def build_lookup_client(builds)
+    client = Object.new
+    client.define_singleton_method(:get) do |path, _params = {}|
+      if path == "/builds"
+        { "data" => builds.map { |id, _version, _platform, state|
+          { "id" => id, "attributes" => { "processingState" => state } }
+        } }
+      else
+        build = builds.find { |id, *_| path == "/builds/#{id}/preReleaseVersion" }
+        raise "unexpected GET #{path}" unless build
+
+        { "data" => { "attributes" => { "version" => build[1], "platform" => build[2] } } }
+      end
+    end
+    client
+  end
 
   def runner_for(client)
     TestFlightGroupDistributor::Runner.new(
       client: client,
       app_id: "app",
       build_number: "123",
+      marketing_version: "1.4.10",
       platform: "MAC_OS",
       internal_group: "Internal",
       external_group: "External",

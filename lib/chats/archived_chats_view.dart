@@ -4,12 +4,14 @@
 //  Telegram archived chats folded behind the group assistant entry.
 //
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 
 import '../app/app_navigator.dart';
 import '../chat/chat_view.dart';
 import '../components/app_icons.dart';
+import '../components/desktop_row_actions.dart';
 import '../components/ui_components.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
@@ -143,6 +145,7 @@ class ArchivedChatsView extends StatelessWidget {
               itemBuilder: (context, i) {
                 final chat = chats[i];
                 return _ArchivedChatSwipeRow(
+                  key: ValueKey(chat.id),
                   chat: chat,
                   selected: chat.id == selectedChatId,
                   onTap: () => _openChat(context, chat),
@@ -176,6 +179,7 @@ class ArchivedChatsView extends StatelessWidget {
 
 class _ArchivedChatSwipeRow extends StatefulWidget {
   const _ArchivedChatSwipeRow({
+    super.key,
     required this.chat,
     required this.selected,
     required this.onTap,
@@ -200,6 +204,39 @@ class _ArchivedChatSwipeRowState extends State<_ArchivedChatSwipeRow> {
   @override
   Widget build(BuildContext context) {
     final action = widget.onUnarchive;
+    final row = ChatRowView(
+      chat: widget.chat,
+      archived: true,
+      selected: widget.selected,
+      onClearUnread: widget.onClearUnread,
+    );
+    // Match the main list: macOS uses secondary-click commands, never a
+    // horizontal swipe tray (including trackpad drags).
+    if (!kIsWeb && Theme.of(context).platform == TargetPlatform.macOS) {
+      return DesktopRowActionRegion(
+        actions: [
+          if (action != null)
+            DesktopRowAction(
+              id: 'unarchive',
+              label: AppStringKeys.chatListUnarchive,
+              icon: HeroAppIcons.inbox,
+              onInvoke: action,
+            ),
+          if (widget.chat.unreadCount > 0 || widget.chat.isMarkedUnread)
+            DesktopRowAction(
+              id: 'mark-read',
+              label: AppStringKeys.channelDirectMessagesMarkRead,
+              icon: HeroAppIcons.circleCheck,
+              onInvoke: widget.onClearUnread,
+            ),
+        ],
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: row,
+        ),
+      );
+    }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _offset == 0 ? widget.onTap : () => setState(() => _offset = 0),
@@ -213,44 +250,41 @@ class _ArchivedChatSwipeRowState extends State<_ArchivedChatSwipeRow> {
           : (_) => setState(
               () => _offset = _offset <= -_actionWidth / 2 ? -_actionWidth : 0,
             ),
-      child: Stack(
-        alignment: Alignment.centerRight,
-        children: [
-          if (action != null)
-            SizedBox(
-              key: const ValueKey('archived-chat-unarchive'),
-              width: _actionWidth,
-              height: 72,
-              child: Material(
-                color: AppTheme.brand,
-                child: InkWell(
-                  onTap: () {
-                    action();
-                    setState(() => _offset = 0);
-                  },
-                  child: const Center(
-                    child: AppIcon(
-                      HeroAppIcons.inbox,
-                      size: 22,
-                      color: Colors.white,
+      child: ClipRect(
+        child: Stack(
+          alignment: Alignment.centerRight,
+          children: [
+            if (action != null && _offset != 0)
+              Positioned(
+                key: const ValueKey('archived-chat-unarchive'),
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: _actionWidth,
+                child: ColoredBox(
+                  color: AppTheme.brand,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      action();
+                      setState(() => _offset = 0);
+                    },
+                    child: const Center(
+                      child: AppIcon(
+                        HeroAppIcons.inbox,
+                        size: 22,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
               ),
+            Transform.translate(
+              offset: Offset(_offset, 0),
+              child: ColoredBox(color: context.colors.background, child: row),
             ),
-          Transform.translate(
-            offset: Offset(_offset, 0),
-            child: ColoredBox(
-              color: context.colors.background,
-              child: ChatRowView(
-                chat: widget.chat,
-                archived: true,
-                selected: widget.selected,
-                onClearUnread: widget.onClearUnread,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

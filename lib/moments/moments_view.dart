@@ -18,13 +18,16 @@ import 'package:provider/provider.dart';
 import '../app/app_navigator.dart';
 import '../app/bottom_bar_layout.dart';
 import '../app/ipad_window_chrome.dart';
+import '../chat/animated_sticker_view.dart';
 import '../chat/chat_picker_view.dart';
 import '../chat/chat_view.dart';
 import '../chat/custom_emoji.dart';
 import '../chat/forward_options.dart';
 import '../chat/image_preview.dart';
 import '../chat/media_album_layout.dart';
+import '../chat/media_spoiler.dart';
 import '../chat/message_reaction_availability.dart';
+import '../chat/music_player_controller.dart';
 import '../chat/outgoing_attachment.dart';
 import '../chat/quick_reaction_choice.dart';
 import '../chat/rich_text_composer_view.dart';
@@ -33,6 +36,7 @@ import '../chat/shared_media_view.dart';
 import '../chat/telegram_rich_text.dart';
 import '../chat/video_playback_queue.dart';
 import '../chat/video_player_view.dart';
+import '../chat/video_sticker_view.dart';
 import '../chats/chat_list_view_model.dart';
 import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
@@ -1516,7 +1520,7 @@ class _ChannelMomentsViewState extends State<ChannelMomentsView> {
       final quoted = TDParse.message(raw);
       if (quoted == null) return;
       message.replyToPreview = _replyPreview(quoted);
-      message.replyToImage = quoted.image;
+      message.replyToImage = quoted.previewImage;
       message.replyToImageWidth = quoted.imageWidth;
       message.replyToImageHeight = quoted.imageHeight;
       message.replyToSender = await _senderName(quoted) ?? post.channel.title;
@@ -4303,6 +4307,19 @@ class ChannelPostRow extends StatelessWidget {
                 accountSlot: post.accountSlot,
               ),
             ],
+            for (final item in messages)
+              if (!item.isContentRestricted && item.music != null) ...[
+                const SizedBox(height: 10),
+                _PostMusicCard(message: item, post: post),
+              ] else if (!item.isContentRestricted &&
+                  _hasStickerMedia(item)) ...[
+                const SizedBox(height: 10),
+                _PostSticker(
+                  key: ValueKey('moments-sticker-${item.id}'),
+                  message: item,
+                  accountSlot: post.accountSlot,
+                ),
+              ],
             const SizedBox(height: 12),
             _PostActions(
               post: post,
@@ -4333,6 +4350,7 @@ class ChannelPostRow extends StatelessWidget {
 
   ChatMessage? get _displayTextMessage {
     for (final message in messages) {
+      if (_hasStickerMedia(message)) continue;
       final text = message.text.trim();
       if (text.isNotEmpty && !(text.startsWith('[') && text.endsWith(']'))) {
         return message;
@@ -4367,6 +4385,226 @@ class ChannelPostRow extends StatelessWidget {
   bool get _hasReplyQuote => message.replyToMessageId != null;
 }
 
+bool _hasStickerMedia(ChatMessage message) =>
+    !message.isContentRestricted &&
+    (message.contentType == 'messageSticker' ||
+        message.contentType == 'messageAnimatedEmoji') &&
+    (message.image != null ||
+        message.animatedSticker != null ||
+        message.videoSticker != null);
+
+class _PostMusicCard extends StatelessWidget {
+  const _PostMusicCard({required this.message, required this.post});
+
+  final ChatMessage message;
+  final ChannelPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final music = message.music!;
+    final player = MusicPlayerController.shared;
+    final colors = context.colors;
+    final duration = math.max(0, music.duration);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.card,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: colors.divider, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            AnimatedBuilder(
+              animation: player,
+              builder: (context, _) {
+                final sameAccount =
+                    post.accountSlot == TdClient.shared.activeSlot;
+                final active = sameAccount && player.isActive(music.file);
+                final playing = active && player.isPlaying;
+                final loading = active && player.isLoading;
+                final canPlay = sameAccount && music.file != null;
+                return Semantics(
+                  button: true,
+                  enabled: canPlay,
+                  label:
+                      (playing
+                              ? AppStringKeys.musicPlayerPause
+                              : AppStringKeys.musicPlayerPlay)
+                          .l10n(context),
+                  child: GestureDetector(
+                    key: ValueKey('moments-music-play-${message.id}'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: !canPlay
+                        ? null
+                        : () => unawaited(
+                            player.playChat(
+                              ChatMessage(
+                                id: message.id,
+                                isOutgoing: message.isOutgoing,
+                                text: '',
+                                date: message.date,
+                                chatId: post.channel.id,
+                                senderName: post.channel.title,
+                                music: music,
+                              ),
+                              post.channel.id,
+                              title: post.channel.title,
+                            ),
+                          ),
+                    child: SizedBox.square(
+                      dimension: 52,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (music.cover != null)
+                            TDImage(
+                              photo: music.cover,
+                              accountSlot: post.accountSlot,
+                            ),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: music.cover == null
+                                  ? AppTheme.brand
+                                  : Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.control,
+                              ),
+                            ),
+                            child: Center(
+                              child: loading
+                                  ? const SizedBox.square(
+                                      dimension: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : AppIcon(
+                                      playing
+                                          ? HeroAppIcons.pause
+                                          : HeroAppIcons.play,
+                                      size: 24,
+                                      color: Colors.white,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    music.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  if ((music.performer ?? '').trim().isNotEmpty)
+                    Text(
+                      music.performer!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  Text(
+                    '${duration ~/ 60}:${(duration % 60).toString().padLeft(2, '0')}',
+                    style: TextStyle(fontSize: 12, color: colors.textTertiary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PostSticker extends StatefulWidget {
+  const _PostSticker({
+    super.key,
+    required this.message,
+    required this.accountSlot,
+  });
+
+  final ChatMessage message;
+  final int accountSlot;
+
+  @override
+  State<_PostSticker> createState() => _PostStickerState();
+}
+
+class _PostStickerState extends State<_PostSticker> {
+  bool _ready = false;
+
+  @override
+  void didUpdateWidget(_PostSticker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.accountSlot != widget.accountSlot ||
+        oldWidget.message.animatedSticker?.id !=
+            widget.message.animatedSticker?.id) {
+      _ready = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final message = widget.message;
+    final width = math.max(1, message.imageWidth ?? 180).toDouble();
+    final height = math.max(1, message.imageHeight ?? 180).toDouble();
+    final scale = 180 / math.max(width, height);
+    final activeAccount = widget.accountSlot == TdClient.shared.activeSlot;
+    return SizedBox(
+      width: width * scale,
+      height: height * scale,
+      child: RepaintBoundary(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (message.image != null &&
+                !_ready &&
+                (!activeAccount || message.videoSticker == null))
+              TDImage(
+                photo: message.image,
+                accountSlot: widget.accountSlot,
+                fit: BoxFit.contain,
+                cornerRadius: 0,
+              ),
+            if (activeAccount && message.animatedSticker != null)
+              AnimatedStickerView(
+                file: message.animatedSticker!,
+                onReady: () {
+                  if (mounted) setState(() => _ready = true);
+                },
+              )
+            else if (activeAccount && message.videoSticker != null)
+              VideoStickerView(
+                file: message.videoSticker!,
+                fallback: message.image,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PostReplyQuote extends StatelessWidget {
   const _PostReplyQuote({required this.message});
 
@@ -4376,7 +4614,7 @@ class _PostReplyQuote extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final sender = message.replyToSender?.trim();
-    final preview = message.replyToPreview?.trim() ?? '';
+    final preview = message.replyPreviewText?.trim() ?? '';
     final image = message.replyToImage;
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final hasText =
@@ -4642,7 +4880,11 @@ class _PostImageGroup extends StatelessWidget {
       key: ValueKey('moments-media-${messages[index].id}'),
       behavior: HitTestBehavior.opaque,
       onTap: () => _openMedia(context, messages[index]),
-      child: child,
+      child: MessageMediaSpoiler(
+        message: messages[index],
+        accountSlot: accountSlot,
+        child: child,
+      ),
     );
   }
 
@@ -4661,7 +4903,13 @@ class _PostImageGroup extends StatelessWidget {
   }
 
   VideoPlaybackQueue _videoQueue(ChatMessage current) {
-    final videos = messages.where((message) => message.video != null).toList();
+    final videos = messages
+        .where(
+          (message) =>
+              message.video != null &&
+              canPreviewMediaAlongside(message, current),
+        )
+        .toList();
     if (!videos.any((message) => message.id == current.id)) videos.add(current);
     final index = videos.indexWhere((message) => message.id == current.id);
     return VideoPlaybackQueue(
@@ -4685,7 +4933,12 @@ class _PostImageGroup extends StatelessWidget {
 
   void _openImage(BuildContext context, ChatMessage startMessage) {
     final photoMessages = messages
-        .where((message) => message.isPhoto && message.image != null)
+        .where(
+          (message) =>
+              message.isPhoto &&
+              message.image != null &&
+              canPreviewMediaAlongside(message, startMessage),
+        )
         .toList();
     final refs = photoMessages.map((message) => message.image!).toList();
     if (refs.isEmpty) return;

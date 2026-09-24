@@ -21,9 +21,9 @@ void main() {
       isTrue,
     );
     expect(
-      chatDeleteCapabilities(const {}).canDeleteForSelf,
-      isTrue,
-      reason: 'older TDLib responses retain the safe local-only action',
+      chatDeleteCapabilities(const {}).canDelete,
+      isFalse,
+      reason: 'missing capabilities must not permit destructive requests',
     );
   });
 
@@ -85,6 +85,7 @@ void main() {
       'chatDeleteUnavailable',
       'chatInfoClearHistoryFinalQuestion',
       'chatLeaveAndDeleteDescription',
+      'chatLeaveHistoryCleanupFailed',
       'savedMessagesClear',
       'savedMessagesClearDescription',
       'savedMessagesClearFinalQuestion',
@@ -153,6 +154,48 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('channel leave has its own label and keeps both confirmations', (
+    tester,
+  ) async {
+    ChatDeleteScope? selected;
+    await tester.pumpWidget(
+      _dialogApp(
+        onPressed: () async {
+          selected = await showTwoStepChatDeleteDialog(
+            tester.element(find.byType(FilledButton)),
+            capabilities: chatListDeleteCapabilities({
+              'type': {'@type': 'chatTypeSupergroup', 'is_channel': true},
+              'can_be_deleted_only_for_self': false,
+              'can_be_deleted_for_all_users': false,
+            }),
+            isGroupOrChannel: true,
+            isSavedMessages: false,
+            chatTitle: 'News',
+            title: AppStringKeys.chatListDeleteChatQuestion,
+            selfOnlyDescription: AppStrings.t(
+              AppStringKeys.chatLeaveAndDeleteDescription,
+              {'value1': 'News'},
+            ),
+            selfConfirmText: AppStringKeys.topicChatLeaveChannel,
+          );
+        },
+      ),
+    );
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Leave Channel'), findsOneWidget);
+    expect(find.text('Delete for me'), findsNothing);
+    expect(find.byKey(const ValueKey('chat-delete-scope-all')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('chat-delete-scope-self')));
+    await tester.pumpAndSettle();
+    expect(selected, isNull);
+    expect(find.text('Leave Channel'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('app-confirm-accept')));
+    await tester.pumpAndSettle();
+    expect(selected, ChatDeleteScope.self);
   });
 
   testWidgets('chat deletion requires scope and final confirmation', (

@@ -24,12 +24,18 @@ import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
 import '../tdlib/td_user_index.dart';
 import 'chat_delete_policy.dart';
+import 'chat_removal_actions.dart';
 
 class ChatFilterOption {
-  const ChatFilterOption({required this.title, this.folderId});
+  const ChatFilterOption({
+    required this.title,
+    this.folderId,
+    this.iconName = 'Custom',
+  });
 
   final String title;
   final int? folderId;
+  final String iconName;
 
   bool get isAll => folderId == null;
 }
@@ -312,7 +318,13 @@ class ChatListViewModel extends ChangeNotifier {
       final id = folder.integer('id') ?? folder.integer('chat_folder_id');
       if (id == null) continue;
       final title = _folderTitle(folder, id);
-      folders.add(ChatFilterOption(title: title, folderId: id));
+      folders.add(
+        ChatFilterOption(
+          title: title,
+          folderId: id,
+          iconName: folder.obj('icon')?.str('name') ?? 'Custom',
+        ),
+      );
     }
     _filters = folders;
     if (_selectedFilter.folderId != null &&
@@ -322,6 +334,10 @@ class ChatListViewModel extends ChangeNotifier {
       _prefetchMainChats();
       _resort();
     }
+    _selectedFilter = _filters.firstWhere(
+      (filter) => filter.folderId == _selectedFilter.folderId,
+      orElse: () => _filters.first,
+    );
     _notifyIfAlive();
   }
 
@@ -349,15 +365,17 @@ class ChatListViewModel extends ChangeNotifier {
         .then((folder) {
           if (_disposed) return;
           _resolvingFolders.remove(id);
-          final title = _folderTitle(folder, id);
+          final option = ChatFilterOption(
+            title: _folderTitle(folder, id),
+            folderId: id,
+            iconName: folder.obj('icon')?.str('name') ?? 'Custom',
+          );
           _filters = [
             for (final filter in _filters)
-              filter.folderId == id
-                  ? ChatFilterOption(title: title, folderId: id)
-                  : filter,
+              filter.folderId == id ? option : filter,
           ];
           if (_selectedFilter.folderId == id) {
-            _selectedFilter = ChatFilterOption(title: title, folderId: id);
+            _selectedFilter = option;
           }
           _notifyIfAlive();
         })
@@ -719,9 +737,9 @@ class ChatListViewModel extends ChangeNotifier {
   Future<ChatDeleteCapabilities> deleteCapabilities(ChatSummary chat) async {
     try {
       final raw = await _client.query({'@type': 'getChat', 'chat_id': chat.id});
-      return chatDeleteCapabilities(raw);
+      return chatListDeleteCapabilities(raw);
     } catch (_) {
-      return const ChatDeleteCapabilities.selfOnly();
+      return const ChatDeleteCapabilities.none();
     }
   }
 
@@ -745,14 +763,16 @@ class ChatListViewModel extends ChangeNotifier {
   }) async {
     final leavesChat = shouldLeaveBeforeDeletingChat(chat.kind, scope);
     if (leavesChat) {
-      await _client.query({'@type': 'leaveChat', 'chat_id': chat.id});
+      await leaveChatAndRemoveFromList(
+        chatId: chat.id,
+        query: _client.query,
+        onLeft: () => _client.emitLocalUpdate(chatLeftLocalUpdate(chat.id)),
+      );
+      return;
     }
     await _client.query(
       deleteChatHistoryRequest(chatId: chat.id, scope: scope),
     );
-    if (leavesChat) {
-      _client.emitLocalUpdate(chatLeftLocalUpdate(chat.id));
-    }
   }
 
   Future<void> clearSavedMessages(ChatSummary chat) async {

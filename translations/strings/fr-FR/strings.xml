@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">Chat Completions OpenAI</string>
     <string name="aiEndpointStyleOpenAiResponses">Responses OpenAI</string>
     <string name="aiEnterModelManually">Saisir le modèle manuellement</string>
-    <string name="aiInvalidEndpoint">Utilisez une URL HTTPS correspondant au style d’API sélectionné. HTTP n’est autorisé que pour localhost.</string>
+    <string name="aiInvalidEndpoint">Saisissez l’URL HTTPS complète de l’API, avec le chemin de requête du style d’API sélectionné. HTTP n’est autorisé que pour localhost.</string>
     <string name="aiInvalidModel">Saisissez un modèle et un nombre valide de jetons de contexte.</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute, le modèle Apple sur l’appareil et les modèles serveur enregistrés peuvent être choisis séparément pour traduire ou résumer.</string>
     <string name="aiModelConfiguration">Configuration des modèles</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">Clé API</string>
     <string name="aiServerApiKeyOptional">Facultative pour les serveurs locaux ou sans clé</string>
     <string name="aiServerEndpoint">URL de l’API</string>
+    <string name="aiServerEndpointHelp">Saisissez l’URL complète de l’API, avec le protocole, l’hôte et le chemin de requête, pas seulement l’URL de base. Le chemin n’est pas complété automatiquement. Exemple : {value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">Modèle</string>
     <string name="aiServerModelHint">Nom du modèle</string>
@@ -962,7 +963,8 @@
     <string name="chatJoinGroup">Rejoindre le groupe</string>
     <string name="chatJoinRequestPending">Demande envoyée, en attente d’approbation</string>
     <string name="chatJoinRequestSent">Demande envoyée</string>
-    <string name="chatLeaveAndDeleteDescription">Quitter « {value1} » et supprimer son historique de votre compte Telegram sur tous vos appareils.</string>
+    <string name="chatLeaveAndDeleteDescription">Quitter « {value1} » et le retirer de votre liste de discussions. Les messages ne seront pas supprimés pour les autres membres.</string>
+    <string name="chatLeaveHistoryCleanupFailed">Vous avez quitté le groupe, mais son historique de discussion n’a pas pu être effacé.</string>
     <string name="chatListAddFriendOrGroup">Ajouter un ami/groupe</string>
     <string name="chatListBlockedPlaceholder">[Bloqué]</string>
     <string name="chatListChannelName">Nom de la chaîne</string>
@@ -974,6 +976,7 @@
     <string name="chatListMarkUnread">Marquer comme non lu</string>
     <string name="chatListNoChats">Aucune discussion pour le moment</string>
     <string name="chatListScanQrCode">Scanner un QR code</string>
+    <string name="chatListUnarchive">Désarchiver</string>
     <string name="chatListUnpin">Désépingler</string>
     <string name="chatLoadingTopics">Chargement des sujets</string>
     <string name="chatMeLabel">Moi</string>
@@ -1291,12 +1294,14 @@
     <string name="downloadsMediaVideoMessage">Message vidéo</string>
     <string name="downloadsMediaVoiceMessage">Message vocal</string>
     <string name="downloadsNoDownloadsFound">Aucun téléchargement trouvé.</string>
+    <string name="downloadsPause">Suspendre le téléchargement</string>
     <string name="downloadsPauseAllDownloads">Suspendre tous les téléchargements</string>
     <string name="downloadsPausedProgress">En pause · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Actualiser les téléchargements</string>
     <string name="downloadsRemoveAndDeleteFile">Supprimer et supprimer le fichier</string>
     <string name="downloadsRemoveAndKeepCachedFile">Supprimer et conserver le fichier en cache</string>
     <string name="downloadsRemoveFromDownloads">Supprimer des téléchargements ?</string>
+    <string name="downloadsResume">Reprendre le téléchargement</string>
     <string name="downloadsResumeAllDownloads">Reprendre tous les téléchargements</string>
     <string name="downloadsSearchDownloads">Rechercher des téléchargements</string>
     <string name="editProfileAddPhoto">Ajouter une photo</string>
@@ -2675,7 +2680,9 @@
     <string name="sharedMediaEmpty">Aucun contenu</string>
     <string name="sharedMediaFilterAll">Tout</string>
     <string name="sharedMediaFilterDownloaded">Téléchargés</string>
+    <string name="sharedMediaFilterDownloading">Téléchargement en cours</string>
     <string name="sharedMediaFilterNotDownloaded">Non téléchargés</string>
+    <string name="sharedMediaFilterPartial">Téléchargé en partie</string>
     <string name="sharedMediaFromSource">De {value1}</string>
     <string name="sharedMediaLinks">Liens</string>
     <string name="sharedMediaMinDuration">Durée min.</string>
@@ -3431,4 +3438,18 @@
     <string name="vipBadgeLabel">VIP</string>
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Vérifiez l’enregistrement avant de l’envoyer. Les options d'envoi incluent la livraison silencieuse, la planification, les effets et la visualisation unique.</string>
     <string name="voiceNotePreviewVoiceMessage">Message vocal</string>
+    <string name="mediaSpoilerReveal">Spoiler. Touchez pour afficher</string>
+    <string name="downloadsTasks">Téléchargements</string>
+    <string name="downloadsCacheHint">Médias en cache des discussions et des archives. Chargez davantage pour trouver les éléments plus anciens.</string>
+    <string name="sharedMediaFilterCached">En cache / actifs</string>
+    <string name="downloadsKeepOnDevice">Conserver sur l’appareil</string>
+    <string name="downloadsKeptOnDevice">Conservé sur l’appareil</string>
+    <string name="downloadsKeepExplanation">Enregistrer une copie distincte, qui occupe de l’espace supplémentaire et n’est pas supprimée lors du nettoyage du cache. Supprimez-la séparément depuis la liste des fichiers conservés.</string>
+    <string name="downloadsKeepFailed">Impossible de conserver ce fichier. Vérifiez que le téléchargement est terminé et que l’espace libre est suffisant, puis réessayez.</string>
+    <string name="downloadsRetained">Fichiers conservés</string>
+    <string name="downloadsRetainedHint">Ces copies ne font pas partie du cache. Désinstaller l’application ou effacer ses données peut toutefois les supprimer.</string>
+    <string name="downloadsRemoveRetained">Supprimer la copie conservée</string>
+    <string name="downloadsRemoveRetainedConfirm">Supprimer la copie conservée de « {name} » ? Les messages et le cache de téléchargement ne seront pas modifiés.</string>
+    <string name="downloadsRetainedUnavailable">Impossible d’accéder aux fichiers conservés. Réessayez.</string>
+    <string name="downloadsNoRetained">Aucun fichier conservé. Une fois le téléchargement d’un fichier ou d’une vidéo terminé, utilisez son bouton bouclier pour le conserver.</string>
 </resources>

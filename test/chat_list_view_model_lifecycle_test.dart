@@ -7,6 +7,27 @@ import 'package:mithka/tdlib/json_helpers.dart';
 import 'package:mithka/tdlib/td_models.dart';
 
 void main() {
+  test('folder updates retain configured icons and refresh changes', () {
+    final model = ChatListViewModel();
+    addTearDown(model.dispose);
+    void update(String icon) => model.applyUpdateForTesting({
+      '@type': 'updateChatFolders',
+      'chat_folders': [
+        {
+          'id': 7,
+          'title': 'Business',
+          'icon': {'name': icon},
+        },
+        {'id': 8, 'title': 'Other'},
+      ],
+    });
+    update('Work');
+    expect(model.filters[1].iconName, 'Work');
+    expect(model.filters[2].iconName, 'Custom');
+    update('Money');
+    expect(model.filters[1].iconName, 'Money');
+  });
+
   test('message-level updates keep mention and reaction counters current', () {
     final model = ChatListViewModel();
     addTearDown(model.dispose);

@@ -31,8 +31,10 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../media/video_playback_reporting.dart';
 import '../media/video_view_compatibility.dart';
 import '../platform/adaptive_platform.dart';
+import '../platform/keyboard_modifiers.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
@@ -60,7 +62,9 @@ bool storyViewerUsesDesktopControls(
 StoryViewerDesktopCommand? storyViewerDesktopCommandForKey(
   LogicalKeyboardKey key, {
   required bool replyHasFocus,
+  bool hasModifiers = false,
 }) {
+  if (hasModifiers) return null;
   if (key == LogicalKeyboardKey.escape) {
     return StoryViewerDesktopCommand.close;
   }
@@ -392,8 +396,13 @@ class _StoryViewerViewState extends State<StoryViewerView>
       File(path),
       viewType: preferredCompatibleVideoViewType,
     );
+    final diagnostics = VideoPlaybackDiagnostics(
+      location: VideoPlaybackLocation.story,
+      mimeType: m.videoFile?.mimeType,
+    )..beginAttempt(source: VideoPlaybackSource.file, viewType: c.viewType);
     try {
       await c.initialize();
+      diagnostics.initialized(value: c.value);
       await c.setLooping(false);
       try {
         await c.setVolume(_videoVolume);
@@ -402,7 +411,14 @@ class _StoryViewerViewState extends State<StoryViewerView>
         // backend that cannot change gain must not make the story unplayable.
       }
       if (!_holding && !_replyFocus.hasFocus) await c.play();
-    } catch (_) {
+    } catch (error) {
+      if (mounted && _current == m) {
+        diagnostics.recordFailure(
+          error,
+          stage: VideoFailureStage.initialization,
+        );
+        diagnostics.reportTerminal();
+      }
       await c.dispose();
       _videoStarting = false;
       if (mounted && _current == m) {
@@ -416,6 +432,19 @@ class _StoryViewerViewState extends State<StoryViewerView>
       _videoStarting = false;
       return;
     }
+    c.addListener(() {
+      if (!mounted ||
+          _current != m ||
+          !identical(_videoController, c) ||
+          !c.value.hasError) {
+        return;
+      }
+      diagnostics.recordFailure(
+        c.value.errorDescription,
+        stage: VideoFailureStage.playback,
+      );
+      diagnostics.reportTerminal();
+    });
     setState(() {
       _videoController = c;
       _videoStarting = false;
@@ -523,6 +552,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
     final command = storyViewerDesktopCommandForKey(
       event.logicalKey,
       replyHasFocus: _replyFocus.hasFocus,
+      hasModifiers: keyboardModifiersPressed(),
     );
     switch (command) {
       case StoryViewerDesktopCommand.close:

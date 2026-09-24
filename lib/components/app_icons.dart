@@ -332,6 +332,15 @@ class HeroAppIcons {
   static const fingerprint = AppIconData(HeroiconsOutline.fingerPrint);
   static const flash = AppIconData(HeroiconsOutline.bolt);
   static const folder = AppIconData(HeroiconsOutline.folder);
+  static const briefcase = AppIconData(HeroiconsOutline.briefcase);
+  static const home = AppIconData(HeroiconsOutline.home);
+  static const book = AppIconData(HeroiconsOutline.bookOpen);
+  static const lightbulb = AppIconData(HeroiconsOutline.lightBulb);
+  static const banknotes = AppIconData(HeroiconsOutline.banknotes);
+  static const academicCap = AppIconData(HeroiconsOutline.academicCap);
+  static const puzzle = AppIconData(HeroiconsOutline.puzzlePiece);
+  static const gift = AppIconData(HeroiconsOutline.gift);
+  static const trophy = AppIconData(HeroiconsOutline.trophy);
   static const font = AppIconData(HeroiconsOutline.documentText);
 
   /// Message, post, and story forwarding. Generic share/export actions keep

@@ -224,6 +224,35 @@ class ChatFolderService {
     return result.integer('id') ?? result.integer('chat_folder_id');
   }
 
+  Future<Map<String, dynamic>> getFolder(int id) =>
+      _query({'@type': 'getChatFolder', 'chat_folder_id': id});
+
+  /// Re-read before saving so a name/icon edit cannot overwrite newer rules.
+  Future<void> editAppearance(int id, {String? title, String? iconName}) async {
+    if (title == null && iconName == null) return;
+    final folder = Map<String, dynamic>.of(await getFolder(id));
+    folder.remove('@extra');
+    if (title != null) {
+      folder['name'] = {
+        ...?folder.obj('name'),
+        '@type': 'chatFolderName',
+        'text': {
+          '@type': 'formattedText',
+          'text': title.trim(),
+          'entities': <Object>[],
+        },
+      };
+    }
+    if (iconName != null) {
+      folder['icon'] = {'@type': 'chatFolderIcon', 'name': iconName};
+    }
+    await _query({
+      '@type': 'editChatFolder',
+      'chat_folder_id': id,
+      'folder': folder,
+    });
+  }
+
   Future<void> edit(int id, ChatFolderDraft draft) => _query({
     '@type': 'editChatFolder',
     'chat_folder_id': id,

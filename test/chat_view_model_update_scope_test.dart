@@ -37,6 +37,34 @@ void main() {
     KeywordBlocker.shared.replaceAll(const []);
   });
 
+  test('live media updates apply and clear spoiler before refresh', () {
+    final message = ChatMessage(
+      id: 1,
+      chatId: _chatId,
+      isOutgoing: true,
+      text: '',
+      date: 1,
+      contentType: 'messageVideo',
+      isSending: true,
+    );
+    final vm = ChatViewModel(
+      chatId: _chatId,
+      title: 'Test',
+      markReadOnOpen: false,
+      sessionMessages: [message],
+    );
+    addTearDown(vm.dispose);
+    for (final spoiler in [true, false]) {
+      vm.applyLiveUpdateForTesting({
+        '@type': 'updateMessageContent',
+        'chat_id': _chatId,
+        'message_id': 1,
+        'new_content': {'@type': 'messageVideo', 'has_spoiler': spoiler},
+      });
+      expect(message.hasSpoiler, spoiler);
+    }
+  });
+
   test('message-level updates clear loaded mention and reaction state', () {
     final message = ChatMessage(
       id: _firstMessageId,

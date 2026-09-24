@@ -10,6 +10,7 @@ import 'package:mithka/bot_api/bot_api_store.dart';
 import 'package:mithka/bot_api/bot_api_td_backend.dart';
 import 'package:mithka/chat/outgoing_attachment.dart';
 import 'package:mithka/chat/rich_message_source.dart';
+import 'package:mithka/tdlib/td_models.dart';
 
 void main() {
   late Directory temporaryDirectory;
@@ -25,6 +26,89 @@ void main() {
       await temporaryDirectory.delete(recursive: true);
     }
   });
+
+  test(
+    'partial quote survives outbound and inbound Bot API conversion',
+    () async {
+      final polling = Completer<Object?>();
+      Map<String, dynamic>? sent;
+      final api = _FakeBotApiClient(
+        (method, parameters) {
+          switch (method) {
+            case 'getWebhookInfo':
+              return <String, dynamic>{'url': ''};
+            case 'getUpdates':
+              return polling.future;
+            case 'sendMessage':
+              sent = parameters;
+              return <String, dynamic>{
+                'message_id': 8,
+                'date': 1700000000,
+                'from': {'id': 999, 'is_bot': true, 'first_name': 'Test Bot'},
+                'chat': {'id': 123, 'type': 'private', 'first_name': 'Test'},
+                'text': 'reply',
+                'reply_to_message': {
+                  'message_id': 7,
+                  'chat': {'id': 123, 'type': 'private'},
+                  'text': 'before selected after',
+                },
+                'quote': {
+                  'text': 'selected',
+                  'position': 7,
+                  'is_manual': true,
+                  'entities': [
+                    {'type': 'bold', 'offset': 0, 'length': 8},
+                  ],
+                },
+              };
+            default:
+              throw BotApiException(400, 'Unexpected $method');
+          }
+        },
+        onClose: () {
+          if (!polling.isCompleted) polling.complete(const []);
+        },
+      );
+      final backend = _backend(temporaryDirectory, api, emit: (_) {});
+      addTearDown(backend.close);
+      await backend.start();
+      const quote = MessageTextQuote(
+        text: 'selected',
+        position: 7,
+        entities: [
+          MessageTextEntity(offset: 0, length: 8, type: 'textEntityTypeBold'),
+        ],
+      );
+      final result = await backend.query({
+        '@type': 'sendMessage',
+        'chat_id': 123,
+        'reply_to': {
+          '@type': 'inputMessageReplyToMessage',
+          'message_id': 7,
+          'quote': quote.toInputJson(),
+        },
+        'input_message_content': {
+          '@type': 'inputMessageText',
+          'text': {'@type': 'formattedText', 'text': 'reply'},
+        },
+      });
+      expect(sent!['reply_parameters'], {
+        'message_id': 7,
+        'allow_sending_without_reply': true,
+        'quote': 'selected',
+        'quote_entities': [
+          {'type': 'bold', 'offset': 0, 'length': 8},
+        ],
+        'quote_position': 7,
+      });
+      final received = TDParse.message(result)!;
+      expect(received.replyToMessageId, 7);
+      expect(received.replyPreviewText, 'selected');
+      expect(received.replyToQuote!.position, 7);
+      expect(received.replyToQuote!.isManual, isTrue);
+      expect(received.replyPreviewEntities.single.type, 'textEntityTypeBold');
+    },
+  );
 
   test('does not resume backend startup after application shutdown', () async {
     final openGate = Completer<void>();

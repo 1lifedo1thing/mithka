@@ -45,6 +45,58 @@ void main() {
   });
 
   group('ChatFolderService', () {
+    test(
+      'appearance updates preserve fresh rules and untouched rich names',
+      () async {
+        final richName = {
+          '@type': 'chatFolderName',
+          'animate_custom_emoji': false,
+          'text': {
+            '@type': 'formattedText',
+            'text': 'Work',
+            'entities': [
+              {'offset': 0, 'length': 4},
+            ],
+          },
+        };
+        final current = <String, dynamic>{
+          '@type': 'chatFolder',
+          'name': richName,
+          'icon': {'@type': 'chatFolderIcon', 'name': 'Work'},
+          'included_chat_ids': [11, 22],
+          'pinned_chat_ids': [22],
+          'excluded_chat_ids': [33],
+          'include_groups': true,
+          'color_id': 4,
+          'unknown_future_rule': true,
+        };
+        final sent = <Map<String, dynamic>>[];
+        final service = ChatFolderService(
+          query: (request) async {
+            sent.add(request);
+            return request['@type'] == 'getChatFolder'
+                ? current
+                : {'@type': 'ok'};
+          },
+        );
+        await service.editAppearance(7, iconName: 'Cat');
+        final iconEdit = sent.last['folder'] as Map;
+        expect(iconEdit, {
+          ...current,
+          'icon': {'@type': 'chatFolderIcon', 'name': 'Cat'},
+        });
+        expect(iconEdit['name'], same(richName));
+        await service.editAppearance(7, title: 'Team');
+        final nameEdit = sent.last['folder'] as Map;
+        expect(nameEdit['included_chat_ids'], [11, 22]);
+        expect(nameEdit['icon'], current['icon']);
+        expect((nameEdit['name'] as Map)['animate_custom_emoji'], false);
+        expect(((nameEdit['name'] as Map)['text'] as Map)['text'], 'Team');
+        final count = sent.length;
+        await service.editAppearance(7);
+        expect(sent.length, count);
+      },
+    );
     for (final testCase in <(String, bool?, bool?, ChatFolderTagEntitlement)>[
       (
         'Premium unavailable',

@@ -26,6 +26,7 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../platform/keyboard_modifiers.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -575,7 +576,9 @@ class DesktopInlineSearchField extends StatelessWidget {
       final scope = controller.scope;
       return Focus(
         onKeyEvent: (_, event) {
-          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event is! KeyDownEvent || keyboardModifiersPressed()) {
+            return KeyEventResult.ignored;
+          }
           if (event.logicalKey == LogicalKeyboardKey.escape) {
             controller.dismiss();
             return KeyEventResult.handled;
@@ -2457,7 +2460,7 @@ class _SearchHit {
       date: message.date,
       sourceTitle: source.title,
       photo: source.photo,
-      thumbnail: message.image ?? music?.cover,
+      thumbnail: message.previewImage ?? music?.cover,
       chatId: chatId,
       message: message,
       icon: _messageIcon(message),

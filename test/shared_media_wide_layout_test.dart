@@ -4,7 +4,9 @@ import 'dart:ui' show SemanticsAction;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mithka/chat/media_spoiler.dart';
 import 'package:mithka/chat/shared_media_view.dart';
+import 'package:mithka/components/photo_avatar.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:mithka/tdlib/td_client.dart';
 
@@ -83,6 +85,34 @@ void main() {
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
     await updates.close();
+  });
+
+  testWidgets('video browser masks spoiler thumbnails until clicked', (
+    tester,
+  ) async {
+    _configureView(tester, const Size(1024, 768), TargetPlatform.macOS);
+    messages = [_videoMessage(1, 501, 'Hidden video', 30)];
+    (messages.single['content'] as Map<String, dynamic>)['has_spoiler'] = true;
+    await tester.pumpWidget(
+      _app(
+        const SharedMediaView(
+          chatId: 101,
+          title: 'Videos',
+          initialTab: 4,
+          lockedTab: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(MediaSpoiler), findsOneWidget);
+    expect(find.byType(TDImage), findsNothing);
+    await tester.tap(find.byType(MediaSpoiler));
+    await tester.pump();
+    expect(find.bySemanticsLabel('Spoiler. Tap to reveal'), findsNothing);
+    expect(find.byType(SharedMediaView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('wide macOS hides the inner header for Video and Music', (
@@ -479,7 +509,7 @@ void main() {
 
     await tester.drag(
       find.byKey(const ValueKey('shared-video-grid')),
-      const Offset(0, -12000),
+      const Offset(0, -20000),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));

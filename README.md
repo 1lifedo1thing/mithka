@@ -1,11 +1,18 @@
 # Mithka
 
+![Mithka — an independent Telegram client](docs/images/mithka-github-banner.png)
+
 English | [简体中文](README.zh-CN.md)
 
 Mithka is an independent, cross-platform Telegram client for Android, iOS,
 Windows, macOS, and Linux. It combines a Flutter interface with
 [TDLib](https://core.telegram.org/tdlib) over Dart FFI to provide a compact,
 native-feeling messaging experience across phones and desktops.
+
+![Mithka desktop, iPad, and iPhone Duo layout mockups](docs/images/mithka-github-devices.png)
+
+*Illustrative mockups with fictional chats, based on Mithka's layouts. Device
+previews are not actual screenshots; iPhone Duo is a layout preview.*
 
 > [!IMPORTANT]
 > Mithka is an independent, unofficial project. It is not affiliated with,

@@ -49,7 +49,6 @@ import '../tdlib/td_models.dart';
 import '../tdlib/td_requests.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
-import '../theme/global_theme_view.dart';
 import '../theme/telegram_cloud_theme.dart';
 import '../theme/theme_controller.dart';
 import '../update/update_checker.dart';
@@ -62,6 +61,7 @@ import 'desktop_chat_window.dart';
 import 'desktop_navigation_rail.dart';
 import 'desktop_utility_window.dart';
 import 'detail_content_reveal.dart';
+import 'horizontal_safe_viewport.dart';
 import 'liquid_glass_bottom_bar.dart';
 import 'native_bottom_tab_bar.dart';
 import 'primary_chat_launcher.dart';
@@ -551,14 +551,6 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
     );
   }
 
-  void _openGlobalThemeSelector() {
-    unawaited(
-      Navigator.of(context, rootNavigator: true).push<void>(
-        AppPageRoute<void>(pageBuilder: (_, _, _) => const GlobalThemeView()),
-      ),
-    );
-  }
-
   Future<void> _openDesktopSavedMessages() async {
     final accounts = context.read<AccountStore>();
     var userId = accounts.activeUserId;
@@ -699,6 +691,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
             ? AnimatedBuilder(
                 animation: _unread,
                 builder: (context, _) => _MainBottomBar(
+                  chatListController: _chatListController,
                   selection: selection,
                   onSelect: _select,
                   items: tabs,
@@ -735,19 +728,21 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
       animation: MusicPlayerController.shared,
       builder: (context, _) {
         final player = MusicPlayerController.shared;
+        final content =
+            player.isVisible &&
+                !player.collapsed &&
+                !player.hasEmbeddedPlayerHost
+            ? GlobalMusicPlayerBar(
+                bottomPadding: safeBottom
+                    ? MediaQuery.paddingOf(context).bottom.clamp(0, 12)
+                    : 0,
+              )
+            : const SizedBox.shrink();
+        if (AppMotion.isReduced(context)) return content;
         return AnimatedSize(
           duration: AppMotion.duration(context, AppMotion.responsive),
           curve: AppMotion.standard,
-          child:
-              player.isVisible &&
-                  !player.collapsed &&
-                  !player.hasEmbeddedPlayerHost
-              ? GlobalMusicPlayerBar(
-                  bottomPadding: safeBottom
-                      ? MediaQuery.paddingOf(context).bottom.clamp(0, 12)
-                      : 0,
-                )
-              : const SizedBox.shrink(),
+          child: content,
         );
       },
     );
@@ -815,7 +810,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         ),
     ];
     final fileLabel = AppStrings.t(AppStringKeys.topicPostContentFile);
-    final railActions = [
+    final applicationMenuPrimaryActions = [
       if (!isBotApi)
         DesktopNavigationAction(
           id: 'calls',
@@ -826,8 +821,6 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
             AppStrings.t(AppStringKeys.callsTitle),
           ),
         ),
-    ];
-    final applicationMenuQuickActions = [
       if (!isBotApi)
         DesktopNavigationAction(
           id: 'saved-messages',
@@ -841,12 +834,6 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         icon: HeroAppIcons.folder,
         onTap: () =>
             _openDesktopUtility(DesktopUtilityWindowKind.files, fileLabel),
-      ),
-      DesktopNavigationAction(
-        id: 'appearance',
-        label: AppStrings.t(AppStringKeys.appearanceTitle),
-        icon: HeroAppIcons.palette,
-        onTap: _openGlobalThemeSelector,
       ),
     ];
     // Recomputed on each rail rebuild: the premium gate below changes after
@@ -925,9 +912,16 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
       // EmojiStore carries the is_premium option, which decides
       // whether the business entry is in the menu at all and
       // lands after the first frame.
-      animation: Listenable.merge([_unread, EmojiStore.shared]),
+      animation: Listenable.merge([
+        _unread,
+        EmojiStore.shared,
+        _chatListController.sideFolders,
+      ]),
       builder: (context, _) => DesktopNavigationRail(
         destinations: destinations,
+        folders: activeTabIndex == 0
+            ? _chatListController.sideFolders.value
+            : null,
         selection: selection,
         onSelect: _select,
         unread: _unread.countFor(theme.unreadBadgeMode),
@@ -945,19 +939,15 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
               : AppStringKeys.themeModeDark,
         ),
         darkMode: Theme.of(context).brightness == Brightness.dark,
-        onToggleThemeMode: () {
-          theme.mode = Theme.of(context).brightness == Brightness.dark
-              ? AppearanceMode.light
-              : AppearanceMode.dark;
-        },
+        onToggleThemeMode: () =>
+            theme.toggleDayNight(Theme.of(context).brightness),
         showAccountPhone: !theme.hideSidebarPhone,
-        actions: railActions,
         applicationMenuLabel: AppStrings.t(AppStringKeys.chatMenu),
         languageMenuLabel: AppStrings.t(AppStringKeys.languageMithkaLanguage),
         languageOptions: languageOptions,
         themeMenuLabel: AppStrings.t(AppStringKeys.appearanceTheme),
         themeOptions: themeOptions,
-        applicationMenuQuickActions: applicationMenuQuickActions,
+        applicationMenuPrimaryActions: applicationMenuPrimaryActions,
         applicationMenuActions: applicationMenuActions(),
       ),
     );
@@ -1170,6 +1160,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
                             footer: AnimatedBuilder(
                               animation: _unread,
                               builder: (context, _) => _MainBottomBar(
+                                chatListController: _chatListController,
                                 selection: selection,
                                 onSelect: _select,
                                 items: tabs,
@@ -2106,12 +2097,14 @@ class _MainBottomBar extends StatelessWidget {
     required this.onClearUnread,
     required this.items,
     required this.unread,
+    this.chatListController,
   });
   final int selection;
   final ValueChanged<int> onSelect;
   final VoidCallback onClearUnread;
   final List<_MainTabItem> items;
   final int unread;
+  final ChatListController? chatListController;
 
   /// Label size the bar is laid out around. The icon block above it keeps its
   /// size at every text scale, so only this line's growth is added to the bar.
@@ -2127,6 +2120,87 @@ class _MainBottomBar extends StatelessWidget {
     // by what the labels underneath them gain from the text scale.
     final theme = context.watch<ThemeController>();
     final glass = theme.liquidGlassBottomBar;
+    final sideGeometry = SideNavigationGeometry.of(context);
+    const sideItemHeight = SideNavigationGeometry.itemExtent;
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        sideGeometry?.fits(items.length, sideItemHeight) == true) {
+      return SideNavigationPortal(
+        fillSide: true,
+        visible:
+            (ModalRoute.isCurrentOf(context) ?? true) &&
+            !context.watch<dc.DrawerController>().isOpen,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Column(
+            key: const ValueKey('side-tab-bar'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (chatListController != null && items[selection].index == 0)
+                Expanded(
+                  child: ValueListenableBuilder<Widget?>(
+                    valueListenable: chatListController!.sideFolders,
+                    builder: (_, folders, _) =>
+                        folders ?? const SizedBox.shrink(),
+                  ),
+                )
+              else
+                const Spacer(),
+              const SizedBox(height: 12),
+              for (var i = 0; i < items.length; i++)
+                AppInteractiveSurface(
+                  key: ValueKey('side-tab-${items[i].index}'),
+                  semanticLabel: items[i].label.l10n(context),
+                  selected: selection == i,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  onTap: () => onSelect(i),
+                  child: Container(
+                    height: sideItemHeight,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: selection == i
+                          ? c.linkBlue.withValues(alpha: 0.10)
+                          : null,
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          height: 28,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.center,
+                            children: [
+                              AppIcon(
+                                items[i].icon,
+                                size: 24,
+                                color: selection == i
+                                    ? c.linkBlue
+                                    : c.textTertiary,
+                              ),
+                              if (i == 0 && unread > 0)
+                                Positioned(
+                                  right: -12,
+                                  top: -4,
+                                  child: UnreadBadge(
+                                    count: unread,
+                                    onClear: onClearUnread,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
     if (glass && !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       return NativeBottomTabBar(
         items: [

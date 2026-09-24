@@ -19,6 +19,7 @@ class TelegramRichText extends StatefulWidget {
     this.entities = const [],
     this.style,
     this.linkColor,
+    this.underlineLinks = false,
     this.maxLines,
     this.overflow = TextOverflow.clip,
     this.onBotCommandTap,
@@ -31,6 +32,7 @@ class TelegramRichText extends StatefulWidget {
   final List<MessageTextEntity> entities;
   final TextStyle? style;
   final Color? linkColor;
+  final bool underlineLinks;
   final int? maxLines;
   final TextOverflow overflow;
   final ValueChanged<String>? onBotCommandTap;
@@ -57,6 +59,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
   List<MessageTextEntity>? _spanCacheEntities;
   TextStyle? _spanCacheBaseStyle;
   Color? _spanCacheLinkColor;
+  bool _spanCacheUnderlineLinks = false;
   bool _spanCacheHashtagTap = false;
   bool _spanCacheMentionTap = false;
 
@@ -121,6 +124,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         identical(_spanCacheEntities, widget.entities) &&
         _spanCacheBaseStyle == baseStyle &&
         _spanCacheLinkColor == linkColor &&
+        _spanCacheUnderlineLinks == widget.underlineLinks &&
         _spanCacheHashtagTap == hashtagTap &&
         _spanCacheMentionTap == mentionTap) {
       return _spanCache!;
@@ -133,6 +137,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     _spanCacheEntities = widget.entities;
     _spanCacheBaseStyle = baseStyle;
     _spanCacheLinkColor = linkColor;
+    _spanCacheUnderlineLinks = widget.underlineLinks;
     _spanCacheHashtagTap = hashtagTap;
     _spanCacheMentionTap = mentionTap;
     return spans;
@@ -235,6 +240,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
       entities: _sliceEntities(sourceEntities, start, end),
       style: baseStyle,
       linkColor: linkColor,
+      underlineLinks: widget.underlineLinks,
       maxLines: widget.maxLines,
       overflow: widget.overflow,
       onBotCommandTap: widget.onBotCommandTap,
@@ -462,6 +468,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     final decorations = <TextDecoration>[];
     var fontFeatures = const <FontFeature>[];
     var useCodeFont = false;
+    var isLink = false;
     for (final entity in active) {
       switch (entity.type) {
         case 'textEntityTypeBold':
@@ -503,12 +510,19 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         case 'textEntityTypeMediaTimestamp':
         case 'textEntityTypeDateTime':
           style = style.copyWith(color: linkColor);
+          isLink = true;
       }
+    }
+    if (isLink &&
+        widget.underlineLinks &&
+        !active.any((entity) => entity.type == 'textEntityTypeSpoiler')) {
+      decorations.add(TextDecoration.underline);
     }
     if (decorations.isNotEmpty) {
       style = style.copyWith(
         decoration: TextDecoration.combine(decorations),
         decorationColor: style.color,
+        decorationThickness: isLink && widget.underlineLinks ? 1.0 : null,
       );
     }
     if (fontFeatures.isNotEmpty) {
@@ -605,10 +619,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
           : matched;
       if (isHashtag && widget.onHashtagTap == null) {
         spans.add(
-          TextSpan(
-            text: matched,
-            style: baseStyle.copyWith(color: linkColor),
-          ),
+          TextSpan(text: matched, style: _autoLinkStyle(baseStyle, linkColor)),
         );
         last = match.end;
         continue;
@@ -625,7 +636,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
       spans.add(
         TextSpan(
           text: matched,
-          style: baseStyle.copyWith(color: linkColor),
+          style: _autoLinkStyle(baseStyle, linkColor),
           recognizer: recognizer,
         ),
       );
@@ -636,6 +647,18 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     }
     return spans;
   }
+
+  TextStyle _autoLinkStyle(TextStyle base, Color link) => base.copyWith(
+    color: link,
+    decoration: widget.underlineLinks
+        ? TextDecoration.combine([
+            if (base.decoration != null) base.decoration!,
+            TextDecoration.underline,
+          ])
+        : base.decoration,
+    decorationColor: widget.underlineLinks ? link : base.decorationColor,
+    decorationThickness: widget.underlineLinks ? 1.0 : base.decorationThickness,
+  );
 
   String _normalizeHashtag(String tag) {
     final trimmed = tag.trim();

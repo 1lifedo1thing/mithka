@@ -174,6 +174,44 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NativeBottomTabBar") {
       registrar.register(NativeBottomTabBarFactory(registrar: registrar), withId: "mithka/native_bottom_bar")
     }
+    let windowGeometryChannel = FlutterMethodChannel(
+      name: "mithka/window_geometry",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    windowGeometryChannel.setMethodCallHandler { call, result in
+      guard call.method == "sideNavigationGeometry", let window = Self.keyWindow() else {
+        result(nil)
+        return
+      }
+      var bottom: CGFloat = 0
+      let insets = window.safeAreaInsets
+      let sideWidth = max(insets.left, insets.right)
+      guard sideWidth >= 64, window.bounds.height > 0 else {
+        result(nil)
+        return
+      }
+      let side = CGRect(
+        x: insets.right >= insets.left ? window.bounds.maxX - sideWidth : 0,
+        y: 0, width: sideWidth, height: window.bounds.height
+      )
+      if let scene = window.windowScene, let manager = scene.statusBarManager {
+        let frame = window.convert(manager.statusBarFrame, from: scene.coordinateSpace)
+        if frame.intersects(side) { bottom = max(bottom, frame.maxY) }
+      }
+      #if compiler(>=6.4)
+      if #available(iOS 27.1, *) {
+        for region in window.reservedRegions(kind: .occlusion) where region.isActive {
+          if region.frame.intersects(side) { bottom = max(bottom, region.frame.maxY) }
+        }
+      }
+      #endif
+      // Do not invent usable space when the system reserves the whole edge.
+      var geometry: [String: Any] = [:]
+      if bottom > 0 && bottom < window.bounds.height {
+        geometry["topFraction"] = Double((bottom + 8) / window.bounds.height)
+      }
+      result(geometry)
+    }
     HandoffBridge.shared.register(
       messenger: engineBridge.applicationRegistrar.messenger()
     )

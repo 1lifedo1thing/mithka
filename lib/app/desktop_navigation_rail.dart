@@ -12,10 +12,15 @@ import '../theme/app_theme.dart';
 import 'adaptive_split_layout.dart';
 
 class DesktopNavigationDestination {
-  const DesktopNavigationDestination({required this.label, required this.icon});
+  const DesktopNavigationDestination({
+    required this.label,
+    required this.icon,
+    this.bottom = false,
+  });
 
   final String label;
   final AppIconData icon;
+  final bool bottom;
 }
 
 class DesktopNavigationAction {
@@ -56,6 +61,7 @@ class DesktopNavigationRail extends StatefulWidget {
     required this.onSelect,
     required this.unread,
     required this.onClearUnread,
+    this.folders,
     this.accounts = const [],
     this.activeAccountSlot,
     this.onSelectAccount,
@@ -72,7 +78,7 @@ class DesktopNavigationRail extends StatefulWidget {
     this.languageOptions = const [],
     this.themeMenuLabel = 'Theme',
     this.themeOptions = const [],
-    this.applicationMenuQuickActions = const [],
+    this.applicationMenuPrimaryActions = const [],
     this.applicationMenuActions = const [],
   });
 
@@ -81,6 +87,7 @@ class DesktopNavigationRail extends StatefulWidget {
   final ValueChanged<int> onSelect;
   final int unread;
   final VoidCallback onClearUnread;
+  final Widget? folders;
   final List<AccountSummary> accounts;
   final int? activeAccountSlot;
   final ValueChanged<int>? onSelectAccount;
@@ -97,7 +104,7 @@ class DesktopNavigationRail extends StatefulWidget {
   final List<DesktopMenuChoice> languageOptions;
   final String themeMenuLabel;
   final List<DesktopMenuChoice> themeOptions;
-  final List<DesktopNavigationAction> applicationMenuQuickActions;
+  final List<DesktopNavigationAction> applicationMenuPrimaryActions;
   final List<DesktopNavigationAction> applicationMenuActions;
 
   @override
@@ -207,7 +214,7 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
         languageOptions: widget.languageOptions,
         themeMenuLabel: widget.themeMenuLabel,
         themeOptions: widget.themeOptions,
-        quickActions: widget.applicationMenuQuickActions,
+        primaryActions: widget.applicationMenuPrimaryActions,
         actions: widget.applicationMenuActions,
         onDismiss: _closeApplicationMenu,
       ),
@@ -220,6 +227,15 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
     _applicationMenu?.remove();
     _applicationMenu = null;
   }
+
+  Widget _destination(int index) => _DesktopNavigationButton(
+    key: ValueKey('desktop-navigation-item-$index'),
+    destination: widget.destinations[index],
+    selected: widget.selection == index,
+    unread: index == 0 ? widget.unread : 0,
+    onClearUnread: widget.onClearUnread,
+    onTap: () => widget.onSelect(index),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -235,37 +251,19 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
       ),
       child: Column(
         children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              children: [
-                for (var index = 0; index < widget.destinations.length; index++)
-                  _DesktopNavigationButton(
-                    key: ValueKey('desktop-navigation-item-$index'),
-                    destination: widget.destinations[index],
-                    selected: widget.selection == index,
-                    unread: index == 0 ? widget.unread : 0,
-                    onClearUnread: widget.onClearUnread,
-                    onTap: () => widget.onSelect(index),
-                  ),
-                if (widget.actions.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                      vertical: AppSpacing.xs,
-                    ),
-                    child: Divider(height: 1, thickness: 1, color: c.divider),
-                  ),
-                for (final action in widget.actions)
-                  _DesktopNavigationActionButton(action: action),
-              ],
-            ),
-          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (var index = 0; index < widget.destinations.length; index++)
+            if (!widget.destinations[index].bottom) _destination(index),
+          Expanded(child: widget.folders ?? const SizedBox.shrink()),
+          for (final action in widget.actions)
+            _DesktopNavigationActionButton(action: action),
+          for (var index = 0; index < widget.destinations.length; index++)
+            if (widget.destinations[index].bottom) _destination(index),
           if (widget.onSelectAccount != null ||
               widget.onAddAccount != null ||
               widget.onToggleThemeMode != null ||
               widget.languageOptions.isNotEmpty ||
-              widget.applicationMenuQuickActions.isNotEmpty ||
+              widget.applicationMenuPrimaryActions.isNotEmpty ||
               widget.applicationMenuActions.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
@@ -292,7 +290,7 @@ class _DesktopNavigationRailState extends State<DesktopNavigationRail> {
                       darkMode: widget.darkMode,
                       onTap: widget.onToggleThemeMode!,
                     ),
-                  if (widget.applicationMenuQuickActions.isNotEmpty ||
+                  if (widget.applicationMenuPrimaryActions.isNotEmpty ||
                       widget.languageOptions.isNotEmpty ||
                       widget.applicationMenuActions.isNotEmpty)
                     _DesktopApplicationMenuButton(
@@ -402,7 +400,7 @@ class _DesktopApplicationMenuOverlay extends StatefulWidget {
     required this.languageOptions,
     required this.themeMenuLabel,
     required this.themeOptions,
-    required this.quickActions,
+    required this.primaryActions,
     required this.actions,
     required this.onDismiss,
   });
@@ -414,7 +412,7 @@ class _DesktopApplicationMenuOverlay extends StatefulWidget {
   final List<DesktopMenuChoice> languageOptions;
   final String themeMenuLabel;
   final List<DesktopMenuChoice> themeOptions;
-  final List<DesktopNavigationAction> quickActions;
+  final List<DesktopNavigationAction> primaryActions;
   final List<DesktopNavigationAction> actions;
   final VoidCallback onDismiss;
 
@@ -515,27 +513,12 @@ class _DesktopApplicationMenuOverlayState
                                 ),
                             ]
                           : [
-                              if (widget.quickActions.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.sm,
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      for (final action
-                                          in widget.quickActions.take(3))
-                                        Expanded(
-                                          child: _DesktopApplicationQuickAction(
-                                            action: action,
-                                            onTap: () => _run(action),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                              for (final action in widget.primaryActions)
+                                _DesktopApplicationMenuRow(
+                                  action: action,
+                                  onTap: () => _run(action),
                                 ),
-                              if (widget.quickActions.isNotEmpty &&
+                              if (widget.primaryActions.isNotEmpty &&
                                   (widget.languageOptions.isNotEmpty ||
                                       widget.themeOptions.isNotEmpty ||
                                       widget.actions.isNotEmpty))
@@ -731,51 +714,6 @@ class _DesktopApplicationLanguageOptionRow extends StatelessWidget {
                 AppIcon(HeroAppIcons.check, size: 15, color: c.linkBlue),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopApplicationQuickAction extends StatelessWidget {
-  const _DesktopApplicationQuickAction({
-    required this.action,
-    required this.onTap,
-  });
-
-  final DesktopNavigationAction action;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return AppInteractiveSurface(
-      key: ValueKey('desktop-application-quick-${action.id}'),
-      semanticLabel: action.label,
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.control),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xs,
-          vertical: AppSpacing.sm,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppIcon(action.icon, size: 23, color: c.textPrimary),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              action.label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: c.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ),
       ),
     );

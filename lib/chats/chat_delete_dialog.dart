@@ -15,6 +15,7 @@ Future<ChatDeleteScope?> showChatDeleteScopeDialog(
   required bool isGroupOrChannel,
   required String title,
   required String selfOnlyDescription,
+  String? selfConfirmText,
 }) {
   final bothScopes =
       capabilities.canDeleteForSelf && capabilities.canDeleteForAllUsers;
@@ -42,6 +43,7 @@ Future<ChatDeleteScope?> showChatDeleteScopeDialog(
       description: description.l10n(dialogContext),
       capabilities: capabilities,
       isGroupOrChannel: isGroupOrChannel,
+      selfConfirmText: selfConfirmText,
     ),
   );
 }
@@ -78,6 +80,7 @@ Future<ChatDeleteScope?> showTwoStepChatDeleteDialog(
     isGroupOrChannel: isGroupOrChannel,
     title: title,
     selfOnlyDescription: selfOnlyDescription,
+    selfConfirmText: isGroupOrChannel ? selfConfirmText : null,
   );
   if (!context.mounted || scope == null) return null;
   await _waitForDialogDismissal(context);
@@ -167,12 +170,14 @@ class _ChatDeleteScopeDialog extends StatelessWidget {
     required this.description,
     required this.capabilities,
     required this.isGroupOrChannel,
+    this.selfConfirmText,
   });
 
   final String title;
   final String description;
   final ChatDeleteCapabilities capabilities;
   final bool isGroupOrChannel;
+  final String? selfConfirmText;
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +186,9 @@ class _ChatDeleteScopeDialog extends StatelessWidget {
       if (capabilities.canDeleteForSelf)
         _ScopeAction(
           key: const ValueKey('chat-delete-scope-self'),
-          label: AppStringKeys.chatDeleteForMe.l10n(context),
+          label: (selfConfirmText ?? AppStringKeys.chatDeleteForMe).l10n(
+            context,
+          ),
           destructive: true,
           onTap: () => Navigator.of(context).pop(ChatDeleteScope.self),
         ),

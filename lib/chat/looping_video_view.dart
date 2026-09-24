@@ -13,7 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../components/photo_avatar.dart';
+import '../media/inline_video_motion_guard.dart';
 import '../media/looping_media_playback.dart';
+import '../media/video_playback_reporting.dart';
 import '../media/video_view_compatibility.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
@@ -50,6 +52,7 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
   LoopingMediaPlayerLease? _lease;
   LoopingMediaPlayerWaiter? _leaseWaiter;
   VideoPlayerController? _initializingController;
+  VideoPlaybackDiagnostics? _playbackDiagnostics;
 
   bool get _isEligible => loopingMediaPlaybackIsEligible(
     tickerEnabled: _tickerEnabled,
@@ -101,6 +104,10 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
     }
     if (!_isEligible) return;
     if (sourceChanged) {
+      _playbackDiagnostics = VideoPlaybackDiagnostics(
+        location: VideoPlaybackLocation.inline,
+        mimeType: widget.file.mimeType,
+      );
       _loadedId = widget.file.id;
       _loadedLocalPath = widget.file.localPath;
       _loadedSlot = slot;
@@ -180,8 +187,14 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
       viewType: preferredCompatibleVideoViewType,
     );
     _initializingController = controller;
+    final diagnostics = _playbackDiagnostics!;
+    diagnostics.beginAttempt(
+      source: VideoPlaybackSource.file,
+      viewType: controller.viewType,
+    );
     try {
       await controller.initialize();
+      diagnostics.initialized(value: controller.value);
       await controller.setLooping(true);
       await controller.setVolume(0);
       disableLoopingMediaAudioTracks(controller);
@@ -190,7 +203,14 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
         return;
       }
       await controller.play();
-    } catch (_) {
+    } catch (error) {
+      if (_ownsLoad(generation, ref, slot, lease)) {
+        diagnostics.recordFailure(
+          error,
+          stage: VideoFailureStage.initialization,
+        );
+        diagnostics.reportTerminal();
+      }
       await _disposeInitializingLoad(controller, lease);
       return;
     }
@@ -202,6 +222,16 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
       _initializingController = null;
     }
     _loadPending = false;
+    controller.addListener(() {
+      if (!_ownsAttempt(generation, ref, slot) || !controller.value.hasError) {
+        return;
+      }
+      diagnostics.recordFailure(
+        controller.value.errorDescription,
+        stage: VideoFailureStage.playback,
+      );
+      diagnostics.reportTerminal();
+    });
     setState(() => _controller = controller);
   }
 
@@ -326,15 +356,18 @@ class _LoopingVideoViewState extends State<LoopingVideoView>
             showProgress: widget.showDownloadProgress,
           ),
         if (controller != null && controller.value.isInitialized)
-          FittedBox(
-            fit: widget.fit,
-            child: SizedBox(
-              width: controller.value.size.width,
-              height: controller.value.size.height,
-              // Inline previews have no controls of their own. Keeping the
-              // native view out of hit testing lets the enclosing message
-              // gesture open fullscreen playback on direct-surface devices.
-              child: IgnorePointer(child: VideoPlayer(controller)),
+          InlineVideoMotionGuard(
+            viewType: controller.viewType,
+            child: FittedBox(
+              fit: widget.fit,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                // Inline previews have no controls of their own. Keeping the
+                // native view out of hit testing lets the enclosing message
+                // gesture open fullscreen playback on direct-surface devices.
+                child: IgnorePointer(child: VideoPlayer(controller)),
+              ),
             ),
           ),
       ],

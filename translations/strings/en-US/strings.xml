@@ -152,7 +152,7 @@
     <string name="aiEndpointStyleOpenAiChatCompletions">OpenAI Chat Completions</string>
     <string name="aiEndpointStyleOpenAiResponses">OpenAI Responses</string>
     <string name="aiEnterModelManually">Enter Model Manually</string>
-    <string name="aiInvalidEndpoint">Use an HTTPS URL matching the selected API style. HTTP is allowed only for localhost.</string>
+    <string name="aiInvalidEndpoint">Enter the full HTTPS API URL, including the request path for the selected API style. HTTP is allowed only for localhost.</string>
     <string name="aiInvalidModel">Enter a model name and a valid context token count.</string>
     <string name="aiModelCandidatesDescription">Apple Private Cloud Compute, the Apple on-device model, and saved server models can each be selected for translation or summaries.</string>
     <string name="aiModelConfiguration">Model Configuration</string>
@@ -223,6 +223,7 @@
     <string name="aiServerApiKey">API Key</string>
     <string name="aiServerApiKeyOptional">Optional for local or keyless servers</string>
     <string name="aiServerEndpoint">API Endpoint</string>
+    <string name="aiServerEndpointHelp">Enter the full API URL, including the protocol, host, and request path — not just a Base URL. The path is not completed automatically. Example: {value1}</string>
     <string name="aiServerEndpointHint">https://example.com/v1/chat/completions</string>
     <string name="aiServerModel">Model</string>
     <string name="aiServerModelHint">Model name</string>
@@ -962,7 +963,8 @@
     <string name="chatJoinGroup">Join group</string>
     <string name="chatJoinRequestPending">Join request sent, pending approval</string>
     <string name="chatJoinRequestSent">Join request sent</string>
-    <string name="chatLeaveAndDeleteDescription">Leave “{value1}” and remove its history from your Telegram account on all devices.</string>
+    <string name="chatLeaveAndDeleteDescription">Leave “{value1}” and remove it from your chat list. This will not delete messages for other members.</string>
+    <string name="chatLeaveHistoryCleanupFailed">You left the group, but its chat history could not be cleared.</string>
     <string name="chatListAddFriendOrGroup">Add friend/group</string>
     <string name="chatListBlockedPlaceholder">[Blocked]</string>
     <string name="chatListChannelName">Channel name</string>
@@ -974,6 +976,7 @@
     <string name="chatListMarkUnread">Mark as unread</string>
     <string name="chatListNoChats">No chats yet</string>
     <string name="chatListScanQrCode">Scan QR Code</string>
+    <string name="chatListUnarchive">Unarchive</string>
     <string name="chatListUnpin">Unpin</string>
     <string name="chatLoadingTopics">Loading topics</string>
     <string name="chatMeLabel">Me</string>
@@ -1291,12 +1294,14 @@
     <string name="downloadsMediaVideoMessage">Video message</string>
     <string name="downloadsMediaVoiceMessage">Voice message</string>
     <string name="downloadsNoDownloadsFound">No downloads found.</string>
+    <string name="downloadsPause">Pause download</string>
     <string name="downloadsPauseAllDownloads">Pause all downloads</string>
     <string name="downloadsPausedProgress">Paused · {value1} / {value2}</string>
     <string name="downloadsRefreshDownloads">Refresh downloads</string>
     <string name="downloadsRemoveAndDeleteFile">Remove and delete file</string>
     <string name="downloadsRemoveAndKeepCachedFile">Remove and keep cached file</string>
     <string name="downloadsRemoveFromDownloads">Remove from downloads?</string>
+    <string name="downloadsResume">Continue download</string>
     <string name="downloadsResumeAllDownloads">Resume all downloads</string>
     <string name="downloadsSearchDownloads">Search downloads</string>
     <string name="editProfileAddPhoto">Add photo</string>
@@ -2675,7 +2680,9 @@
     <string name="sharedMediaEmpty">No content yet</string>
     <string name="sharedMediaFilterAll">All</string>
     <string name="sharedMediaFilterDownloaded">Downloaded</string>
+    <string name="sharedMediaFilterDownloading">Downloading</string>
     <string name="sharedMediaFilterNotDownloaded">Not downloaded</string>
+    <string name="sharedMediaFilterPartial">Partially downloaded</string>
     <string name="sharedMediaFromSource">From {value1}</string>
     <string name="sharedMediaLinks">Links</string>
     <string name="sharedMediaMinDuration">Min duration</string>
@@ -3431,4 +3438,18 @@
     <string name="vipBadgeLabel">VIP</string>
     <string name="voiceNotePreviewReviewTheRecordingBeforeSendingSendOptionsInclude">Review the recording before sending. Send options include silent delivery, scheduling, effects and view-once.</string>
     <string name="voiceNotePreviewVoiceMessage">Voice message</string>
+    <string name="mediaSpoilerReveal">Spoiler. Tap to reveal</string>
+    <string name="downloadsTasks">Download tasks</string>
+    <string name="downloadsCacheHint">Cached media from chats and the archive. Load more to find older items.</string>
+    <string name="sharedMediaFilterCached">Cached / active</string>
+    <string name="downloadsKeepOnDevice">Keep on device</string>
+    <string name="downloadsKeptOnDevice">Kept on device</string>
+    <string name="downloadsKeepExplanation">Save a separate copy that uses extra space and is excluded from cache cleanup. Remove it separately from the Kept on device list.</string>
+    <string name="downloadsKeepFailed">Could not keep this file. Check that the download is complete and there is enough free space, then retry.</string>
+    <string name="downloadsRetained">Kept on device</string>
+    <string name="downloadsRetainedHint">These copies are not cache. Uninstalling the app or clearing app data can still remove them.</string>
+    <string name="downloadsRemoveRetained">Delete retained copy</string>
+    <string name="downloadsRemoveRetainedConfirm">Delete the retained copy of “{name}”? Chat messages and the download cache are not affected.</string>
+    <string name="downloadsRetainedUnavailable">Cannot access retained files. Please retry.</string>
+    <string name="downloadsNoRetained">No retained files yet. After a file or video finishes downloading, use its shield button to keep it.</string>
 </resources>

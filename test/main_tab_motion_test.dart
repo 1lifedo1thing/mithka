@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,6 +10,7 @@ import 'package:mithka/app/bottom_bar_layout.dart';
 import 'package:mithka/app/chat_deep_link_controller.dart';
 import 'package:mithka/app/content_view.dart';
 import 'package:mithka/app/detail_content_reveal.dart';
+import 'package:mithka/app/horizontal_safe_viewport.dart';
 import 'package:mithka/app/liquid_glass_bottom_bar.dart';
 import 'package:mithka/app/main_tab_view.dart';
 import 'package:mithka/auth/account_store.dart';
@@ -23,6 +26,7 @@ import 'package:mithka/l10n/app_localizations.dart';
 import 'package:mithka/profile/profile_view.dart';
 import 'package:mithka/settings/desktop_hotkey_controller.dart';
 import 'package:mithka/settings/translation_controller.dart';
+import 'package:mithka/tdlib/td_client.dart';
 import 'package:mithka/tdlib/td_models.dart';
 import 'package:mithka/theme/app_theme.dart';
 import 'package:mithka/theme/theme_controller.dart';
@@ -30,6 +34,134 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('folder slides never reset to All or toggle the Messages tab', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      await _setSurfaceSize(tester, const Size(1100, 720));
+      await _pumpMainShell(tester);
+      TdClient.shared.emitLocalUpdate({
+        '@type': 'updateChatFolders',
+        'chat_folders': [
+          {
+            'id': 1,
+            'title': 'Work',
+            'icon': {'name': 'Work'},
+          },
+          {
+            'id': 2,
+            'title': 'Home',
+            'icon': {'name': 'Home'},
+          },
+        ],
+      });
+      await tester.pump();
+      await tester.pump();
+      final controller = tester
+          .widget<ChatListView>(find.byType(ChatListView))
+          .controller!;
+      final toggles = controller.toggleFirstUnreadRequests;
+      await tester.tap(find.byKey(const ValueKey('side-folder-1')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ChatFolderRail>(find.byType(ChatFolderRail))
+            .selectedFolderId,
+        1,
+      );
+      await tester.tap(find.byKey(const ValueKey('side-folder-2')));
+      for (var frame = 0; frame < 24; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(
+          tester
+              .widget<ChatFolderRail>(find.byType(ChatFolderRail))
+              .selectedFolderId,
+          isNotNull,
+        );
+      }
+      expect(controller.toggleFirstUnreadRequests, toggles);
+      expect(
+        tester
+            .widget<ChatFolderRail>(find.byType(ChatFolderRail))
+            .selectedFolderId,
+        2,
+      );
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets(
+    'Duo side tabs use the strip and yield to routes and the drawer',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await _setSurfaceSize(tester, const Size(466, 678));
+      tester.view.padding = const FakeViewPadding(right: 84, bottom: 34);
+      tester.view.viewPadding = const FakeViewPadding(right: 84, bottom: 34);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewPadding);
+      final harness = await _pumpMainShell(
+        tester,
+        reducedMotion: true,
+        withSideViewport: true,
+      );
+      await tester.pump();
+      final contactsTab = find.byKey(const ValueKey('side-tab-2'));
+      expect(tester.getRect(contactsTab).left, greaterThanOrEqualTo(382));
+      expect(find.byKey(const ValueKey('classic-bottom-bar')), findsNothing);
+      for (final label in ['Messages', 'Contacts', 'Moments']) {
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('side-tab-bar')),
+            matching: find.text(label),
+          ),
+          findsNothing,
+        );
+      }
+      await tester.tap(contactsTab);
+      await tester.pump();
+      final contacts = tester.element(find.byType(ContactsView));
+      final scroll = find.descendant(
+        of: find.byType(ContactsView),
+        matching: find.byType(CustomScrollView),
+      );
+      expect(tester.getRect(scroll).bottom, 678);
+      harness.drawer.open();
+      await tester.pump();
+      expect(contactsTab, findsNothing);
+      harness.drawer.close();
+      await tester.pump();
+      expect(contactsTab, findsOneWidget);
+      final navigator = Navigator.of(
+        tester.element(find.byType(MainSplitRootView)),
+        rootNavigator: true,
+      );
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(builder: (_) => const SizedBox.expand()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(contactsTab, findsNothing);
+      navigator.pop();
+      await tester.pumpAndSettle();
+      expect(contactsTab, findsOneWidget);
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+      await tester.pump();
+      await tester.pump();
+      expect(contactsTab, findsNothing);
+      expect(find.byKey(const ValueKey('classic-bottom-bar')), findsOneWidget);
+      expect(tester.element(find.byType(ContactsView)), same(contacts));
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
   for (final size in [const Size(390, 844), const Size(1024, 800)]) {
     testWidgets('glass option switches live without losing tabs at $size', (
       tester,
@@ -266,6 +398,26 @@ void main() {
       final contacts = tester.widget<ContactsView>(find.byType(ContactsView));
       expect(contacts.desktopSidebar, isTrue);
       expect(find.byKey(const ValueKey('contacts-root-header')), findsNothing);
+      final chatController = tester
+          .widget<ChatListView>(find.byType(ChatListView, skipOffstage: false))
+          .controller!;
+      const folderKey = ValueKey('test-desktop-folder-rail');
+      chatController.publishSideFolders(
+        Object(),
+        const SizedBox(key: folderKey),
+      );
+      await tester.pump();
+      expect(find.byKey(folderKey), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('desktop-navigation-item-0')));
+      await tester.pump();
+      chatController.publishSideFolders(
+        Object(),
+        const SizedBox(key: folderKey),
+      );
+      await tester.pump();
+      expect(find.byKey(folderKey), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('desktop-navigation-item-1')));
+      await tester.pump();
       expect(
         find.byKey(const ValueKey('contacts-desktop-toolbar')),
         findsOneWidget,
@@ -469,6 +621,7 @@ Future<_MainShellHarness> _pumpMainShell(
   bool reducedMotion = false,
   bool showChannelsTab = false,
   bool withDesktopFrame = false,
+  bool withSideViewport = false,
   List<NavigatorObserver> navigatorObservers = const [],
 }) async {
   SharedPreferences.setMockInitialValues({
@@ -524,7 +677,9 @@ Future<_MainShellHarness> _pumpMainShell(
               disableAnimations: reducedMotion,
               textScaler: TextScaler.noScaling,
             ),
-            child: child!,
+            child: withSideViewport
+                ? HorizontalSafeViewport(sideNavigation: true, child: child!)
+                : child!,
           );
           if (!withDesktopFrame) return content;
           return DesktopPrimaryWindowFrame(

@@ -479,6 +479,11 @@ class _AiProviderEditorViewState extends State<AiProviderEditorView> {
             hint: _endpointStyle.exampleEndpoint,
             keyboardType: TextInputType.url,
           ),
+          SettingsNote(
+            text: context.l10n.t(AppStringKeys.aiServerEndpointHelp, {
+              'value1': _endpointStyle.exampleEndpoint,
+            }),
+          ),
           const SizedBox(height: AppSpacing.sm),
           _inputField(
             context,

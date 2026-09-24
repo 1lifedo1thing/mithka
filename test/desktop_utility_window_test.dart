@@ -508,8 +508,10 @@ void main() {
     expect(main, contains('onSettingsChanged: _reloadDesktopSettings'));
     expect(main, contains('accountUserIdForSlot: _accountUserIdForSlot'));
     expect(main, contains('await widget.prefs.reload()'));
-    expect(mainTabs, contains("id: 'appearance'"));
-    expect(mainTabs, contains('_openGlobalThemeSelector'));
+    for (final id in ['calls', 'saved-messages', 'files', 'settings']) {
+      expect(mainTabs, contains("id: '$id'"));
+    }
+    expect(mainTabs, isNot(contains("id: 'appearance'")));
   });
 
   test('detached settings synchronize notification and video preferences', () {

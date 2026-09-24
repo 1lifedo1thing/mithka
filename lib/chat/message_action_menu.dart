@@ -21,6 +21,7 @@ import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import 'custom_emoji.dart';
 import 'emoji_store.dart';
+import 'message_text_quote.dart';
 import 'quick_reaction_choice.dart';
 
 enum MessageAction {
@@ -34,6 +35,7 @@ enum MessageAction {
     AppStringKeys.messageActionDisplayTranslation,
   ),
   reply(HeroAppIcons.quoteLeft, AppStringKeys.chatInputBarReply),
+  quote(HeroAppIcons.quoteLeft, AppStringKeys.messageActionQuote),
   replies(HeroAppIcons.comments, AppStringKeys.messageActionReplies),
   forward(HeroAppIcons.forward, AppStringKeys.messageActionForward),
   repeat(HeroAppIcons.circlePlus, AppStringKeys.messageActionRepeat),
@@ -310,6 +312,8 @@ class MessageActionMenu extends StatelessWidget {
     required this.onSelect,
     this.allowForwarding = true,
     this.allowTranslation = true,
+    this.allowQuote = false,
+    this.hasSelectedQuote = false,
     this.allowSuggestedPostOffer = false,
     this.source = MessageActionSource.normal,
     this.showingOriginalTranslation = false,
@@ -320,6 +324,8 @@ class MessageActionMenu extends StatelessWidget {
   final ValueChanged<MessageAction> onSelect;
   final bool allowForwarding;
   final bool allowTranslation;
+  final bool allowQuote;
+  final bool hasSelectedQuote;
   final bool allowSuggestedPostOffer;
   final MessageActionSource source;
   final bool showingOriginalTranslation;
@@ -478,7 +484,15 @@ class MessageActionMenu extends StatelessWidget {
     if (allowSuggestedPostOffer && !message.isService && _isEditableMessage) {
       result.add(MessageAction.suggestOffer);
     }
-    result.add(MessageAction.reply);
+    final canQuote = allowQuote && canQuoteMessageText(message);
+    result.add(
+      isDesktop && canQuote && hasSelectedQuote
+          ? MessageAction.quote
+          : MessageAction.reply,
+    );
+    if (!isDesktop && canQuote) {
+      result.add(MessageAction.quote);
+    }
     if (message.hasActualReplies) {
       result.add(MessageAction.replies);
     }

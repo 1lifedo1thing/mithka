@@ -28,8 +28,10 @@ import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
+import '../media/video_playback_reporting.dart';
 import '../media/video_view_compatibility.dart';
 import '../platform/fullscreen_system_ui.dart';
+import '../platform/keyboard_modifiers.dart';
 import '../platform/player_brightness.dart';
 import '../platform/player_system_volume.dart';
 import '../platform/screen_wakelock.dart';
@@ -369,6 +371,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   late final TdVideoStreamQuery _streamQuery =
       widget.streamQuery ?? tdVideoStreamQueryForAccount(widget.accountSlot);
   VideoPlayerController? _controller;
+  late final _playbackDiagnostics = VideoPlaybackDiagnostics(
+    location: VideoPlaybackLocation.player,
+    mimeType: widget.video.mimeType,
+    width: widget.width,
+    height: widget.height,
+  );
   bool _failed = false;
   bool _moreMenuVisible = false;
   bool _modeMenuVisible = false;
@@ -620,12 +628,23 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       mimeType: widget.video.mimeType,
     );
     _streamServer = server;
-    final uri = await server.start();
+    Uri? uri;
+    Object? sourceError;
+    try {
+      uri = await server.start();
+    } catch (error) {
+      sourceError = error;
+    }
     if (!mounted) {
       unawaited(server.close());
       return;
     }
     if (uri == null) {
+      _playbackDiagnostics.recordFailure(
+        sourceError,
+        stage: VideoFailureStage.source,
+        source: VideoPlaybackSource.loopback,
+      );
       if (await _recoverFromCompletedFile(
         releaseActiveController: false,
         resumeOverride: resumeOverride,
@@ -688,6 +707,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       return;
     }
     if (!mounted) return;
+    if (!prepared) {
+      _playbackDiagnostics.recordFailure(
+        null,
+        stage: VideoFailureStage.source,
+        source: VideoPlaybackSource.loopback,
+      );
+    }
     if (await _recoverFromCompletedFile(
       releaseActiveController: false,
       resumeOverride: resumeOverride,
@@ -710,7 +736,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         '@type': 'getFile',
         'file_id': widget.video.id,
       });
-      return _validatedCompletedVideoPath(file);
+      return await _validatedCompletedVideoPath(file);
     } catch (_) {
       return null;
     }
@@ -731,7 +757,11 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     }
     try {
       return await operation.timeout(const Duration(minutes: 5));
-    } on TimeoutException {
+    } on TimeoutException catch (error) {
+      _playbackDiagnostics.recordFailure(
+        error,
+        stage: VideoFailureStage.download,
+      );
       debugPrint(
         'VideoPlayerView full-file fallback timed out for '
         '${widget.video.id}; retaining the in-flight request.',
@@ -750,8 +780,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         'limit': 0,
         'synchronous': true,
       });
-      return _validatedCompletedVideoPath(file);
+      return await _validatedCompletedVideoPath(file);
     } catch (error) {
+      _playbackDiagnostics.recordFailure(
+        error,
+        stage: VideoFailureStage.download,
+      );
       debugPrint(
         'VideoPlayerView full-file fallback failed for '
         '${widget.video.id}: $error',
@@ -847,9 +881,16 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     Duration? resumeOverride,
     bool? playOverride,
   }) async {
+    _playbackDiagnostics.beginAttempt(
+      source: c.dataSourceType == DataSourceType.file
+          ? VideoPlaybackSource.file
+          : VideoPlaybackSource.loopback,
+      viewType: c.viewType,
+    );
     _lastControllerInitializationError = null;
     try {
       await c.initialize().timeout(const Duration(seconds: 45));
+      _playbackDiagnostics.initialized(value: c.value);
       await c.setLooping(false);
       await c.setPlaybackSpeed(_speed);
       await c.setVolume(_controllerGainForCurrentVolume);
@@ -865,6 +906,10 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       _lastKnownPlaybackWasPlaying = shouldPlay;
     } catch (error, stackTrace) {
       _lastControllerInitializationError = error;
+      _playbackDiagnostics.recordFailure(
+        error,
+        stage: VideoFailureStage.initialization,
+      );
       debugPrint(
         'VideoPlayerView failed to initialize ${c.dataSource}: $error\n'
         '$stackTrace',
@@ -984,6 +1029,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       return;
     }
     debugPrint('VideoPlayerView runtime error for ${widget.video.id}: $error');
+    _playbackDiagnostics.recordFailure(
+      controller.value.errorDescription ?? error,
+      stage: requireControllerError
+          ? VideoFailureStage.playback
+          : VideoFailureStage.stall,
+      reason: requireControllerError ? null : VideoFailureReason.stalled,
+    );
     final isNetworkSource =
         source.startsWith('http://') || source.startsWith('https://');
     if (!isNetworkSource) {
@@ -1094,6 +1146,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       if (initialized) {
         server.startBackgroundDownload();
         return;
+      }
+      if (!prepared) {
+        _playbackDiagnostics.recordFailure(
+          null,
+          stage: VideoFailureStage.source,
+          source: VideoPlaybackSource.loopback,
+        );
       }
       final recovered = await _recoverFromCompletedFile(
         releaseActiveController: false,
@@ -1228,6 +1287,10 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     bool preservePlaybackSnapshot = false,
   }) {
     if (!mounted) return;
+    _playbackDiagnostics.reportTerminal(
+      streamRecoveries: _automaticStreamRecoveryCount,
+      completedFileFallback: _completedFileRecoveryAttempted,
+    );
     if (preservePlaybackSnapshot) _retryFromPlaybackSnapshot = true;
     setState(() => _failed = true);
     showToast(context, messageKey);
@@ -3125,6 +3188,9 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    if (keyboardModifiersPressed(allowShift: key == LogicalKeyboardKey.tab)) {
+      return KeyEventResult.ignored;
+    }
     if (key == LogicalKeyboardKey.escape) {
       if (_moreMenuVisible) {
         _closeMoreMenu();

@@ -18,6 +18,7 @@ import 'package:video_player/video_player.dart';
 
 import '../app/performance_metrics.dart';
 import '../l10n/app_localizations.dart';
+import '../media/inline_video_motion_guard.dart';
 import '../media/looping_media_playback.dart';
 import '../media/video_view_compatibility.dart';
 import '../tdlib/animated_avatar_repository.dart';
@@ -561,21 +562,29 @@ class _PhotoAvatarState extends State<PhotoAvatar> with WidgetsBindingObserver {
   }
 
   Widget _content() {
-    final ref = widget.photo;
-    final cacheSize = _cacheSizePx(context, widget.size);
     final animation = _animationController;
     if (animation != null && animation.value.isInitialized) {
       final videoSize = animation.value.size;
-      return FittedBox(
-        fit: BoxFit.cover,
-        clipBehavior: Clip.hardEdge,
-        child: SizedBox(
-          width: videoSize.width,
-          height: videoSize.height,
-          child: VideoPlayer(animation),
+      return InlineVideoMotionGuard(
+        viewType: animation.viewType,
+        placeholder: _stillContent(),
+        child: FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            width: videoSize.width,
+            height: videoSize.height,
+            child: VideoPlayer(animation),
+          ),
         ),
       );
     }
+    return _stillContent();
+  }
+
+  Widget _stillContent() {
+    final ref = widget.photo;
+    final cacheSize = _cacheSizePx(context, widget.size);
     if (_file != null) {
       return Image.file(
         _file!,

@@ -21,6 +21,7 @@ import '../chat/video_player_view.dart';
 import '../chat/video_stream_debugger.dart';
 import '../components/app_icons.dart';
 import '../l10n/app_localizations.dart';
+import '../media/video_playback_reporting.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
 import 'desktop_media_window_registry.dart';
@@ -220,6 +221,16 @@ class _DesktopVideoWindowPlayer extends StatefulWidget {
 
 class _DesktopVideoWindowPlayerState extends State<_DesktopVideoWindowPlayer> {
   VideoPlayerController? _controller;
+  late final _playbackDiagnostics =
+      VideoPlaybackDiagnostics(
+        location: VideoPlaybackLocation.desktopWindow,
+        width: arguments.width,
+        height: arguments.height,
+      )..beginAttempt(
+        source: VideoPlaybackSource.loopback,
+        viewType: VideoViewType.textureView,
+      );
+  FVideoPlaybackState? _playbackState;
   final HttpClient _progressClient = HttpClient();
   final List<String> _debugEvents = <String>[];
   Timer? _progressTimer;
@@ -326,7 +337,21 @@ class _DesktopVideoWindowPlayerState extends State<_DesktopVideoWindowPlayer> {
     if (identical(_controller, controller)) return;
     _controller?.removeListener(_handleControllerChanged);
     _controller = controller;
+    _playbackDiagnostics.initialized(value: controller.value);
     controller.addListener(_handleControllerChanged);
+  }
+
+  void _handlePlaybackError(FVideoPlayerError error) {
+    // FVideoPlayer also calls onError for harmless command failures (volume,
+    // PiP, etc.). A fatal error changes its state BEFORE invoking onError.
+    if (!mounted || _playbackState != FVideoPlaybackState.failed) return;
+    _playbackDiagnostics.recordFailure(
+      error,
+      stage: _controller == null
+          ? VideoFailureStage.initialization
+          : VideoFailureStage.playback,
+    );
+    _playbackDiagnostics.reportTerminal();
   }
 
   void _handleControllerChanged() {
@@ -491,6 +516,8 @@ class _DesktopVideoWindowPlayerState extends State<_DesktopVideoWindowPlayer> {
       showPictureInPictureButton: false,
       showFullscreenButton: false,
       onReady: _handleControllerReady,
+      onPlaybackStateChanged: (state) => _playbackState = state,
+      onError: _handlePlaybackError,
       isFullscreen: fullscreen,
       isPictureInPicture: _pictureInPicture,
       onPictureInPictureChanged: _pictureInPictureSupported
