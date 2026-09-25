@@ -1058,6 +1058,26 @@
     <string name="chatSendFailedTitle">メッセージを送信できませんでした</string>
     <string name="chatSendFailedUnavailable">このアカウントまたはチャットは利用できなくなりました。</string>
     <string name="chatStickerAddSuccess">絵文字に追加しました</string>
+    <string name="chatStickerPacksAdd">追加</string>
+    <string name="chatStickerPacksAddAll">すべて追加</string>
+    <string name="chatStickerPacksAdded">追加済み</string>
+    <plurals name="chatStickerPacksAddedCount">
+        <item quantity="other">{count} 個のセットを追加しました</item>
+    </plurals>
+    <plurals name="chatStickerPacksEmojiCount">
+        <item quantity="other">絵文字 {count} 個</item>
+    </plurals>
+    <string name="chatStickerPacksEmptyEmoji">このチャットではまだ絵文字セットが使われていません</string>
+    <string name="chatStickerPacksEmptyStickers">このチャットではまだスタンプセットが使われていません</string>
+    <plurals name="chatStickerPacksScanned">
+        <item quantity="other">直近 {count} 件のメッセージから</item>
+    </plurals>
+    <string name="chatStickerPacksTabEmoji">絵文字</string>
+    <string name="chatStickerPacksTabStickers">スタンプ</string>
+    <string name="chatStickerPacksTitle">スタンプと絵文字</string>
+    <plurals name="chatStickerPacksUses">
+        <item quantity="other">{count} 回使用</item>
+    </plurals>
     <string name="chatThemeApply">テーマを適用</string>
     <string name="chatThemeChanged">チャットテーマが変更されました</string>
     <string name="chatThemeChoose">チャットテーマを選択</string>

@@ -41,6 +41,7 @@ import 'add_members_view.dart';
 import 'chat_members_cache.dart';
 import 'chat_members_view.dart';
 import 'chat_search_view.dart';
+import 'chat_sticker_packs_view.dart';
 import 'chat_theme_view.dart';
 import 'chat_wallpaper_view.dart';
 import 'group_management_view.dart';
@@ -819,6 +820,15 @@ class _ChatInfoViewState extends State<ChatInfoView> {
           _infoRow(
             AppStrings.t(AppStringKeys.chatInfoChatFolders),
             _openChatFolders,
+          ),
+          const InsetDivider(leadingInset: 14),
+          _infoRow(
+            AppStrings.t(AppStringKeys.chatStickerPacksTitle),
+            () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ChatStickerPacksView(chatId: widget.chatId),
+              ),
+            ),
           ),
           if (_vm.canOpenDirectMessages) ...[
             const InsetDivider(leadingInset: 14),

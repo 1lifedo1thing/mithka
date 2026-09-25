@@ -1061,6 +1061,30 @@
     <string name="chatSendFailedTitle">Mensaje no enviado</string>
     <string name="chatSendFailedUnavailable">Esta cuenta o este chat ya no está disponible.</string>
     <string name="chatStickerAddSuccess">Añadido a emoji</string>
+    <string name="chatStickerPacksAdd">Añadir</string>
+    <string name="chatStickerPacksAddAll">Añadir todo</string>
+    <string name="chatStickerPacksAdded">Añadido</string>
+    <plurals name="chatStickerPacksAddedCount">
+        <item quantity="one">{count} paquete añadido</item>
+        <item quantity="other">{count} paquetes añadidos</item>
+    </plurals>
+    <plurals name="chatStickerPacksEmojiCount">
+        <item quantity="one">{count} emoji</item>
+        <item quantity="other">{count} emojis</item>
+    </plurals>
+    <string name="chatStickerPacksEmptyEmoji">Aún no se han usado paquetes de emojis en este chat</string>
+    <string name="chatStickerPacksEmptyStickers">Aún no se han usado paquetes de stickers en este chat</string>
+    <plurals name="chatStickerPacksScanned">
+        <item quantity="one">De {count} mensaje reciente</item>
+        <item quantity="other">De los últimos {count} mensajes</item>
+    </plurals>
+    <string name="chatStickerPacksTabEmoji">Emojis</string>
+    <string name="chatStickerPacksTabStickers">Stickers</string>
+    <string name="chatStickerPacksTitle">Stickers y emojis</string>
+    <plurals name="chatStickerPacksUses">
+        <item quantity="one">usado {count} vez</item>
+        <item quantity="other">usado {count} veces</item>
+    </plurals>
     <string name="chatThemeApply">Aplicar tema</string>
     <string name="chatThemeChanged">El tema del chat cambió</string>
     <string name="chatThemeChoose">Elegir tema del chat</string>
