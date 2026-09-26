@@ -923,10 +923,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         ),
     ];
     final rail = AnimatedBuilder(
-      animation: Listenable.merge([
-        _unread,
-        _chatListController.sideFolders,
-      ]),
+      animation: Listenable.merge([_unread, _chatListController.sideFolders]),
       builder: (context, _) => DesktopNavigationRail(
         destinations: destinations,
         folders: activeTabIndex == 0
