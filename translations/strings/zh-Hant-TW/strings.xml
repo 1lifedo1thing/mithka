@@ -1084,6 +1084,7 @@
     <string name="chatStickerPacksSortRecent">最近</string>
     <string name="chatStickerPacksSortSize">數量</string>
     <string name="chatStickerPacksSortUsage">最常用</string>
+    <string name="chatStickerPacksStats">{value2} 人使用了 {value1} 次</string>
     <string name="chatStickerPacksTabEmoji">表情符號</string>
     <string name="chatStickerPacksTabStickers">貼圖</string>
     <string name="chatStickerPacksTitle">貼圖與表情</string>

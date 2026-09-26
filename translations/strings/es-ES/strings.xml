@@ -1090,6 +1090,7 @@
     <string name="chatStickerPacksSortRecent">Recientes</string>
     <string name="chatStickerPacksSortSize">Tamaño</string>
     <string name="chatStickerPacksSortUsage">Más usados</string>
+    <string name="chatStickerPacksStats">{value1} usos de {value2} personas</string>
     <string name="chatStickerPacksTabEmoji">Emojis</string>
     <string name="chatStickerPacksTabStickers">Stickers</string>
     <string name="chatStickerPacksTitle">Stickers y emojis</string>

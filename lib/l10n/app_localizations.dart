@@ -990,6 +990,7 @@ abstract final class AppStringKeys {
   static const chatStickerPacksSortRecent = 'chatStickerPacksSortRecent';
   static const chatStickerPacksSortSize = 'chatStickerPacksSortSize';
   static const chatStickerPacksSortUsage = 'chatStickerPacksSortUsage';
+  static const chatStickerPacksStats = 'chatStickerPacksStats';
   static const chatStickerPacksTabEmoji = 'chatStickerPacksTabEmoji';
   static const chatStickerPacksTabStickers = 'chatStickerPacksTabStickers';
   static const chatStickerPacksTitle = 'chatStickerPacksTitle';

@@ -1084,6 +1084,7 @@
     <string name="chatStickerPacksSortRecent">最近</string>
     <string name="chatStickerPacksSortSize">数</string>
     <string name="chatStickerPacksSortUsage">よく使う</string>
+    <string name="chatStickerPacksStats">{value2} 人が {value1} 回使用</string>
     <string name="chatStickerPacksTabEmoji">絵文字</string>
     <string name="chatStickerPacksTabStickers">スタンプ</string>
     <string name="chatStickerPacksTitle">スタンプと絵文字</string>

@@ -1084,6 +1084,7 @@
     <string name="chatStickerPacksSortRecent">최근</string>
     <string name="chatStickerPacksSortSize">개수</string>
     <string name="chatStickerPacksSortUsage">많이 사용</string>
+    <string name="chatStickerPacksStats">{value2}명이 {value1}회 사용</string>
     <string name="chatStickerPacksTabEmoji">이모티콘</string>
     <string name="chatStickerPacksTabStickers">스티커</string>
     <string name="chatStickerPacksTitle">스티커 및 이모티콘</string>

@@ -657,10 +657,51 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
                 ),
               ),
               SizedBox(width: dense ? 8 : 10),
-              _addButton(pack, dense: dense),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _stats(pack, dense: dense),
+                  SizedBox(height: dense ? 4 : 6),
+                  _addButton(pack, dense: dense),
+                ],
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Use count and distinct people, right-aligned over the add button.
+  Widget _stats(ChatUsedPack pack, {required bool dense}) {
+    final color = context.colors.textTertiary;
+    final iconSize = dense ? 11.0 : 12.0;
+    final style = TextStyle(
+      fontSize: dense ? AppTextSize.tiny + 1 : AppTextSize.caption,
+      fontWeight: AppTextWeight.medium,
+      color: color,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      height: 1,
+    );
+    return Semantics(
+      label: AppStrings.t(AppStringKeys.chatStickerPacksStats, {
+        'value1': pack.uses,
+        'value2': pack.users,
+      }),
+      excludeSemantics: true,
+      child: Row(
+        key: ValueKey('chat-sticker-pack-stats-${pack.id}'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppIcon(HeroAppIcons.message, size: iconSize, color: color),
+          const SizedBox(width: 2),
+          Text('${pack.uses}', style: style),
+          SizedBox(width: dense ? 7 : 9),
+          AppIcon(HeroAppIcons.users, size: iconSize, color: color),
+          const SizedBox(width: 2),
+          Text('${pack.users}', style: style),
+        ],
       ),
     );
   }

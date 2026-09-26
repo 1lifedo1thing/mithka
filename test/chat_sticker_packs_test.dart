@@ -13,10 +13,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/l10n_fixtures.dart';
 
-Map<String, dynamic> _sticker(int id, int date, int setId) => {
+Map<String, dynamic> _from(int userId) => {
+  '@type': 'messageSenderUser',
+  'user_id': userId,
+};
+
+Map<String, dynamic> _sticker(int id, int date, int setId, {int from = 1}) => {
   '@type': 'message',
   'id': id,
   'date': date,
+  'sender_id': _from(from),
   'content': {
     '@type': 'messageSticker',
     'sticker': {'@type': 'sticker', 'set_id': '$setId'},
@@ -28,10 +34,12 @@ Map<String, dynamic> _text(
   int date,
   List<int> emojiIds, {
   int? reactionEmojiId,
+  int from = 1,
 }) => {
   '@type': 'message',
   'id': id,
   'date': date,
+  'sender_id': _from(from),
   'content': {
     '@type': 'messageText',
     'text': {
@@ -58,6 +66,9 @@ Map<String, dynamic> _text(
               '@type': 'reactionTypeCustomEmoji',
               'custom_emoji_id': '$reactionEmojiId',
             },
+            // Three reactors, of whom TDLib names the two most recent.
+            'total_count': 3,
+            'recent_sender_ids': [_from(5), _from(6)],
           },
         ],
       },
@@ -65,7 +76,7 @@ Map<String, dynamic> _text(
 };
 
 /// A fake TDLib. Chats 1 and 2 are in the main list, chat 3 in the archive;
-/// histories are newest first. Custom emoji 501/502 belong to set 50, 601 to
+/// histories are newest first, sent by users 1–4. Custom emoji 501/502 belong to set 50, 601 to
 /// set 60. Set N has N % 17 items, so sizes differ between sets.
 class _FakeTd {
   _FakeTd({Map<int, List<Map<String, dynamic>>>? history})
@@ -74,14 +85,14 @@ class _FakeTd {
           {
             1: [
               _sticker(30, 900, 10),
-              _sticker(20, 500, 10),
+              _sticker(20, 500, 10, from: 2),
               _text(10, 100, [501, 502]),
             ],
             2: [
-              _sticker(31, 800, 20),
-              _text(21, 600, [601], reactionEmojiId: 501),
+              _sticker(31, 800, 20, from: 3),
+              _text(21, 600, [601], reactionEmojiId: 501, from: 3),
             ],
-            3: [_sticker(5, 700, 30)],
+            3: [_sticker(5, 700, 30, from: 4)],
           },
       archive = history == null ? {3} : const {};
 
@@ -196,6 +207,10 @@ Map<int, int> _uses(List<ChatUsedPack> packs) => {
   for (final p in packs) p.id: p.uses,
 };
 
+Map<int, int> _users(List<ChatUsedPack> packs) => {
+  for (final p in packs) p.id: p.users,
+};
+
 int _historyReads(_FakeTd td) =>
     td.requests.where((r) => r['@type'] == 'getChatHistory').length;
 
@@ -215,10 +230,12 @@ void main() {
     expect(scanner.scannedMessages, 3);
     expect(scanner.exhausted, isTrue);
     expect(_uses(scanner.stickers), {10: 2});
+    expect(_users(scanner.stickers), {10: 2}, reason: 'users 1 and 2');
     expect(scanner.stickers.single.lastUsed, 900);
     expect(scanner.stickers.single.itemCount, 10);
     expect(scanner.stickers.single.previews, hasLength(10));
     expect(_uses(scanner.emoji), {50: 2});
+    expect(_users(scanner.emoji), {50: 1}, reason: 'one message, one sender');
   });
 
   test(
@@ -234,17 +251,21 @@ void main() {
       expect(scanner.emoji, isEmpty);
       expect(scanner.exhausted, isFalse);
 
-      // Next: the archived chat 3 at 700, then chat 2 at 600.
+      // Next: the archived chat 3 at 700, then chat 2 at 600, whose custom
+      // emoji reaction had three reactors.
       await scanner.loadMore(messages: 2);
       expect(_uses(scanner.stickers), {10: 1, 20: 1, 30: 1});
-      expect(_uses(scanner.emoji), {60: 1, 50: 1});
+      expect(_uses(scanner.emoji), {60: 1, 50: 3});
 
       await scanner.loadMore();
       expect(scanner.scannedMessages, 6);
       expect(scanner.exhausted, isTrue);
       expect(_uses(scanner.stickers), {10: 2, 20: 1, 30: 1});
-      // 501 twice (reaction + text) and 502 once all land on set 50.
-      expect(_uses(scanner.emoji), {60: 1, 50: 3});
+      // 501 (three reactors, then text) and 502 all land on set 50.
+      expect(_uses(scanner.emoji), {60: 1, 50: 5});
+      // Set 50: user 1's text plus the two named reactors, 5 and 6.
+      expect(_users(scanner.emoji), {60: 1, 50: 3});
+      expect(_users(scanner.stickers), {10: 2, 20: 1, 30: 1});
       expect(scanner.stickers.firstWhere((p) => p.id == 20).installed, isTrue);
       expect(
         td.requests.where((r) => r['@type'] == 'getStickerSet').length,
@@ -333,6 +354,17 @@ void main() {
 
     expect(find.text('Pack 20'), findsOneWidget);
     expect(find.text('Added'), findsOneWidget, reason: 'set 20 is installed');
+    final stats = find.byKey(const ValueKey('chat-sticker-pack-stats-20'));
+    expect(
+      find.descendant(of: stats, matching: find.text('1')),
+      findsNWidgets(2),
+      reason: 'one use by one person',
+    );
+    expect(
+      tester.getBottomRight(stats).dy,
+      lessThan(tester.getTopLeft(find.text('Added')).dy),
+      reason: 'counts sit above the button',
+    );
     expect(find.textContaining(RegExp(r'used \d')), findsNothing);
     expect(find.text('No older messages'), findsOneWidget);
     expect(find.byType(SliverGrid), findsNothing);

@@ -32,6 +32,7 @@ class ChatUsedPack {
     required this.uses,
     required this.lastUsed,
     required this.installed,
+    this.users = 0,
     this.previews = const [],
   });
 
@@ -42,6 +43,9 @@ class ChatUsedPack {
 
   /// Uses in the messages scanned so far; grows as the scan goes back.
   int uses;
+
+  /// Distinct senders (users or chats) behind those uses.
+  int users;
 
   /// Unix time of the newest message that used this pack.
   int lastUsed;
@@ -63,24 +67,33 @@ class ChatPackReferences {
   final Map<int, int> stickerSetDates = {};
   final Map<int, int> customEmojiDates = {};
 
+  /// Who used each sticker set id / custom_emoji_id, as sender keys.
+  final Map<int, Set<String>> stickerSetUsers = {};
+  final Map<int, Set<String>> customEmojiUsers = {};
+
   void addMessage(Map<String, dynamic> message) {
     final date = message.integer('date') ?? 0;
+    final senders = [?senderKey(message.obj('sender_id'))];
     final content = message.obj('content');
     switch (content?.type) {
       case 'messageSticker':
-        _addSticker(content!.obj('sticker'), date);
+        _addSticker(content!.obj('sticker'), date, senders);
       case 'messageAnimatedEmoji':
         // A plain emoji sent alone animates from Telegram's built-in set,
         // which is not a pack anyone can add; only custom emoji count.
         final sticker = content!.obj('animated_emoji')?.obj('sticker');
-        _addEmoji(sticker?.obj('full_type')?.int64('custom_emoji_id'), date);
+        _addEmoji(
+          sticker?.obj('full_type')?.int64('custom_emoji_id'),
+          date,
+          senders,
+        );
     }
     for (final text in [content?.obj('text'), content?.obj('caption')]) {
       for (final entity
           in text?.objects('entities') ?? const <Map<String, dynamic>>[]) {
         final type = entity.obj('type');
         if (type?.type != 'textEntityTypeCustomEmoji') continue;
-        _addEmoji(type!.int64('custom_emoji_id'), date);
+        _addEmoji(type!.int64('custom_emoji_id'), date, senders);
       }
     }
     final reactions = message
@@ -90,32 +103,74 @@ class ChatPackReferences {
     for (final reaction in reactions ?? const <Map<String, dynamic>>[]) {
       final type = reaction.obj('type');
       if (type?.type != 'reactionTypeCustomEmoji') continue;
-      _addEmoji(type!.int64('custom_emoji_id'), date);
+      // Every reactor is a use; TDLib names only the most recent reactors.
+      _addEmoji(
+        type!.int64('custom_emoji_id'),
+        date,
+        [
+          for (final sender
+              in reaction.objects('recent_sender_ids') ??
+                  const <Map<String, dynamic>>[])
+            ?senderKey(sender),
+        ],
+        count: math.max(1, reaction.integer('total_count') ?? 1),
+      );
     }
   }
 
-  void _addSticker(Map<String, dynamic>? sticker, int date) {
+  /// A stable key for a message sender, or null when there is none.
+  static String? senderKey(Map<String, dynamic>? sender) =>
+      switch (sender?.type) {
+        'messageSenderUser' => 'u${sender!.int64('user_id')}',
+        'messageSenderChat' => 'c${sender!.int64('chat_id')}',
+        _ => null,
+      };
+
+  void _addSticker(
+    Map<String, dynamic>? sticker,
+    int date,
+    List<String> senders,
+  ) {
     if (sticker == null) return;
     final customEmojiId = sticker.obj('full_type')?.int64('custom_emoji_id');
     if (customEmojiId != null && customEmojiId != 0) {
-      _addEmoji(customEmojiId, date);
+      _addEmoji(customEmojiId, date, senders);
       return;
     }
-    _bump(stickerSets, stickerSetDates, sticker.int64('set_id'), date);
+    _bump(
+      stickerSets,
+      stickerSetDates,
+      stickerSetUsers,
+      sticker.int64('set_id'),
+      date,
+      senders,
+    );
   }
 
-  void _addEmoji(int? id, int date) =>
-      _bump(customEmoji, customEmojiDates, id, date);
+  void _addEmoji(int? id, int date, List<String> senders, {int count = 1}) =>
+      _bump(
+        customEmoji,
+        customEmojiDates,
+        customEmojiUsers,
+        id,
+        date,
+        senders,
+        count: count,
+      );
 
   static void _bump(
     Map<int, int> counts,
     Map<int, int> dates,
+    Map<int, Set<String>> users,
     int? id,
     int date,
-  ) {
+    List<String> senders, {
+    int count = 1,
+  }) {
     if (id == null || id == 0) return;
-    counts[id] = (counts[id] ?? 0) + 1;
+    counts[id] = (counts[id] ?? 0) + count;
     dates[id] = math.max(dates[id] ?? 0, date);
+    (users[id] ??= {}).addAll(senders);
   }
 }
 
@@ -442,6 +497,10 @@ class ChatPackScanner {
   void _recount() {
     final uses = Map<int, int>.of(_refs.stickerSets);
     final dates = Map<int, int>.of(_refs.stickerSetDates);
+    final users = {
+      for (final entry in _refs.stickerSetUsers.entries)
+        entry.key: {...entry.value},
+    };
     _refs.customEmoji.forEach((emojiId, count) {
       final setId = _emojiSets[emojiId];
       if (setId == null) return;
@@ -450,10 +509,12 @@ class ChatPackScanner {
         dates[setId] ?? 0,
         _refs.customEmojiDates[emojiId] ?? 0,
       );
+      (users[setId] ??= {}).addAll(_refs.customEmojiUsers[emojiId] ?? const {});
     });
     for (final pack in _packs.values) {
       pack.uses = uses[pack.id] ?? 0;
       pack.lastUsed = dates[pack.id] ?? 0;
+      pack.users = users[pack.id]?.length ?? 0;
     }
   }
 }
