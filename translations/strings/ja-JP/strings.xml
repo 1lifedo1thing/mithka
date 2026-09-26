@@ -1058,26 +1058,34 @@
     <string name="chatSendFailedTitle">メッセージを送信できませんでした</string>
     <string name="chatSendFailedUnavailable">このアカウントまたはチャットは利用できなくなりました。</string>
     <string name="chatStickerAddSuccess">絵文字に追加しました</string>
-    <string name="chatStickerPacksAdd">追加</string>
     <string name="chatStickerPacksAddAll">すべて追加</string>
+    <string name="chatStickerPacksAddCount">追加 ({value1})</string>
     <string name="chatStickerPacksAdded">追加済み</string>
     <plurals name="chatStickerPacksAddedCount">
         <item quantity="other">{count} 個のセットを追加しました</item>
     </plurals>
-    <plurals name="chatStickerPacksEmojiCount">
-        <item quantity="other">絵文字 {count} 個</item>
-    </plurals>
     <string name="chatStickerPacksEmptyEmoji">このチャットではまだ絵文字セットが使われていません</string>
     <string name="chatStickerPacksEmptyStickers">このチャットではまだスタンプセットが使われていません</string>
+    <string name="chatStickerPacksFilterHint">セットを絞り込む</string>
+    <string name="chatStickerPacksFinderTitle">スタンプと絵文字を探す</string>
+    <string name="chatStickerPacksLoadingPacks">セットを読み込み中… {value1}/{value2}</string>
+    <string name="chatStickerPacksNoMatches">一致するセットはありません</string>
+    <string name="chatStickerPacksNoneFound">最近のチャットにセットは見つかりませんでした</string>
+    <string name="chatStickerPacksNotAdded">未追加</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">直近 {count} 件のメッセージから</item>
     </plurals>
+    <plurals name="chatStickerPacksScannedChats">
+        <item quantity="other">最近の {count} 件のチャットから</item>
+    </plurals>
+    <string name="chatStickerPacksScanning">チャットをスキャン中… {value1}/{value2}</string>
+    <string name="chatStickerPacksSortName">名前</string>
+    <string name="chatStickerPacksSortRecent">最近</string>
+    <string name="chatStickerPacksSortSize">数</string>
+    <string name="chatStickerPacksSortUsage">よく使う</string>
     <string name="chatStickerPacksTabEmoji">絵文字</string>
     <string name="chatStickerPacksTabStickers">スタンプ</string>
     <string name="chatStickerPacksTitle">スタンプと絵文字</string>
-    <plurals name="chatStickerPacksUses">
-        <item quantity="other">{count} 回使用</item>
-    </plurals>
     <string name="chatThemeApply">テーマを適用</string>
     <string name="chatThemeChanged">チャットテーマが変更されました</string>
     <string name="chatThemeChoose">チャットテーマを選択</string>

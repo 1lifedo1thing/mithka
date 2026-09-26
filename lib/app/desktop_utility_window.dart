@@ -14,6 +14,7 @@ import '../call/call_overlay_host.dart';
 import '../call/calls_view.dart';
 import '../chat/audio_search_view.dart';
 import '../chat/chat_info_view.dart';
+import '../chat/chat_sticker_packs_view.dart';
 import '../chat/chat_view.dart';
 import '../chat/chat_view_model.dart';
 import '../chat/checklist_composer_view.dart';
@@ -664,6 +665,9 @@ class _DesktopUtilityWindowAppState extends State<DesktopUtilityWindowApp> {
       title: widget.arguments.title,
       initialTab: 1,
       displayTitle: AppStringKeys.topicPostContentFile,
+      showBackButton: false,
+    ),
+    DesktopUtilityWindowKind.stickerFinder => const ChatStickerPacksView(
       showBackButton: false,
     ),
     DesktopUtilityWindowKind.videos => SharedMediaView(

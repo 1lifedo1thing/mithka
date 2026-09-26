@@ -1058,26 +1058,34 @@
     <string name="chatSendFailedTitle">메시지를 보내지 못했습니다</string>
     <string name="chatSendFailedUnavailable">이 계정 또는 채팅은 더 이상 사용할 수 없습니다.</string>
     <string name="chatStickerAddSuccess">emoji에 추가됨</string>
-    <string name="chatStickerPacksAdd">추가</string>
     <string name="chatStickerPacksAddAll">모두 추가</string>
+    <string name="chatStickerPacksAddCount">추가 ({value1})</string>
     <string name="chatStickerPacksAdded">추가됨</string>
     <plurals name="chatStickerPacksAddedCount">
         <item quantity="other">팩 {count}개를 추가했습니다</item>
     </plurals>
-    <plurals name="chatStickerPacksEmojiCount">
-        <item quantity="other">이모티콘 {count}개</item>
-    </plurals>
     <string name="chatStickerPacksEmptyEmoji">이 채팅에서 아직 사용된 이모티콘 팩이 없습니다</string>
     <string name="chatStickerPacksEmptyStickers">이 채팅에서 아직 사용된 스티커 팩이 없습니다</string>
+    <string name="chatStickerPacksFilterHint">팩 필터</string>
+    <string name="chatStickerPacksFinderTitle">스티커 및 이모티콘 찾기</string>
+    <string name="chatStickerPacksLoadingPacks">팩 불러오는 중… {value1}/{value2}</string>
+    <string name="chatStickerPacksNoMatches">일치하는 팩이 없습니다</string>
+    <string name="chatStickerPacksNoneFound">최근 채팅에서 찾은 팩이 없습니다</string>
+    <string name="chatStickerPacksNotAdded">추가 안 됨</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">최근 메시지 {count}개에서</item>
     </plurals>
+    <plurals name="chatStickerPacksScannedChats">
+        <item quantity="other">최근 채팅 {count}개에서</item>
+    </plurals>
+    <string name="chatStickerPacksScanning">채팅 검색 중… {value1}/{value2}</string>
+    <string name="chatStickerPacksSortName">이름</string>
+    <string name="chatStickerPacksSortRecent">최근</string>
+    <string name="chatStickerPacksSortSize">개수</string>
+    <string name="chatStickerPacksSortUsage">많이 사용</string>
     <string name="chatStickerPacksTabEmoji">이모티콘</string>
     <string name="chatStickerPacksTabStickers">스티커</string>
     <string name="chatStickerPacksTitle">스티커 및 이모티콘</string>
-    <plurals name="chatStickerPacksUses">
-        <item quantity="other">{count}회 사용</item>
-    </plurals>
     <string name="chatThemeApply">테마 적용</string>
     <string name="chatThemeChanged">채팅 테마가 변경되었습니다</string>
     <string name="chatThemeChoose">채팅 테마 선택</string>

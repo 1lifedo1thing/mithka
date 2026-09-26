@@ -1058,26 +1058,34 @@
     <string name="chatSendFailedTitle">訊息未傳送</string>
     <string name="chatSendFailedUnavailable">此帳號或聊天已無法使用。</string>
     <string name="chatStickerAddSuccess">已新增到 emoji</string>
-    <string name="chatStickerPacksAdd">新增</string>
     <string name="chatStickerPacksAddAll">全部新增</string>
+    <string name="chatStickerPacksAddCount">新增 ({value1})</string>
     <string name="chatStickerPacksAdded">已新增</string>
     <plurals name="chatStickerPacksAddedCount">
         <item quantity="other">已新增 {count} 個包</item>
     </plurals>
-    <plurals name="chatStickerPacksEmojiCount">
-        <item quantity="other">{count} 個表情符號</item>
-    </plurals>
     <string name="chatStickerPacksEmptyEmoji">此聊天中尚未使用過表情符號包</string>
     <string name="chatStickerPacksEmptyStickers">此聊天中尚未使用過貼圖包</string>
+    <string name="chatStickerPacksFilterHint">篩選貼圖包</string>
+    <string name="chatStickerPacksFinderTitle">貼圖與表情搜尋</string>
+    <string name="chatStickerPacksLoadingPacks">正在載入貼圖包… {value1}/{value2}</string>
+    <string name="chatStickerPacksNoMatches">沒有符合的貼圖包</string>
+    <string name="chatStickerPacksNoneFound">最近的聊天中沒有找到貼圖包</string>
+    <string name="chatStickerPacksNotAdded">未新增</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">來自最近 {count} 則訊息</item>
     </plurals>
+    <plurals name="chatStickerPacksScannedChats">
+        <item quantity="other">來自最近 {count} 個聊天</item>
+    </plurals>
+    <string name="chatStickerPacksScanning">正在掃描聊天… {value1}/{value2}</string>
+    <string name="chatStickerPacksSortName">名稱</string>
+    <string name="chatStickerPacksSortRecent">最近</string>
+    <string name="chatStickerPacksSortSize">數量</string>
+    <string name="chatStickerPacksSortUsage">最常用</string>
     <string name="chatStickerPacksTabEmoji">表情符號</string>
     <string name="chatStickerPacksTabStickers">貼圖</string>
     <string name="chatStickerPacksTitle">貼圖與表情</string>
-    <plurals name="chatStickerPacksUses">
-        <item quantity="other">使用 {count} 次</item>
-    </plurals>
     <string name="chatThemeApply">套用主題</string>
     <string name="chatThemeChanged">聊天主題已變更</string>
     <string name="chatThemeChoose">選擇聊天主題</string>

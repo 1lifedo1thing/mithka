@@ -1061,30 +1061,37 @@
     <string name="chatSendFailedTitle">Nachricht nicht gesendet</string>
     <string name="chatSendFailedUnavailable">Dieses Konto oder dieser Chat ist nicht mehr verfügbar.</string>
     <string name="chatStickerAddSuccess">Zu emoji hinzugefügt</string>
-    <string name="chatStickerPacksAdd">Hinzufügen</string>
     <string name="chatStickerPacksAddAll">Alle hinzufügen</string>
+    <string name="chatStickerPacksAddCount">Hinzufügen ({value1})</string>
     <string name="chatStickerPacksAdded">Hinzugefügt</string>
     <plurals name="chatStickerPacksAddedCount">
         <item quantity="one">{count} Paket hinzugefügt</item>
         <item quantity="other">{count} Pakete hinzugefügt</item>
     </plurals>
-    <plurals name="chatStickerPacksEmojiCount">
-        <item quantity="one">{count} Emoji</item>
-        <item quantity="other">{count} Emojis</item>
-    </plurals>
     <string name="chatStickerPacksEmptyEmoji">In diesem Chat wurden noch keine Emoji-Pakete verwendet</string>
     <string name="chatStickerPacksEmptyStickers">In diesem Chat wurden noch keine Sticker-Pakete verwendet</string>
+    <string name="chatStickerPacksFilterHint">Pakete filtern</string>
+    <string name="chatStickerPacksFinderTitle">Sticker- &amp; Emoji-Finder</string>
+    <string name="chatStickerPacksLoadingPacks">Pakete werden geladen… {value1}/{value2}</string>
+    <string name="chatStickerPacksNoMatches">Keine passenden Pakete</string>
+    <string name="chatStickerPacksNoneFound">Keine Pakete in neuen Chats gefunden</string>
+    <string name="chatStickerPacksNotAdded">Nicht hinzugefügt</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="one">Aus {count} aktuellen Nachricht</item>
         <item quantity="other">Aus den letzten {count} Nachrichten</item>
     </plurals>
+    <plurals name="chatStickerPacksScannedChats">
+        <item quantity="one">Aus {count} neuen Chat</item>
+        <item quantity="other">Aus {count} neuen Chats</item>
+    </plurals>
+    <string name="chatStickerPacksScanning">Chats werden durchsucht… {value1}/{value2}</string>
+    <string name="chatStickerPacksSortName">Name</string>
+    <string name="chatStickerPacksSortRecent">Neueste</string>
+    <string name="chatStickerPacksSortSize">Größe</string>
+    <string name="chatStickerPacksSortUsage">Meistgenutzt</string>
     <string name="chatStickerPacksTabEmoji">Emojis</string>
     <string name="chatStickerPacksTabStickers">Sticker</string>
     <string name="chatStickerPacksTitle">Sticker &amp; Emojis</string>
-    <plurals name="chatStickerPacksUses">
-        <item quantity="one">{count}× verwendet</item>
-        <item quantity="other">{count}× verwendet</item>
-    </plurals>
     <string name="chatThemeApply">Thema anwenden</string>
     <string name="chatThemeChanged">Chat-Thema geändert</string>
     <string name="chatThemeChoose">Chat-Thema auswählen</string>

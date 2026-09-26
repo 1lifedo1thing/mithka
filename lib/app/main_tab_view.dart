@@ -810,6 +810,9 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         ),
     ];
     final fileLabel = AppStrings.t(AppStringKeys.topicPostContentFile);
+    final stickerFinderLabel = AppStrings.t(
+      AppStringKeys.chatStickerPacksFinderTitle,
+    );
     final applicationMenuPrimaryActions = [
       if (!isBotApi)
         DesktopNavigationAction(
@@ -835,6 +838,16 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         onTap: () =>
             _openDesktopUtility(DesktopUtilityWindowKind.files, fileLabel),
       ),
+      if (!isBotApi)
+        DesktopNavigationAction(
+          id: 'sticker-finder',
+          label: stickerFinderLabel,
+          icon: HeroAppIcons.faceSmile,
+          onTap: () => _openDesktopUtility(
+            DesktopUtilityWindowKind.stickerFinder,
+            stickerFinderLabel,
+          ),
+        ),
     ];
     // Recomputed on each rail rebuild: the premium gate below changes after
     // the first frame, and a list captured in build() would stay stale.

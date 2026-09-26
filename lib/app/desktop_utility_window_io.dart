@@ -208,6 +208,11 @@ WindowOptions desktopUtilityWindowOptions(
       const Size(1040, 760),
       const Size(720, 520),
     ),
+    // Two 58pt columns of packs appear from 620pt; below that it is one.
+    DesktopUtilityWindowKind.stickerFinder => (
+      const Size(760, 720),
+      const Size(460, 480),
+    ),
     DesktopUtilityWindowKind.search => (
       const Size(900, 720),
       const Size(680, 520),
