@@ -4,14 +4,21 @@
 //  Finds the sticker packs and custom-emoji packs used in one chat, or across
 //  all of the user's chats. A [ChatPackScanner] walks messages newest first a
 //  batch at a time — for the global finder, every chat's history merged into
-//  one timeline by date — so a list can load more as the user scrolls.
+//  one timeline by date — and the global scan is saved per account, so a
+//  reopened finder resumes it and first catches up on newer messages.
 //  Each batch collects sticker set ids (sticker messages) and custom_emoji_ids
 //  (text/caption entities, single custom-emoji messages, reactions), resolves
 //  the new ones to their sets, and dedupes by set id.
 //
 
+import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
+
+import 'package:crypto/crypto.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
@@ -70,6 +77,50 @@ class ChatPackReferences {
   /// Who used each sticker set id / custom_emoji_id, as sender keys.
   final Map<int, Set<String>> stickerSetUsers = {};
   final Map<int, Set<String>> customEmojiUsers = {};
+
+  Map<String, Object> toJson() => {
+    'stickerSets': _counts(stickerSets),
+    'customEmoji': _counts(customEmoji),
+    'stickerSetDates': _counts(stickerSetDates),
+    'customEmojiDates': _counts(customEmojiDates),
+    'stickerSetUsers': _users(stickerSetUsers),
+    'customEmojiUsers': _users(customEmojiUsers),
+  };
+
+  void restore(Map<String, dynamic> json) {
+    _readCounts(json['stickerSets'], stickerSets);
+    _readCounts(json['customEmoji'], customEmoji);
+    _readCounts(json['stickerSetDates'], stickerSetDates);
+    _readCounts(json['customEmojiDates'], customEmojiDates);
+    _readUsers(json['stickerSetUsers'], stickerSetUsers);
+    _readUsers(json['customEmojiUsers'], customEmojiUsers);
+  }
+
+  static Map<String, int> _counts(Map<int, int> map) => {
+    for (final entry in map.entries) '${entry.key}': entry.value,
+  };
+
+  static Map<String, List<String>> _users(Map<int, Set<String>> map) => {
+    for (final entry in map.entries) '${entry.key}': [...entry.value],
+  };
+
+  static void _readCounts(Object? json, Map<int, int> into) {
+    if (json is! Map) return;
+    json.forEach((key, value) {
+      final id = int.tryParse('$key');
+      if (id != null && value is int) into[id] = value;
+    });
+  }
+
+  static void _readUsers(Object? json, Map<int, Set<String>> into) {
+    if (json is! Map) return;
+    json.forEach((key, value) {
+      final id = int.tryParse('$key');
+      if (id != null && value is List) {
+        into[id] = value.whereType<String>().toSet();
+      }
+    });
+  }
 
   void addMessage(Map<String, dynamic> message) {
     final date = message.integer('date') ?? 0;
@@ -174,24 +225,90 @@ class ChatPackReferences {
   }
 }
 
+/// Where the global finder keeps its scan between window openings: one file
+/// per Telegram user, so a reused account slot never inherits another
+/// account's results.
+class ChatPackScanStore {
+  ChatPackScanStore({Future<Directory> Function()? supportDirectory})
+    : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+
+  final Future<Directory> Function() _supportDirectory;
+
+  Future<File> _file(int userId) async {
+    final support = await _supportDirectory();
+    final owner = sha256.convert(utf8.encode('telegram-user:$userId'));
+    return File('${support.path}/sticker-finder-v1/$owner.json');
+  }
+
+  Future<Map<String, dynamic>?> read(int userId) async {
+    try {
+      final file = await _file(userId);
+      if (!await file.exists()) return null;
+      final decoded = jsonDecode(await file.readAsString());
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> write(int userId, Map<String, dynamic> state) async {
+    try {
+      final file = await _file(userId);
+      await file.parent.create(recursive: true);
+      // Write aside, then rename: a crash mid-write never leaves half a file.
+      final temp = File('${file.path}.tmp');
+      await temp.writeAsString(jsonEncode(state), flush: true);
+      await temp.rename(file.path);
+    } catch (_) {}
+  }
+}
+
 class ChatStickerPacksService {
-  ChatStickerPacksService({TdQuery? query})
-    : _query = query ?? TdClient.shared.query;
+  ChatStickerPacksService({
+    TdQuery? query,
+    ChatPackScanStore? store,
+    int Function()? now,
+  }) : _query = query ?? TdClient.shared.query,
+       _store = store ?? ChatPackScanStore(),
+       _now = now ?? _unixNow;
 
   final TdQuery _query;
+  final ChatPackScanStore _store;
+  final int Function() _now;
 
-  /// One chat's history, newest first.
+  static int _unixNow() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+  /// One chat's history, newest first. Not kept between openings: a single
+  /// chat rescans in moments.
   ChatPackScanner chatScanner(int chatId) =>
-      ChatPackScanner._(_query, cursors: [_ChatCursor(chatId, _unknownDate)]);
+      ChatPackScanner._(_query, walks: [_Walk.chat(chatId)]);
 
   /// Every chat in the main list and the archive, merged by message date.
-  ChatPackScanner globalScanner() => ChatPackScanner._(
-    _query,
-    sources: [
-      _ChatListSource({'@type': 'chatListMain'}),
-      _ChatListSource({'@type': 'chatListArchive'}),
-    ],
-  );
+  ///
+  /// Resumes this account's previous scan and puts a new walk in front of
+  /// it covering only messages sent since that scan began, so a reopened
+  /// finder shows what it found before, counts what arrived since, and
+  /// counts nothing twice.
+  Future<ChatPackScanner> openGlobalScanner() async {
+    int? userId;
+    try {
+      userId = (await _query({'@type': 'getMe'})).int64('id');
+    } catch (_) {}
+    final saved = userId == null ? null : await _store.read(userId);
+    final scanner =
+        (saved == null ? null : ChatPackScanner._restore(_query, saved)) ??
+        ChatPackScanner._(_query, walks: []);
+    final owner = userId;
+    if (owner != null) {
+      scanner._persist = (state) => _store.write(owner, state);
+    }
+    final now = _now();
+    if (now > scanner._top) {
+      scanner._walks.insert(0, _Walk.global(floor: scanner._top, ceiling: now));
+      scanner._top = now;
+    }
+    return scanner;
+  }
 
   Future<bool> install(ChatUsedPack pack) async {
     try {
@@ -232,58 +349,204 @@ class _ChatCursor {
 
   final int chatId;
 
-  /// No unread message in this chat is newer than this.
+  /// No message still to be handed out is newer than this.
   int upperBound;
+
+  /// Where the next page is read from.
   int fromMessageId = 0;
+
+  /// The last message handed out. A restored scan reads from here, so
+  /// messages fetched but not yet handed out are read again, not lost.
+  int resumeFromId = 0;
+
+  /// Nothing left to fetch.
   bool exhausted = false;
   final Queue<Map<String, dynamic>> buffer = Queue();
 
   bool get live => buffer.isNotEmpty || !exhausted;
   int get head =>
       buffer.isNotEmpty ? (buffer.first.integer('date') ?? 0) : upperBound;
+
+  Map<String, Object> toJson() => {
+    'chat': chatId,
+    'bound': upperBound,
+    'from': resumeFromId,
+    'done': exhausted && buffer.isEmpty,
+  };
+
+  static _ChatCursor? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final chat = json['chat'];
+    final bound = json['bound'];
+    final from = json['from'];
+    if (chat is! int || bound is! int || from is! int) return null;
+    return _ChatCursor(chat, bound)
+      ..fromMessageId = from
+      ..resumeFromId = from
+      ..exhausted = json['done'] == true;
+  }
 }
 
 class _ChatListSource {
-  _ChatListSource(this.chatList);
+  _ChatListSource(this.listType);
 
-  final Map<String, dynamic> chatList;
+  /// chatListMain or chatListArchive.
+  final String listType;
   int loaded = 0;
   bool exhausted = false;
 
   /// Every chat not loaded yet had its last message at or before this.
   int boundary = _unknownDate;
+
+  Map<String, dynamic> get chatList => {'@type': listType};
+
+  Map<String, Object> toJson() => {
+    'list': listType,
+    'loaded': loaded,
+    'done': exhausted,
+    'boundary': boundary,
+  };
+
+  static _ChatListSource? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final list = json['list'];
+    final loaded = json['loaded'];
+    final boundary = json['boundary'];
+    if (list is! String || loaded is! int || boundary is! int) return null;
+    return _ChatListSource(list)
+      ..loaded = loaded
+      ..boundary = boundary
+      ..exhausted = json['done'] == true;
+  }
+}
+
+/// One newest-first walk over the messages dated in (floor, ceiling].
+///
+/// A reopened finder adds a walk above the previous one's ceiling, so walks
+/// never overlap: each message is counted by exactly one of them.
+class _Walk {
+  _Walk({
+    required this.floor,
+    required this.ceiling,
+    List<_ChatCursor> cursors = const [],
+    List<_ChatListSource> sources = const [],
+    Set<int> knownChats = const {},
+  }) : cursors = [...cursors],
+       sources = [...sources],
+       knownChats = {...knownChats, for (final c in cursors) c.chatId};
+
+  factory _Walk.global({required int floor, required int ceiling}) => _Walk(
+    floor: floor,
+    ceiling: ceiling,
+    sources: [
+      _ChatListSource('chatListMain'),
+      _ChatListSource('chatListArchive'),
+    ],
+  );
+
+  factory _Walk.chat(int chatId) => _Walk(
+    floor: 0,
+    ceiling: _unknownDate,
+    cursors: [_ChatCursor(chatId, _unknownDate)],
+  );
+
+  final int floor;
+  final int ceiling;
+  final List<_ChatCursor> cursors;
+  final List<_ChatListSource> sources;
+  final Set<int> knownChats;
+  bool exhausted = false;
+
+  Map<String, Object> toJson() => {
+    'floor': floor,
+    'ceiling': ceiling,
+    'cursors': [for (final c in cursors) c.toJson()],
+    'sources': [for (final s in sources) s.toJson()],
+    'chats': [...knownChats],
+  };
+
+  static _Walk? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final floor = json['floor'];
+    final ceiling = json['ceiling'];
+    final cursors = json['cursors'];
+    final sources = json['sources'];
+    final chats = json['chats'];
+    if (floor is! int || ceiling is! int) return null;
+    if (cursors is! List || sources is! List || chats is! List) return null;
+    return _Walk(
+      floor: floor,
+      ceiling: ceiling,
+      cursors: cursors
+          .map(_ChatCursor.fromJson)
+          .whereType<_ChatCursor>()
+          .toList(),
+      sources: sources
+          .map(_ChatListSource.fromJson)
+          .whereType<_ChatListSource>()
+          .toList(),
+      knownChats: chats.whereType<int>().toSet(),
+    );
+  }
 }
 
 /// Walks messages newest first and keeps the packs found so far.
+///
+/// Pack details come from getStickerSet, which Telegram rate-limits. They
+/// are looked up by a background worker a few at a time, rows on screen
+/// first, and never block the scan. A rate limit pauses the worker for as
+/// long as Telegram asks; only "this set does not exist" is final.
 class ChatPackScanner {
-  ChatPackScanner._(
-    this._query, {
-    List<_ChatCursor> cursors = const [],
-    List<_ChatListSource> sources = const [],
-  }) : _cursors = [...cursors],
-       _sources = [...sources];
+  ChatPackScanner._(this._query, {required List<_Walk> walks})
+    : _walks = [...walks];
 
   static const int batchSize = 400;
   static const int previewCount = 16;
   static const int _pageSize = 100;
   static const int _chatPage = 50;
   static const int _fetchConcurrency = 6;
-  static const int _setConcurrency = 12;
+  static const int _setConcurrency = 4;
+  static const int _maxAttempts = 3;
+  static const int _stateVersion = 2;
+  static const Duration _saveInterval = Duration(seconds: 3);
+  static const Duration _setTimeout = Duration(seconds: 20);
 
   final TdQuery _query;
-  final List<_ChatCursor> _cursors;
-  final List<_ChatListSource> _sources;
-  final Set<int> _knownChats = {};
+
+  /// Newest window first.
+  final List<_Walk> _walks;
   final ChatPackReferences _refs = ChatPackReferences();
   final LinkedHashMap<int, ChatUsedPack> _packs = LinkedHashMap();
+
+  /// Packs looked up this session: previews and added state are current.
+  /// The rest came from the saved scan and refresh when they are shown.
+  final Set<int> _fresh = {};
   final Set<int> _unresolvableSets = {};
   final Map<int, int> _emojiSets = {};
   final Set<int> _unresolvableEmoji = {};
 
+  /// Set ids waiting for getStickerSet, most urgent first.
+  final LinkedHashSet<int> _queue = LinkedHashSet();
+  final Set<int> _inFlight = {};
+  final Map<int, int> _attempts = {};
+  Completer<void>? _worker;
+  DateTime? _pausedUntil;
+  bool _closed = false;
+
+  /// Called whenever a looked-up pack changes the list.
+  void Function()? onChanged;
+
+  /// The newest ceiling any walk has had; a reopened scan starts above it.
+  int _top = 0;
+  Future<void> Function(Map<String, dynamic> state)? _persist;
+  DateTime? _lastSaved;
+  Future<void>? _saving;
+  bool _saveAgain = false;
+
   int scannedMessages = 0;
 
-  /// True once every chat's history has been read to the start.
-  bool exhausted = false;
+  /// True once every walk has read its window to the end.
+  bool get exhausted => _walks.every((walk) => walk.exhausted);
 
   /// Packs found so far, in discovery order (newest use first).
   List<ChatUsedPack> get stickers => [
@@ -295,41 +558,286 @@ class ChatPackScanner {
       if (p.isCustomEmoji) p,
   ];
 
+  static ChatPackScanner? _restore(TdQuery query, Map<String, dynamic> json) {
+    final version = json['version'];
+    if (version != 1 && version != _stateVersion) return null;
+    final walks = json['walks'];
+    final refs = json['refs'];
+    final top = json['top'];
+    if (walks is! List || refs is! Map<String, dynamic> || top is! int) {
+      return null;
+    }
+    final scanner = ChatPackScanner._(
+      query,
+      walks: walks.map(_Walk.fromJson).whereType<_Walk>().toList(),
+    );
+    scanner._top = top;
+    scanner.scannedMessages = json.integer('scannedMessages') ?? 0;
+    scanner._refs.restore(refs);
+    final emojiSets = json['emojiSets'];
+    if (emojiSets is Map) {
+      emojiSets.forEach((key, value) {
+        final emojiId = int.tryParse('$key');
+        if (emojiId != null && value is int) {
+          scanner._emojiSets[emojiId] = value;
+        }
+      });
+    }
+    // Version 1 marked rate-limited lookups as unresolvable too; those lists
+    // cannot be trusted, so a version 1 scan looks everything up again.
+    if (version == _stateVersion) {
+      scanner._unresolvableSets.addAll(
+        (json['unresolvableSets'] as List? ?? const []).whereType<int>(),
+      );
+      scanner._unresolvableEmoji.addAll(
+        (json['unresolvableEmoji'] as List? ?? const []).whereType<int>(),
+      );
+    }
+    final packs = json['packs'];
+    if (packs is Map) {
+      packs.forEach((key, value) {
+        final id = int.tryParse('$key');
+        if (id == null || value is! Map) return;
+        final title = value['t'];
+        final count = value['n'];
+        if (title is! String || count is! int) return;
+        scanner._packs[id] = ChatUsedPack(
+          id: id,
+          title: title,
+          isCustomEmoji: value['e'] == true,
+          itemCount: count,
+          uses: 0,
+          lastUsed: 0,
+          installed: value['i'] == true,
+        );
+      });
+    }
+    return scanner;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'version': _stateVersion,
+    'top': _top,
+    'scannedMessages': scannedMessages,
+    'refs': _refs.toJson(),
+    'emojiSets': {
+      for (final entry in _emojiSets.entries) '${entry.key}': entry.value,
+    },
+    'unresolvableSets': [..._unresolvableSets],
+    'unresolvableEmoji': [..._unresolvableEmoji],
+    // Enough to list, sort and filter a reopened scan with no network; the
+    // previews come back as rows are shown.
+    'packs': {
+      for (final pack in _packs.values)
+        '${pack.id}': {
+          't': pack.title,
+          'n': pack.itemCount,
+          'e': pack.isCustomEmoji,
+          'i': pack.installed,
+        },
+    },
+    // A finished walk only matters through its ceiling, which [_top] keeps.
+    'walks': [
+      for (final walk in _walks)
+        if (!walk.exhausted) walk.toJson(),
+    ],
+  };
+
+  /// Saves the scan for the next opening, at most every few seconds unless
+  /// [force]d. Scanners that are not kept (one chat) do nothing.
+  Future<void> save({bool force = false}) async {
+    final persist = _persist;
+    if (persist == null) return;
+    final now = DateTime.now();
+    final last = _lastSaved;
+    if (!force && last != null && now.difference(last) < _saveInterval) return;
+    _lastSaved = now;
+    // One write at a time: a save asked for mid-write becomes one more
+    // write of the newest state, never two writes racing on the file.
+    final running = _saving;
+    if (running != null) {
+      _saveAgain = true;
+      return running;
+    }
+    final saving = _saving = () async {
+      do {
+        _saveAgain = false;
+        await persist(toJson());
+      } while (_saveAgain);
+    }();
+    try {
+      await saving;
+    } finally {
+      _saving = null;
+    }
+  }
+
+  /// Puts back what a restored scan found: counts and saved pack details at
+  /// once, with no network. Packs saved before their details were kept are
+  /// queued for lookup.
+  Future<void> resolveKnown() async {
+    _recount();
+    _enqueueUnknown();
+  }
+
   /// Scans the next [messages] messages and folds them into the packs.
   Future<void> loadMore({int messages = batchSize}) async {
-    if (exhausted) return;
-    final batch = await _nextMessages(messages);
+    final batch = <Map<String, dynamic>>[];
+    for (final walk in _walks) {
+      if (batch.length >= messages) break;
+      if (walk.exhausted) continue;
+      batch.addAll(await _next(walk, messages - batch.length));
+    }
     for (final message in batch) {
       _refs.addMessage(message);
     }
     scannedMessages += batch.length;
-    await _resolveNew();
+    await _resolveEmoji();
     _recount();
+    _enqueueUnknown();
   }
 
-  Future<List<Map<String, dynamic>>> _nextMessages(int count) async {
+  /// A row for [id] is on screen: look it up next if its preview and added
+  /// state are not current yet.
+  void requestPack(int id) {
+    if (_fresh.contains(id) ||
+        _inFlight.contains(id) ||
+        _unresolvableSets.contains(id)) {
+      return;
+    }
+    // Most recent request first: that is the row the user just scrolled to.
+    final rest = [..._queue]..remove(id);
+    _queue
+      ..clear()
+      ..add(id)
+      ..addAll(rest);
+    _startWorker();
+  }
+
+  /// Completes once every queued lookup has finished.
+  Future<void> settle() async {
+    while (_worker != null) {
+      await _worker!.future;
+    }
+  }
+
+  /// Stops the lookup worker; the page is gone.
+  void close() {
+    _closed = true;
+    onChanged = null;
+  }
+
+  /// Queues sets the refs mention but no pack stands for yet, most used
+  /// first.
+  void _enqueueUnknown() {
+    final uses = _setUses();
+    final unknown =
+        uses.keys
+            .where(
+              (id) =>
+                  !_packs.containsKey(id) &&
+                  !_unresolvableSets.contains(id) &&
+                  !_inFlight.contains(id) &&
+                  !_queue.contains(id),
+            )
+            .toList()
+          ..sort((a, b) => uses[b]!.compareTo(uses[a]!));
+    if (unknown.isEmpty) return;
+    _queue.addAll(unknown);
+    _startWorker();
+  }
+
+  void _startWorker() {
+    if (_worker != null || _closed || _queue.isEmpty) return;
+    final worker = _worker = Completer<void>();
+    unawaited(
+      _work().whenComplete(() {
+        _worker = null;
+        worker.complete();
+      }),
+    );
+  }
+
+  Future<void> _work() async {
+    while (_queue.isNotEmpty && !_closed) {
+      final wait = _pausedUntil?.difference(DateTime.now());
+      if (wait != null && wait > Duration.zero) await Future.delayed(wait);
+      final batch = _queue.take(_setConcurrency).toList();
+      _queue.removeAll(batch);
+      _inFlight.addAll(batch);
+      final results = await Future.wait(batch.map(_loadSet));
+      _inFlight.removeAll(batch);
+      var changed = false;
+      for (var i = 0; i < batch.length; i++) {
+        final id = batch[i];
+        switch (results[i]) {
+          case _SetLoaded(:final pack):
+            final previous = _packs[id];
+            if (previous != null) {
+              pack
+                ..uses = previous.uses
+                ..lastUsed = previous.lastUsed
+                ..users = previous.users;
+            }
+            _packs[id] = pack;
+            _fresh.add(id);
+            changed = true;
+          case _SetGone():
+            _unresolvableSets.add(id);
+            changed = _packs.remove(id) != null || changed;
+          case _SetRateLimited(:final retryAfter):
+            _pausedUntil = DateTime.now().add(retryAfter);
+            _queue.add(id);
+          case _SetFailed():
+            final attempts = (_attempts[id] ?? 0) + 1;
+            _attempts[id] = attempts;
+            // Try again later this session; a saved pack keeps its details.
+            if (attempts < _maxAttempts) _queue.add(id);
+        }
+      }
+      if (changed) {
+        _recount();
+        onChanged?.call();
+        // Lookups keep landing after the scan is paused or done; keep the
+        // saved details up with them.
+        unawaited(save());
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _next(_Walk walk, int count) async {
     final out = <Map<String, dynamic>>[];
     while (out.length < count) {
-      await _loadChatsIfNeeded();
-      final newest = _newest();
-      if (newest == null) {
-        exhausted = true;
+      await _loadChatsIfNeeded(walk);
+      final newest = _newest(walk);
+      if (newest == null || newest.head <= walk.floor) {
+        walk.exhausted = true;
         break;
       }
       if (newest.buffer.isEmpty) {
-        await _fetchAround(newest);
+        await _fetchAround(walk, newest);
         continue;
       }
       final message = newest.buffer.removeFirst();
-      newest.upperBound = message.integer('date') ?? 0;
+      final date = message.integer('date') ?? 0;
+      newest.upperBound = date;
+      newest.resumeFromId = message.int64('id') ?? newest.resumeFromId;
+      if (date <= walk.floor) {
+        // Older than this window: an older walk has it, or had it.
+        newest.buffer.clear();
+        newest.exhausted = true;
+        continue;
+      }
+      // Newer than this window: a newer walk counts it.
+      if (date > walk.ceiling) continue;
       out.add(message);
     }
     return out;
   }
 
-  _ChatCursor? _newest() {
+  _ChatCursor? _newest(_Walk walk) {
     _ChatCursor? best;
-    for (final cursor in _cursors) {
+    for (final cursor in walk.cursors) {
       if (!cursor.live) continue;
       if (best == null || cursor.head > best.head) best = cursor;
     }
@@ -337,16 +845,18 @@ class ChatPackScanner {
   }
 
   /// Loads more of each chat list while an unloaded chat could hold a message
-  /// newer than every loaded one.
-  Future<void> _loadChatsIfNeeded() async {
-    for (final source in _sources) {
-      while (!source.exhausted && (_newest()?.head ?? -1) < source.boundary) {
-        await _loadChats(source);
+  /// newer than every loaded one, and newer than the walk's floor.
+  Future<void> _loadChatsIfNeeded(_Walk walk) async {
+    for (final source in walk.sources) {
+      while (!source.exhausted &&
+          source.boundary > walk.floor &&
+          (_newest(walk)?.head ?? -1) < source.boundary) {
+        await _loadChats(walk, source);
       }
     }
   }
 
-  Future<void> _loadChats(_ChatListSource source) async {
+  Future<void> _loadChats(_Walk walk, _ChatListSource source) async {
     final limit = source.loaded + _chatPage;
     try {
       final res = await _query({
@@ -355,19 +865,26 @@ class ChatPackScanner {
         'limit': limit,
       });
       final ids = res.int64Array('chat_ids') ?? const <int>[];
-      final fresh = ids.skip(source.loaded).toList();
+      final grew = ids.length > source.loaded;
       source.loaded = ids.length;
-      if (ids.length < limit || fresh.isEmpty) source.exhausted = true;
+      if (ids.length < limit || !grew) source.exhausted = true;
+      // Every id, not just the tail: the list reorders as chats get new
+      // messages, and a restored walk must still pick up a chat that moved
+      // above the part it had loaded.
+      final fresh = [
+        for (final id in ids)
+          if (!walk.knownChats.contains(id)) id,
+      ];
       final dates = await Future.wait(fresh.map(_lastMessageDate));
       for (var i = 0; i < fresh.length; i++) {
-        if (!_knownChats.add(fresh[i])) continue;
+        walk.knownChats.add(fresh[i]);
         final cursor = _ChatCursor(fresh[i], dates[i]);
-        if (dates[i] <= 0) cursor.exhausted = true;
-        _cursors.add(cursor);
+        if (dates[i] <= walk.floor) cursor.exhausted = true;
+        walk.cursors.add(cursor);
       }
       // Pinned chats lead the list whatever their dates, so the list's tail
       // is the one that bounds the chats still to come.
-      if (dates.isNotEmpty) source.boundary = dates.last;
+      if (ids.isNotEmpty) source.boundary = await _lastMessageDate(ids.last);
     } catch (_) {
       source.exhausted = true;
     }
@@ -385,9 +902,9 @@ class ChatPackScanner {
   /// Fetches the next page for [cursor] and, in parallel, for the other
   /// empty chats likely to be needed next, so a merge does not wait on one
   /// round trip per chat.
-  Future<void> _fetchAround(_ChatCursor cursor) async {
+  Future<void> _fetchAround(_Walk walk, _ChatCursor cursor) async {
     final waiting =
-        _cursors
+        walk.cursors
             .where((c) => c != cursor && c.buffer.isEmpty && !c.exhausted)
             .toList()
           ..sort((a, b) => b.head.compareTo(a.head));
@@ -424,7 +941,7 @@ class ChatPackScanner {
     }
   }
 
-  Future<void> _resolveNew() async {
+  Future<void> _resolveEmoji() async {
     final emojiIds = [
       for (final id in _refs.customEmoji.keys)
         if (!_emojiSets.containsKey(id) && !_unresolvableEmoji.contains(id)) id,
@@ -443,59 +960,62 @@ class ChatPackScanner {
           if (setId == null || setId == 0 || emojiId == null) continue;
           _emojiSets[emojiId] = setId;
         }
-      } catch (_) {}
-      for (final id in batch) {
-        if (!_emojiSets.containsKey(id)) _unresolvableEmoji.add(id);
-      }
-    }
-
-    final setIds = <int>{..._refs.stickerSets.keys, ..._emojiSets.values}
-        .where(
-          (id) => !_packs.containsKey(id) && !_unresolvableSets.contains(id),
-        )
-        .toList();
-    for (var i = 0; i < setIds.length; i += _setConcurrency) {
-      final batch = setIds.sublist(
-        i,
-        math.min(i + _setConcurrency, setIds.length),
-      );
-      final packs = await Future.wait(batch.map(_loadSet));
-      for (var j = 0; j < batch.length; j++) {
-        final pack = packs[j];
-        if (pack == null) {
-          _unresolvableSets.add(batch[j]);
-        } else {
-          _packs[pack.id] = pack;
+        // Asked and not answered: these ids have no sticker behind them.
+        for (final id in batch) {
+          if (!_emojiSets.containsKey(id)) _unresolvableEmoji.add(id);
         }
+      } catch (_) {
+        // Rate limited or offline: the next batch asks again.
+        return;
       }
     }
   }
 
-  Future<ChatUsedPack?> _loadSet(int id) async {
+  /// Uses per set id, stickers and resolved custom emoji together.
+  Map<int, int> _setUses() {
+    final uses = Map<int, int>.of(_refs.stickerSets);
+    _refs.customEmoji.forEach((emojiId, count) {
+      final setId = _emojiSets[emojiId];
+      if (setId != null) uses[setId] = (uses[setId] ?? 0) + count;
+    });
+    return uses;
+  }
+
+  Future<_SetLookup> _loadSet(int id) async {
     try {
-      final set = await _query({'@type': 'getStickerSet', 'set_id': id});
+      final set = await _query({
+        '@type': 'getStickerSet',
+        'set_id': id,
+      }).timeout(_setTimeout);
       final title = set.str('title');
-      if (title == null) return null;
+      if (title == null) return const _SetGone();
       final items = parseStickers(set.objects('stickers'));
-      return ChatUsedPack(
-        id: id,
-        title: title,
-        isCustomEmoji:
-            set.obj('sticker_type')?.type == 'stickerTypeCustomEmoji',
-        itemCount: items.length,
-        uses: 0,
-        lastUsed: 0,
-        installed: set.boolean('is_installed') ?? false,
-        previews: items.take(previewCount).toList(growable: false),
+      return _SetLoaded(
+        ChatUsedPack(
+          id: id,
+          title: title,
+          isCustomEmoji:
+              set.obj('sticker_type')?.type == 'stickerTypeCustomEmoji',
+          itemCount: items.length,
+          uses: 0,
+          lastUsed: 0,
+          installed: set.boolean('is_installed') ?? false,
+          previews: items.take(previewCount).toList(growable: false),
+        ),
       );
+    } on TdError catch (error) {
+      final retryAfter = rateLimitRetryAfter(error);
+      if (retryAfter != null) return _SetRateLimited(retryAfter);
+      // A 400 is Telegram saying the set is invalid or gone for good.
+      return error.code == 400 ? const _SetGone() : const _SetFailed();
     } catch (_) {
-      return null;
+      return const _SetFailed();
     }
   }
 
   /// Recomputes every pack's totals from the cumulative references.
   void _recount() {
-    final uses = Map<int, int>.of(_refs.stickerSets);
+    final uses = _setUses();
     final dates = Map<int, int>.of(_refs.stickerSetDates);
     final users = {
       for (final entry in _refs.stickerSetUsers.entries)
@@ -504,7 +1024,6 @@ class ChatPackScanner {
     _refs.customEmoji.forEach((emojiId, count) {
       final setId = _emojiSets[emojiId];
       if (setId == null) return;
-      uses[setId] = (uses[setId] ?? 0) + count;
       dates[setId] = math.max(
         dates[setId] ?? 0,
         _refs.customEmojiDates[emojiId] ?? 0,
@@ -517,6 +1036,41 @@ class ChatPackScanner {
       pack.users = users[pack.id]?.length ?? 0;
     }
   }
+}
+
+/// How one getStickerSet lookup went.
+sealed class _SetLookup {
+  const _SetLookup();
+}
+
+final class _SetLoaded extends _SetLookup {
+  const _SetLoaded(this.pack);
+  final ChatUsedPack pack;
+}
+
+/// Telegram says the set does not exist.
+final class _SetGone extends _SetLookup {
+  const _SetGone();
+}
+
+final class _SetRateLimited extends _SetLookup {
+  const _SetRateLimited(this.retryAfter);
+  final Duration retryAfter;
+}
+
+/// Timed out, offline, or another passing failure.
+final class _SetFailed extends _SetLookup {
+  const _SetFailed();
+}
+
+/// How long Telegram asks to wait, if [error] is a rate limit: TDLib reports
+/// "Too Many Requests: retry after N" (429) or a FLOOD_WAIT_N message.
+Duration? rateLimitRetryAfter(TdError error) {
+  final match =
+      RegExp(r'retry after (\d+)').firstMatch(error.message) ??
+      RegExp(r'FLOOD_WAIT_(\d+)').firstMatch(error.message);
+  if (match != null) return Duration(seconds: int.parse(match.group(1)!));
+  return error.code == 429 ? const Duration(seconds: 5) : null;
 }
 
 enum ChatPackSort { usage, recent, name, size }

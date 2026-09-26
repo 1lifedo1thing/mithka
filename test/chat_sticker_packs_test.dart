@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chat/chat_sticker_packs_service.dart';
 import 'package:mithka/chat/chat_sticker_packs_view.dart';
 import 'package:mithka/l10n/app_localizations.dart';
+import 'package:mithka/tdlib/td_client.dart';
 import 'package:mithka/theme/theme_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -98,8 +101,12 @@ class _FakeTd {
 
   final Map<int, List<Map<String, dynamic>>> history;
   final Set<int> archive;
+  var userId = 777;
   final requests = <Map<String, dynamic>>[];
   final installed = <int>{20};
+
+  /// Errors getStickerSet raises, once each, keyed by set id.
+  final setErrors = <int, List<Map<String, dynamic>>>{};
 
   // Round-trip through JSON so nested maps are typed like real TDLib output.
   Future<Map<String, dynamic>> call(Map<String, dynamic> request) async =>
@@ -108,6 +115,8 @@ class _FakeTd {
   Map<String, dynamic> _respond(Map<String, dynamic> request) {
     requests.add(request);
     switch (request['@type']) {
+      case 'getMe':
+        return {'@type': 'user', 'id': userId};
       case 'getChats':
         final archived = request['chat_list']['@type'] == 'chatListArchive';
         final ids = [
@@ -145,6 +154,10 @@ class _FakeTd {
         };
       case 'getStickerSet':
         final id = request['set_id'] as int;
+        final errors = setErrors[id];
+        if (errors != null && errors.isNotEmpty) {
+          throw TdError(errors.removeAt(0));
+        }
         return {
           'id': '$id',
           'title': 'Pack $id',
@@ -211,8 +224,59 @@ Map<int, int> _users(List<ChatUsedPack> packs) => {
   for (final p in packs) p.id: p.users,
 };
 
+int _setLookups(_FakeTd td) =>
+    td.requests.where((r) => r['@type'] == 'getStickerSet').length;
+
 int _historyReads(_FakeTd td) =>
     td.requests.where((r) => r['@type'] == 'getChatHistory').length;
+
+/// Keeps saved scans in memory, round-tripped through JSON like the file.
+class _MemoryStore extends ChatPackScanStore {
+  final saved = <int, String>{};
+
+  @override
+  Future<Map<String, dynamic>?> read(int userId) async {
+    final json = saved[userId];
+    return json == null ? null : jsonDecode(json) as Map<String, dynamic>;
+  }
+
+  @override
+  Future<void> write(int userId, Map<String, dynamic> state) async {
+    saved[userId] = jsonEncode(state);
+  }
+}
+
+/// A store whose writes wait for [release], to catch overlapping saves.
+class _SlowStore extends ChatPackScanStore {
+  final written = <Map<String, dynamic>>[];
+  final _gate = Completer<void>();
+  var _running = 0;
+  var maxConcurrent = 0;
+
+  void release() => _gate.complete();
+
+  @override
+  Future<Map<String, dynamic>?> read(int userId) async => null;
+
+  @override
+  Future<void> write(int userId, Map<String, dynamic> state) async {
+    _running += 1;
+    maxConcurrent = _running > maxConcurrent ? _running : maxConcurrent;
+    await _gate.future;
+    written.add(state);
+    _running -= 1;
+  }
+}
+
+ChatStickerPacksService _service(
+  _FakeTd td, {
+  ChatPackScanStore? store,
+  int now = 10000,
+}) => ChatStickerPacksService(
+  query: td.call,
+  store: store ?? _MemoryStore(),
+  now: () => now,
+);
 
 void main() {
   final fixtures = L10nFixtures.load();
@@ -226,6 +290,7 @@ void main() {
     final td = _FakeTd();
     final scanner = ChatStickerPacksService(query: td.call).chatScanner(1);
     await scanner.loadMore();
+    await scanner.settle();
 
     expect(scanner.scannedMessages, 3);
     expect(scanner.exhausted, isTrue);
@@ -242,10 +307,11 @@ void main() {
     'global scan merges every chat by message date, batch by batch',
     () async {
       final td = _FakeTd();
-      final scanner = ChatStickerPacksService(query: td.call).globalScanner();
+      final scanner = await _service(td).openGlobalScanner();
 
       // The two newest messages overall: chat 1 at 900, chat 2 at 800.
       await scanner.loadMore(messages: 2);
+      await scanner.settle();
       expect(scanner.scannedMessages, 2);
       expect(_uses(scanner.stickers), {10: 1, 20: 1});
       expect(scanner.emoji, isEmpty);
@@ -254,10 +320,13 @@ void main() {
       // Next: the archived chat 3 at 700, then chat 2 at 600, whose custom
       // emoji reaction had three reactors.
       await scanner.loadMore(messages: 2);
+      await scanner.settle();
       expect(_uses(scanner.stickers), {10: 1, 20: 1, 30: 1});
       expect(_uses(scanner.emoji), {60: 1, 50: 3});
 
       await scanner.loadMore();
+
+      await scanner.settle();
       expect(scanner.scannedMessages, 6);
       expect(scanner.exhausted, isTrue);
       expect(_uses(scanner.stickers), {10: 2, 20: 1, 30: 1});
@@ -274,6 +343,193 @@ void main() {
       );
     },
   );
+
+  test(
+    'a reopened scan resumes where it stopped, counting nothing twice',
+    () async {
+      final store = _MemoryStore();
+      final td = _FakeTd();
+      final first = await _service(td, store: store).openGlobalScanner();
+      await first.loadMore(messages: 3);
+      await first.settle();
+      await first.save(force: true);
+      expect(first.exhausted, isFalse);
+
+      final lookups = _setLookups(td);
+
+      final reopened = await _service(td, store: store).openGlobalScanner();
+
+      await reopened.resolveKnown();
+
+      await reopened.settle();
+
+      // What the first opening found is back before anything new is read,
+
+      // and without asking Telegram for a single pack again.
+
+      expect(_setLookups(td), lookups);
+      expect(reopened.scannedMessages, 3);
+      expect(_uses(reopened.stickers), {10: 1, 20: 1, 30: 1});
+
+      await reopened.loadMore();
+
+      await reopened.settle();
+      expect(reopened.exhausted, isTrue);
+      expect(reopened.scannedMessages, 6);
+      // Exactly the totals of one uninterrupted scan.
+      expect(_uses(reopened.stickers), {10: 2, 20: 1, 30: 1});
+      expect(_uses(reopened.emoji), {60: 1, 50: 5});
+      expect(_users(reopened.emoji), {60: 1, 50: 3});
+    },
+  );
+
+  test('a reopened scan catches up on messages sent since', () async {
+    final store = _MemoryStore();
+    final td = _FakeTd();
+    final first = await _service(
+      td,
+      store: store,
+      now: 1000,
+    ).openGlobalScanner();
+    await first.loadMore();
+    await first.settle();
+    await first.save(force: true);
+    expect(first.exhausted, isTrue);
+
+    // A new sticker in chat 1, after the first scan began.
+    td.history[1]!.insert(0, _sticker(40, 1500, 10));
+    final reopened = await _service(
+      td,
+      store: store,
+      now: 2000,
+    ).openGlobalScanner();
+    await reopened.resolveKnown();
+    await reopened.settle();
+    expect(reopened.exhausted, isFalse, reason: 'the new window is unread');
+    await reopened.loadMore();
+    await reopened.settle();
+    expect(reopened.exhausted, isTrue);
+    expect(reopened.scannedMessages, 7);
+    expect(_uses(reopened.stickers), {10: 3, 20: 1, 30: 1});
+    expect(reopened.stickers.firstWhere((p) => p.id == 10).lastUsed, 1500);
+  });
+
+  test('a rate-limited pack waits and is looked up again', () async {
+    final td = _FakeTd()
+      ..setErrors[20] = [
+        {'code': 429, 'message': 'Too Many Requests: retry after 1'},
+      ];
+    final scanner = await _service(td).openGlobalScanner();
+    await scanner.loadMore();
+    await scanner.settle();
+    expect(_uses(scanner.stickers), {10: 2, 20: 1, 30: 1});
+    expect(scanner.toJson()['unresolvableSets'], isEmpty);
+  });
+
+  test('only a 400 marks a pack as gone for good', () async {
+    final store = _MemoryStore();
+    final td = _FakeTd()
+      ..setErrors[20] = [
+        for (var i = 0; i < 3; i++) {'code': 500, 'message': 'Timeout'},
+      ]
+      ..setErrors[30] = [
+        {'code': 400, 'message': 'STICKERSET_INVALID'},
+      ];
+    final scanner = await _service(td, store: store).openGlobalScanner();
+    await scanner.loadMore();
+    await scanner.settle();
+    expect(scanner.stickers.map((p) => p.id), [10]);
+    expect(scanner.toJson()['unresolvableSets'], [30]);
+    await scanner.save(force: true);
+
+    // Next opening: the failed one is asked again, the gone one is not.
+    final reopened = await _service(td, store: store).openGlobalScanner();
+    await reopened.resolveKnown();
+    await reopened.settle();
+    expect(reopened.stickers.map((p) => p.id), unorderedEquals([10, 20]));
+  });
+
+  test('a version 1 save looks every pack up again', () async {
+    final store = _MemoryStore();
+    final td = _FakeTd();
+    final first = await _service(td, store: store).openGlobalScanner();
+    await first.loadMore();
+    await first.settle();
+    final state = first.toJson()
+      ..['version'] = 1
+      ..['unresolvableSets'] = [20]
+      ..remove('packs');
+    await store.write(777, state);
+
+    final reopened = await _service(td, store: store).openGlobalScanner();
+    await reopened.resolveKnown();
+    await reopened.settle();
+    expect(_uses(reopened.stickers), {10: 2, 20: 1, 30: 1});
+  });
+
+  test('rate limits are read from either TDLib wording', () {
+    expect(
+      rateLimitRetryAfter(
+        TdError({'code': 429, 'message': 'Too Many Requests: retry after 7'}),
+      ),
+      const Duration(seconds: 7),
+    );
+    expect(
+      rateLimitRetryAfter(TdError({'code': 420, 'message': 'FLOOD_WAIT_12'})),
+      const Duration(seconds: 12),
+    );
+    expect(
+      rateLimitRetryAfter(TdError({'code': 400, 'message': 'BAD'})),
+      isNull,
+    );
+  });
+
+  test('saves never overlap, and the newest state is written last', () async {
+    final store = _SlowStore();
+    final td = _FakeTd();
+    final scanner = await _service(td, store: store).openGlobalScanner();
+    final first = scanner.save(force: true);
+    await scanner.loadMore();
+    await scanner.settle();
+    final second = scanner.save(force: true);
+    store.release();
+    await Future.wait([first, second]);
+    expect(store.maxConcurrent, 1);
+    expect(store.written.last['scannedMessages'], 6);
+  });
+
+  test('each account keeps its own scan', () async {
+    final store = _MemoryStore();
+    final td = _FakeTd();
+    final first = await _service(td, store: store).openGlobalScanner();
+    await first.loadMore();
+    await first.settle();
+    await first.save(force: true);
+
+    td.userId = 888;
+    final other = await _service(td, store: store).openGlobalScanner();
+    await other.resolveKnown();
+    await other.settle();
+    expect(other.scannedMessages, 0);
+    expect(other.stickers, isEmpty);
+    expect(store.saved.keys, [777]);
+  });
+
+  test('the store writes one file per account and reads it back', () async {
+    final dir = await Directory.systemTemp.createTemp('sticker-finder-test');
+    addTearDown(() => dir.delete(recursive: true));
+    final store = ChatPackScanStore(supportDirectory: () async => dir);
+    await store.write(777, {'version': 1, 'top': 5});
+    expect(await store.read(777), {'version': 1, 'top': 5});
+    expect(await store.read(888), isNull);
+    final files = dir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((f) => f.path)
+        .toList();
+    expect(files, hasLength(1));
+    expect(files.single, isNot(contains('777')), reason: 'hashed owner');
+  });
 
   test('plain animated emoji do not surface the built-in emoji set', () {
     final refs = ChatPackReferences()
@@ -343,12 +599,7 @@ void main() {
   testWidgets('phone layout: previews, Add (N), tabs, add all', (tester) async {
     final td = _FakeTd();
     await tester.pumpWidget(
-      await _app(
-        ChatStickerPacksView(
-          chatId: 2,
-          service: ChatStickerPacksService(query: td.call),
-        ),
-      ),
+      await _app(ChatStickerPacksView(chatId: 2, service: _service(td))),
     );
     await tester.pumpAndSettle();
 
@@ -392,9 +643,7 @@ void main() {
   ) async {
     final td = _FakeTd();
     await tester.pumpWidget(
-      await _app(
-        ChatStickerPacksView(service: ChatStickerPacksService(query: td.call)),
-      ),
+      await _app(ChatStickerPacksView(service: _service(td))),
     );
     await tester.pumpAndSettle();
 
@@ -431,9 +680,7 @@ void main() {
   ) async {
     final td = _FakeTd();
     await tester.pumpWidget(
-      await _app(
-        ChatStickerPacksView(service: ChatStickerPacksService(query: td.call)),
-      ),
+      await _app(ChatStickerPacksView(service: _service(td))),
     );
     await tester.pumpAndSettle();
     expect(find.text('Sticker & Emoji Finder'), findsOneWidget);
@@ -441,15 +688,47 @@ void main() {
     expect(find.text('Pack 30'), findsOneWidget, reason: 'archived chat');
   });
 
-  testWidgets('the scan keeps running until history runs out', (tester) async {
-    final td = _longChat(1000);
+  testWidgets('a reopened finder shows the saved scan straight away', (
+    tester,
+  ) async {
+    final store = _MemoryStore();
+    final td = _FakeTd();
     await tester.pumpWidget(
       await _app(
         ChatStickerPacksView(
-          chatId: 9,
-          service: ChatStickerPacksService(query: td.call),
+          key: const ValueKey('first'),
+          service: _service(td, store: store),
         ),
       ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('From your last 6 messages'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+
+    final reads = _historyReads(td);
+    await tester.pumpWidget(
+      await _app(
+        ChatStickerPacksView(
+          key: const ValueKey('second'),
+          service: _service(td, store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('From your last 6 messages'), findsOneWidget);
+    expect(find.text('Pack 30'), findsOneWidget);
+    expect(
+      _historyReads(td),
+      reads,
+      reason: 'same clock second: nothing newer to read',
+    );
+  });
+
+  testWidgets('the scan keeps running until history runs out', (tester) async {
+    final td = _longChat(1000);
+    await tester.pumpWidget(
+      await _app(ChatStickerPacksView(chatId: 9, service: _service(td))),
     );
     await tester.pumpAndSettle();
     // Three batches of 400 without any scrolling: every message, four per
@@ -468,12 +747,7 @@ void main() {
   ) async {
     final td = _longChat(4000, withPacks: false);
     await tester.pumpWidget(
-      await _app(
-        ChatStickerPacksView(
-          chatId: 9,
-          service: ChatStickerPacksService(query: td.call),
-        ),
-      ),
+      await _app(ChatStickerPacksView(chatId: 9, service: _service(td))),
     );
     // Let the first batch land, then pause mid-scan.
     final pause = find.byKey(const ValueKey('chat-sticker-packs-pause'));
@@ -505,12 +779,7 @@ void main() {
     try {
       final td = _FakeTd();
       await tester.pumpWidget(
-        await _app(
-          ChatStickerPacksView(
-            chatId: 1,
-            service: ChatStickerPacksService(query: td.call),
-          ),
-        ),
+        await _app(ChatStickerPacksView(chatId: 1, service: _service(td))),
       );
       await tester.pumpAndSettle();
       expect(find.byType(SliverGrid), findsOneWidget);

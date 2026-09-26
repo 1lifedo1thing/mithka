@@ -54,9 +54,10 @@ class ChatStickerPacksView extends StatefulWidget {
 class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   late final ChatStickerPacksService _service =
       widget.service ?? ChatStickerPacksService();
-  late final ChatPackScanner _scanner = widget.chatId == null
-      ? _service.globalScanner()
-      : _service.chatScanner(widget.chatId!);
+
+  /// Null until opened: the global scanner first reads back this
+  /// account's saved scan.
+  ChatPackScanner? _scanner;
   final TextEditingController _filter = TextEditingController();
   final ScrollController _scroll = ScrollController();
   bool _firstBatch = true;
@@ -73,8 +74,11 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
 
   bool get _global => widget.chatId == null;
 
-  List<ChatUsedPack> get _tabPacks =>
-      _tab == 0 ? _scanner.stickers : _scanner.emoji;
+  List<ChatUsedPack> get _stickers => _scanner?.stickers ?? const [];
+  List<ChatUsedPack> get _emoji => _scanner?.emoji ?? const [];
+  bool get _exhausted => _scanner?.exhausted ?? false;
+
+  List<ChatUsedPack> get _tabPacks => _tab == 0 ? _stickers : _emoji;
 
   List<ChatUsedPack> get _visible => sortPacks(
     filterPacks(_tabPacks, query: _filter.text, onlyMissing: _onlyMissing),
@@ -85,48 +89,85 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   @override
   void initState() {
     super.initState();
-    unawaited(_scan());
+    unawaited(_open());
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    unawaited(_scanner?.save(force: true));
+    _scanner?.close();
     _scroll.dispose();
     _filter.dispose();
     super.dispose();
   }
 
+  Future<void> _open() async {
+    final chatId = widget.chatId;
+    final scanner = chatId == null
+        ? await _service.openGlobalScanner()
+        : _service.chatScanner(chatId);
+    if (!mounted) return;
+    _scanner = scanner..onChanged = _onScannerChanged;
+    if (scanner.scannedMessages > 0) {
+      // A restored scan: put back what it found before reading anything new.
+      await scanner.resolveKnown();
+      if (!mounted) return;
+      setState(_showFirstResults);
+    }
+    await _scan();
+  }
+
+  Timer? _refreshTimer;
+
+  /// Pack lookups land one small group at a time; repaint at most five
+  /// times a second for them.
+  void _onScannerChanged() {
+    if (_refreshTimer != null) return;
+    _refreshTimer = Timer(const Duration(milliseconds: 200), () {
+      _refreshTimer = null;
+      if (mounted) setState(_showFirstResults);
+    });
+  }
+
+  void _showFirstResults() {
+    if (!_firstBatch) return;
+    _firstBatch = false;
+    // Open on whichever tab has content.
+    if (_stickers.isEmpty && _emoji.isNotEmpty) _tab = 1;
+  }
+
   /// Reads older and older messages, a batch at a time, for as long as the
   /// page is open, until history runs out or the user pauses. The list
-  /// updates after every batch.
+  /// updates after every batch, and the global scan is saved as it goes.
   Future<void> _scan() async {
-    if (_scanning) return;
+    final scanner = _scanner;
+    if (scanner == null || _scanning) return;
     setState(() => _scanning = true);
-    while (mounted && !_paused && !_scanner.exhausted) {
+    while (mounted && !_paused && !scanner.exhausted) {
       try {
-        await _scanner.loadMore();
+        await scanner.loadMore();
       } catch (_) {
         // A failing batch would otherwise spin; wait for the user to resume.
         _paused = true;
       }
       if (!mounted) return;
-      setState(() {
-        if (_firstBatch) {
-          _firstBatch = false;
-          // Open on whichever tab has content.
-          if (_scanner.stickers.isEmpty && _scanner.emoji.isNotEmpty) {
-            _tab = 1;
-          }
-        }
-      });
+      setState(_showFirstResults);
+      unawaited(scanner.save());
       // Let the frame with this batch's results paint before the next one.
       await Future<void>.delayed(Duration.zero);
     }
+    unawaited(scanner.save(force: true));
     if (mounted) setState(() => _scanning = false);
   }
 
   void _togglePaused() {
     setState(() => _paused = !_paused);
-    if (!_paused) unawaited(_scan());
+    if (_paused) {
+      unawaited(_scanner?.save(force: true));
+    } else {
+      unawaited(_scan());
+    }
   }
 
   void _selectTab(int index) {
@@ -246,13 +287,9 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
       padding: EdgeInsets.fromLTRB(12, dense ? 8 : 10, 12, dense ? 6 : 8),
       child: Row(
         children: [
-          tab(
-            0,
-            AppStringKeys.chatStickerPacksTabStickers,
-            _scanner.stickers.length,
-          ),
+          tab(0, AppStringKeys.chatStickerPacksTabStickers, _stickers.length),
           SizedBox(width: dense ? 6 : 8),
-          tab(1, AppStringKeys.chatStickerPacksTabEmoji, _scanner.emoji.length),
+          tab(1, AppStringKeys.chatStickerPacksTabEmoji, _emoji.length),
         ],
       ),
     );
@@ -388,7 +425,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
       _global
           ? AppStringKeys.chatStickerPacksScannedGlobal
           : AppStringKeys.chatStickerPacksScanned,
-      _scanner.scannedMessages,
+      _scanner?.scannedMessages ?? 0,
     );
     final fontSize = dense ? AppTextSize.caption : AppTextSize.footnote;
     return Padding(
@@ -405,7 +442,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
                 style: TextStyle(fontSize: fontSize, color: c.textSecondary),
               ),
             ),
-            if (!_scanner.exhausted)
+            if (!_exhausted)
               AppInteractiveSurface(
                 key: const ValueKey('chat-sticker-packs-pause'),
                 onTap: _togglePaused,
@@ -521,7 +558,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
                       ),
                     ),
             ),
-            if (visible.isEmpty && (_scanner.exhausted || _tabPacks.isNotEmpty))
+            if (visible.isEmpty && (_exhausted || _tabPacks.isNotEmpty))
               SliverToBoxAdapter(child: _emptyMessage(dense)),
             SliverToBoxAdapter(child: _footer(dense)),
           ],
@@ -570,7 +607,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
     final c = context.colors;
     final fontSize = dense ? AppTextSize.caption : AppTextSize.footnote;
     final Widget child;
-    if (_scanner.exhausted) {
+    if (_exhausted) {
       child = Text(
         AppStrings.t(AppStringKeys.chatStickerPacksNoOlder),
         style: TextStyle(fontSize: fontSize, color: c.textTertiary),
@@ -620,6 +657,9 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
     required double height,
   }) {
     final c = context.colors;
+    // Built means on screen (the list is lazy): bring its preview and added
+    // state up to date if they came from the saved scan.
+    _scanner?.requestPack(pack.id);
     return AppInteractiveSurface(
       key: ValueKey('chat-sticker-pack-${pack.id}'),
       onTap: () => unawaited(_openDetail(pack)),
