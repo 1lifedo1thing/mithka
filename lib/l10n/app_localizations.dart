@@ -1869,6 +1869,8 @@ abstract final class AppStringKeys {
   static const messageActionBlock = 'messageActionBlock';
   static const messageActionBlockKeyword = 'messageActionBlockKeyword';
   static const messageActionCopy = 'messageActionCopy';
+  static const messageActionCopyImage = 'messageActionCopyImage';
+  static const messageActionCopyImageFailed = 'messageActionCopyImageFailed';
   static const messageActionDisplayOriginal = 'messageActionDisplayOriginal';
   static const messageActionDisplayTranslation =
       'messageActionDisplayTranslation';

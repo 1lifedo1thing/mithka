@@ -1886,6 +1886,8 @@
     <string name="messageActionBlock">Block</string>
     <string name="messageActionBlockKeyword">Block keyword</string>
     <string name="messageActionCopy">Copy</string>
+    <string name="messageActionCopyImage">Copy image</string>
+    <string name="messageActionCopyImageFailed">Could not copy image</string>
     <string name="messageActionDisplayOriginal">Display original</string>
     <string name="messageActionDisplayTranslation">Display translation</string>
     <string name="messageActionEdit">Edit</string>

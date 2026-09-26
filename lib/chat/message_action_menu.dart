@@ -26,6 +26,7 @@ import 'quick_reaction_choice.dart';
 
 enum MessageAction {
   copy(HeroAppIcons.file, AppStringKeys.messageActionCopy),
+  copyImage(HeroAppIcons.image, AppStringKeys.messageActionCopyImage),
   edit(HeroAppIcons.pen, AppStringKeys.messageActionEdit),
   suggestOffer(HeroAppIcons.penToSquare, AppStringKeys.suggestedPostEditOffer),
   translate(HeroAppIcons.language, AppStringKeys.messageActionTranslate),
@@ -458,6 +459,7 @@ class MessageActionMenu extends StatelessWidget {
   List<MessageAction> _actions(
     TranslationController translation, {
     required bool isDesktop,
+    required bool isMacOS,
   }) {
     if (message.isCall) return [MessageAction.delete];
     final result = <MessageAction>[];
@@ -477,6 +479,13 @@ class MessageActionMenu extends StatelessWidget {
       if (translation.enabled && allowTranslation) {
         result.add(MessageAction.translate);
       }
+    }
+    if (isMacOS &&
+        allowForwarding &&
+        message.isPhoto &&
+        message.image != null &&
+        !message.isContentRestricted) {
+      result.add(MessageAction.copyImage);
     }
     if (!_hasCopyableText && message.isOutgoing && _isEditableMessage) {
       result.add(MessageAction.edit);
@@ -535,6 +544,7 @@ class MessageActionMenu extends StatelessWidget {
       _actions(
         context.read<TranslationController>(),
         isDesktop: isDesktopTargetPlatform(Theme.of(context).platform),
+        isMacOS: Theme.of(context).platform == TargetPlatform.macOS,
       ).length,
       availableHeight: MediaQuery.sizeOf(context).height - 24,
     );
@@ -545,6 +555,7 @@ class MessageActionMenu extends StatelessWidget {
     final actions = _actions(
       context.watch<TranslationController>(),
       isDesktop: isDesktopTargetPlatform(Theme.of(context).platform),
+      isMacOS: Theme.of(context).platform == TargetPlatform.macOS,
     );
     if (_usesVerticalLayout(context)) {
       return _VerticalActionList(actions: actions, onSelect: onSelect);

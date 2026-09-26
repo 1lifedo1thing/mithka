@@ -1879,6 +1879,8 @@
     <string name="messageActionBlock">封鎖</string>
     <string name="messageActionBlockKeyword">封鎖詞</string>
     <string name="messageActionCopy">複製</string>
+    <string name="messageActionCopyImage">複製圖片</string>
+    <string name="messageActionCopyImageFailed">無法複製圖片</string>
     <string name="messageActionDisplayOriginal">顯示原文</string>
     <string name="messageActionDisplayTranslation">顯示譯文</string>
     <string name="messageActionEdit">編輯</string>

@@ -1879,6 +1879,8 @@
     <string name="messageActionBlock">ブロック</string>
     <string name="messageActionBlockKeyword">語句をブロック</string>
     <string name="messageActionCopy">コピー</string>
+    <string name="messageActionCopyImage">画像をコピー</string>
+    <string name="messageActionCopyImageFailed">画像をコピーできませんでした</string>
     <string name="messageActionDisplayOriginal">原文を表示</string>
     <string name="messageActionDisplayTranslation">翻訳を表示</string>
     <string name="messageActionEdit">編集</string>

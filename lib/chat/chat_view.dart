@@ -7,6 +7,7 @@
 //
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
@@ -44,6 +45,7 @@ import '../components/ui_components.dart';
 import '../media/app_asset_picker.dart';
 import '../moments/story_viewer_view.dart';
 import '../notifications/notification_controller.dart';
+import '../platform/desktop_clipboard_images.dart';
 import '../profile/profile_detail_view.dart';
 import '../settings/ai_endpoint_style.dart';
 import '../settings/ai_settings_controller.dart';
@@ -57,6 +59,7 @@ import '../settings/translation_api.dart';
 import '../settings/translation_controller.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
+import '../tdlib/td_image_loader.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -4897,6 +4900,8 @@ class _ChatViewState extends State<ChatView> {
     switch (action) {
       case MessageAction.copy:
         unawaited(Clipboard.setData(ClipboardData(text: message.text)));
+      case MessageAction.copyImage:
+        await _copyMessageImage(message);
       case MessageAction.edit:
         unawaited(_editMessage(message));
       case MessageAction.suggestOffer:
@@ -5084,6 +5089,27 @@ class _ChatViewState extends State<ChatView> {
     final feedback = MediaDownloadService.feedbackFor(outcome);
     if (feedback != null) {
       showToast(context, feedback, visibleFor: const Duration(seconds: 2));
+    }
+  }
+
+  Future<void> _copyMessageImage(ChatMessage message) async {
+    final image = message.isPhoto ? message.image : null;
+    if (image == null) return;
+    try {
+      final path = await TdFileCenter.shared.pathFor(
+        image,
+        accountSlot: _sessionKey.accountSlot,
+      );
+      final copied =
+          path != null &&
+          await DesktopClipboardImageService.copyImageFile(File(path));
+      if (!copied && mounted) {
+        showToast(context, AppStringKeys.messageActionCopyImageFailed);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, AppStringKeys.messageActionCopyImageFailed);
+      }
     }
   }
 

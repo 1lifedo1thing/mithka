@@ -1886,6 +1886,8 @@
     <string name="messageActionBlock">Bloquer</string>
     <string name="messageActionBlockKeyword">Bloquer mot</string>
     <string name="messageActionCopy">Copier</string>
+    <string name="messageActionCopyImage">Copier l’image</string>
+    <string name="messageActionCopyImageFailed">Impossible de copier l’image</string>
     <string name="messageActionDisplayOriginal">Afficher l’original</string>
     <string name="messageActionDisplayTranslation">Afficher la traduction</string>
     <string name="messageActionEdit">Modifier</string>

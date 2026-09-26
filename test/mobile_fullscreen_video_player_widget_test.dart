@@ -61,6 +61,12 @@ void main() {
       await tester.tapAt(const Offset(5, 150));
       await tester.pump(const Duration(milliseconds: 400));
       expect(_playerControlOpacity(tester), 1);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(_playerControlOpacity(tester), 0);
+      await tester.tapAt(const Offset(5, 150));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(_playerControlOpacity(tester), 1);
       await tester.tap(_semanticsWidget('Play'));
       await tester.pump();
       expect(_semanticsWidget('Pause'), findsOneWidget);
@@ -73,6 +79,73 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets(
+    'holding the right or left video edge repeatedly seeks and stops on release',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final previousPlatform = VideoPlayerPlatform.instance;
+      final platform = _FakeMobileVideoPlatform();
+      VideoPlayerPlatform.instance = platform;
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        SharedPreferences.setMockInitialValues(const {});
+        final sourcePath = File('pubspec.yaml').absolute.path;
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: const [AppLocalizations.delegate],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: VideoPlayerView(
+              video: TdFileRef(id: 782, localPath: sourcePath),
+              initialPlaying: false,
+              onClose: () {},
+              streamQuery: _completedVideoQuery(sourcePath, fileId: 782),
+            ),
+          ),
+        );
+        await _pumpUntilPlayerReady(tester);
+        await tester.tapAt(const Offset(360, 400));
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final forward = await tester.startGesture(const Offset(360, 400));
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(
+          find.byKey(const ValueKey('video-held-seek-indicator')),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(milliseconds: 1000));
+        expect(
+          platform.seekPositions.last,
+          greaterThanOrEqualTo(const Duration(seconds: 20)),
+        );
+        await forward.up();
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('video-held-seek-indicator')),
+          findsNothing,
+        );
+        final countAfterRelease = platform.seekPositions.length;
+        await tester.pump(const Duration(seconds: 1));
+        expect(platform.seekPositions.length, countAfterRelease);
+
+        final beforeBackward = platform.seekPositions.last;
+        final backward = await tester.startGesture(const Offset(30, 400));
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(platform.seekPositions.last, lessThan(beforeBackward));
+        await backward.up();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _pumpUntilDisposed(tester, platform);
+      } finally {
+        VideoPlayerPlatform.instance = previousPlatform;
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   testWidgets('split video returns to fullscreen through the app navigator', (
     tester,
@@ -340,6 +413,7 @@ void main() {
           const ValueKey('video-more-save-to-photos'),
         );
         final share = find.byKey(const ValueKey('video-more-share'));
+        final speed = find.byKey(const ValueKey('video-more-speed'));
         final orientation = find.byKey(
           const ValueKey('video-more-orientation'),
         );
@@ -347,7 +421,13 @@ void main() {
         expect(download, findsOneWidget);
         expect(saveToPhotos, findsOneWidget);
         expect(share, findsOneWidget);
+        expect(speed, findsOneWidget);
         expect(orientation, findsOneWidget);
+        expect(find.text('Playback Speed 1x'), findsOneWidget);
+        await tester.tap(speed);
+        await tester.pump();
+        expect(platform.playbackSpeeds.last, 1.25);
+        expect(find.text('Playback Speed 1.25x'), findsOneWidget);
         expect(
           find.descendant(of: download, matching: find.text('Download')),
           findsOneWidget,
@@ -368,7 +448,7 @@ void main() {
         final saveRect = tester.getRect(saveToPhotos);
         final shareRect = tester.getRect(share);
         expect(menuRect.width, 212);
-        expect(menuRect.height, inInclusiveRange(207, 232));
+        expect(menuRect.height, inInclusiveRange(257, 292));
         expect(menuRect.left, greaterThanOrEqualTo(8));
         expect(menuRect.right, lessThanOrEqualTo(390 - 8));
         expect(menuRect.top, greaterThanOrEqualTo(47));
@@ -1028,6 +1108,10 @@ void main() {
       final queueChanges = <VideoPlaybackQueue>[];
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: false),
+            child: child!,
+          ),
           locale: const Locale('en'),
           localizationsDelegates: const [AppLocalizations.delegate],
           supportedLocales: AppLocalizations.supportedLocales,
@@ -1071,15 +1155,44 @@ void main() {
       expect(selectedVolume, inInclusiveRange(0.1, 0.6));
 
       await tester.dragFrom(const Offset(320, 355), const Offset(-90, 0));
+      for (var i = 0; i < 10 && queueChanges.isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(queueChanges.single.index, 1);
+      expect(find.byType(VideoPlayerView), findsOneWidget);
       for (var i = 0; i < 20 && platform.initializedEvents < 2; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 5)),
         );
         await tester.pump(const Duration(milliseconds: 50));
       }
-      expect(queueChanges.single.index, 1);
       expect(platform.initializedEvents, 2);
       expect(platform.volumeValues.last, closeTo(selectedVolume, 0.001));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        tester
+            .widget<Opacity>(find.byKey(const ValueKey('video-queue-arrival')))
+            .opacity,
+        1,
+      );
+      tester.widget<VideoPlayerView>(find.byType(VideoPlayerView)).onNavigate!(
+        -1,
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<Opacity>(find.byKey(const ValueKey('video-queue-arrival')))
+            .opacity,
+        lessThan(1),
+      );
+      expect(find.byType(VideoPlayerView), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        tester
+            .widget<Opacity>(find.byKey(const ValueKey('video-queue-arrival')))
+            .opacity,
+        1,
+      );
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -3068,6 +3181,7 @@ class _FakeMobileVideoPlatform extends VideoPlayerPlatform {
   final disposedPlayerIds = <int>[];
   final seekPositions = <Duration>[];
   final volumeValues = <double>[];
+  final playbackSpeeds = <double>[];
   Completer<void>? nextSeekBarrier;
 
   @override
@@ -3183,7 +3297,9 @@ class _FakeMobileVideoPlatform extends VideoPlayerPlatform {
   }
 
   @override
-  Future<void> setPlaybackSpeed(int playerId, double speed) async {}
+  Future<void> setPlaybackSpeed(int playerId, double speed) async {
+    playbackSpeeds.add(speed);
+  }
 
   @override
   Future<void> setMixWithOthers(bool mixWithOthers) async {}

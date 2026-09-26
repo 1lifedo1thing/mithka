@@ -1879,6 +1879,8 @@
     <string name="messageActionBlock">屏蔽</string>
     <string name="messageActionBlockKeyword">屏蔽词</string>
     <string name="messageActionCopy">复制</string>
+    <string name="messageActionCopyImage">复制图片</string>
+    <string name="messageActionCopyImageFailed">复制图片失败</string>
     <string name="messageActionDisplayOriginal">显示原文</string>
     <string name="messageActionDisplayTranslation">显示译文</string>
     <string name="messageActionEdit">编辑</string>

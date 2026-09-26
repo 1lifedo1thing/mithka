@@ -1879,6 +1879,8 @@
     <string name="messageActionBlock">차단</string>
     <string name="messageActionBlockKeyword">키워드 차단</string>
     <string name="messageActionCopy">복사</string>
+    <string name="messageActionCopyImage">이미지 복사</string>
+    <string name="messageActionCopyImageFailed">이미지를 복사할 수 없습니다</string>
     <string name="messageActionDisplayOriginal">원문 표시</string>
     <string name="messageActionDisplayTranslation">번역 표시</string>
     <string name="messageActionEdit">수정</string>
