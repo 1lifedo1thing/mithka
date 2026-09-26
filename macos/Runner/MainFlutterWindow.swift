@@ -86,9 +86,7 @@ class MainFlutterWindow: NSWindow {
     styleMask.insert(.fullSizeContentView)
     isReleasedWhenClosed = false
     minSize = NSSize(width: 820, height: 560)
-    if #available(macOS 11.0, *) {
-      titlebarSeparatorStyle = .none
-    }
+    titlebarSeparatorStyle = .none
     DispatchQueue.main.async { [weak self] in
       self?.alignTrafficLightsWithTitleBar()
     }
