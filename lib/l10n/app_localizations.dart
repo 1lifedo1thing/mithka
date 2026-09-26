@@ -978,12 +978,13 @@ abstract final class AppStringKeys {
   static const chatStickerPacksEmptyStickers = 'chatStickerPacksEmptyStickers';
   static const chatStickerPacksFilterHint = 'chatStickerPacksFilterHint';
   static const chatStickerPacksFinderTitle = 'chatStickerPacksFinderTitle';
-  static const chatStickerPacksLoadMore = 'chatStickerPacksLoadMore';
   static const chatStickerPacksLoadingMore = 'chatStickerPacksLoadingMore';
   static const chatStickerPacksNoMatches = 'chatStickerPacksNoMatches';
   static const chatStickerPacksNoOlder = 'chatStickerPacksNoOlder';
   static const chatStickerPacksNoneFound = 'chatStickerPacksNoneFound';
   static const chatStickerPacksNotAdded = 'chatStickerPacksNotAdded';
+  static const chatStickerPacksPauseScan = 'chatStickerPacksPauseScan';
+  static const chatStickerPacksResumeScan = 'chatStickerPacksResumeScan';
   static const chatStickerPacksScanned = 'chatStickerPacksScanned';
   static const chatStickerPacksScannedGlobal = 'chatStickerPacksScannedGlobal';
   static const chatStickerPacksSortName = 'chatStickerPacksSortName';

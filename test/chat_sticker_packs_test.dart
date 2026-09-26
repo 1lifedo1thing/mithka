@@ -441,9 +441,7 @@ void main() {
     expect(find.text('Pack 30'), findsOneWidget, reason: 'archived chat');
   });
 
-  testWidgets('scrolling to the end loads the next batch of messages', (
-    tester,
-  ) async {
+  testWidgets('the scan keeps running until history runs out', (tester) async {
     final td = _longChat(1000);
     await tester.pumpWidget(
       await _app(
@@ -454,20 +452,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // 400 messages, four per set: 100 packs, far taller than the screen.
-    expect(find.text('From the last 400 messages'), findsOneWidget);
-    expect(find.text('Pack 1099'), findsNothing);
-
-    await tester.dragUntilVisible(
-      find.text('Pack 1099'),
-      find.byType(CustomScrollView),
-      const Offset(0, -600),
+    // Three batches of 400 without any scrolling: every message, four per
+    // set, so 250 packs.
+    expect(find.text('From the last 1000 messages'), findsOneWidget);
+    expect(find.text('250'), findsOneWidget, reason: 'sticker tab count');
+    expect(
+      find.byKey(const ValueKey('chat-sticker-packs-pause')),
+      findsNothing,
+      reason: 'nothing left to pause',
     );
-    await tester.pumpAndSettle();
-    expect(find.text('From the last 800 messages'), findsOneWidget);
   });
 
-  testWidgets('filling a short list pauses and offers Load more', (
+  testWidgets('pausing stops the scan and resuming continues it', (
     tester,
   ) async {
     final td = _longChat(4000, withPacks: false);
@@ -479,16 +475,26 @@ void main() {
         ),
       ),
     );
+    // Let the first batch land, then pause mid-scan.
+    final pause = find.byKey(const ValueKey('chat-sticker-packs-pause'));
+    for (var i = 0; i < 50 && pause.evaluate().isEmpty; i++) {
+      await tester.pump();
+    }
+    expect(_historyReads(td), lessThan(40), reason: 'still mid-scan');
+    await tester.tap(pause);
     await tester.pumpAndSettle();
-    // The first batch plus four automatic ones, then it waits for the user.
-    expect(find.text('Load more'), findsOneWidget);
-    final reads = _historyReads(td);
+    final paused = _historyReads(td);
+    expect(find.text('Resume scanning'), findsOneWidget);
+    expect(find.text('No older messages'), findsNothing);
 
-    await tester.tap(
-      find.byKey(const ValueKey('chat-sticker-packs-load-more')),
-    );
+    await tester.pump(const Duration(seconds: 5));
+    expect(_historyReads(td), paused, reason: 'no reads while paused');
+
+    await tester.tap(find.byKey(const ValueKey('chat-sticker-packs-resume')));
     await tester.pumpAndSettle();
-    expect(_historyReads(td), greaterThan(reads));
+    expect(_historyReads(td), greaterThan(paused));
+    expect(find.text('From the last 4000 messages'), findsOneWidget);
+    expect(find.text('No older messages'), findsOneWidget);
   });
 
   testWidgets('wide desktop layout uses two compact columns', (tester) async {

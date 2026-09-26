@@ -1068,12 +1068,13 @@
     <string name="chatStickerPacksEmptyStickers">このチャットではまだスタンプセットが使われていません</string>
     <string name="chatStickerPacksFilterHint">セットを絞り込む</string>
     <string name="chatStickerPacksFinderTitle">スタンプと絵文字を探す</string>
-    <string name="chatStickerPacksLoadMore">さらに読み込む</string>
     <string name="chatStickerPacksLoadingMore">さらに読み込み中…</string>
     <string name="chatStickerPacksNoMatches">一致するセットはありません</string>
     <string name="chatStickerPacksNoOlder">これより古いメッセージはありません</string>
     <string name="chatStickerPacksNoneFound">メッセージにセットは見つかりませんでした</string>
     <string name="chatStickerPacksNotAdded">未追加</string>
+    <string name="chatStickerPacksPauseScan">スキャンを一時停止</string>
+    <string name="chatStickerPacksResumeScan">スキャンを再開</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">直近 {count} 件のメッセージから</item>
     </plurals>

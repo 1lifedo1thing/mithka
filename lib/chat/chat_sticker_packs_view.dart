@@ -1,11 +1,14 @@
 //
 //  chat_sticker_packs_view.dart
 //
-//  Sticker and emoji packs used in one chat, or across recent chats (the
-//  global finder), deduplicated, in two tabs. A toolbar filters by title and
-//  by "not added", and sorts by use count, recency, name or size — tapping
-//  the active sort flips its direction. Each row shows the pack title over a
-//  strip of its first stickers and adds the pack in one tap.
+//  Sticker and emoji packs used in one chat, or across every chat (the
+//  global finder), deduplicated, in two tabs. The scan keeps reading older
+//  messages in the background while the page is open, until history runs
+//  out or the user pauses it, and the list updates after every batch.
+//  A toolbar filters by title and by "not added", and sorts by use count,
+//  recency, name or size — tapping the active sort flips its direction.
+//  Each row shows the pack title over a strip of its first stickers and
+//  adds the pack in one tap.
 //
 //  Touch layouts: 72pt rows with 32pt previews. Pointer layouts: 58pt rows
 //  with 24pt previews, split into two columns from 620pt wide.
@@ -57,21 +60,16 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   final TextEditingController _filter = TextEditingController();
   final ScrollController _scroll = ScrollController();
   bool _firstBatch = true;
-  bool _loadingMore = false;
 
-  /// Batches loaded in a row without the user scrolling. Filling a short
-  /// list stops after a few, so a filter that matches nothing cannot walk
-  /// the whole account in the background; the footer offers "Load more".
-  int _autoFills = 0;
+  /// The background scan loop is between batches or inside one.
+  bool _scanning = false;
+  bool _paused = false;
   int _tab = 0;
   ChatPackSort _sort = ChatPackSort.usage;
   bool _descending = true;
   bool _onlyMissing = false;
   final Set<int> _working = {};
   bool _addingAll = false;
-
-  static const double _loadAheadExtent = 600;
-  static const int _maxAutoFills = 4;
 
   bool get _global => widget.chatId == null;
 
@@ -87,8 +85,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(_onScroll);
-    unawaited(_loadMore());
+    unawaited(_scan());
   }
 
   @override
@@ -98,51 +95,43 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
     super.dispose();
   }
 
-  void _onScroll() {
-    if (!_scroll.hasClients) return;
-    if (_scroll.position.extentAfter > _loadAheadExtent) return;
-    _autoFills = 0;
-    unawaited(_loadMore());
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || _scanner.exhausted) return;
-    setState(() => _loadingMore = true);
-    try {
-      await _scanner.loadMore();
-    } catch (_) {}
-    if (!mounted) return;
-    setState(() {
-      _loadingMore = false;
-      if (_firstBatch) {
-        _firstBatch = false;
-        // Open on whichever tab has content.
-        if (_scanner.stickers.isEmpty && _scanner.emoji.isNotEmpty) _tab = 1;
+  /// Reads older and older messages, a batch at a time, for as long as the
+  /// page is open, until history runs out or the user pauses. The list
+  /// updates after every batch.
+  Future<void> _scan() async {
+    if (_scanning) return;
+    setState(() => _scanning = true);
+    while (mounted && !_paused && !_scanner.exhausted) {
+      try {
+        await _scanner.loadMore();
+      } catch (_) {
+        // A failing batch would otherwise spin; wait for the user to resume.
+        _paused = true;
       }
-    });
-    _fillViewportSoon();
+      if (!mounted) return;
+      setState(() {
+        if (_firstBatch) {
+          _firstBatch = false;
+          // Open on whichever tab has content.
+          if (_scanner.stickers.isEmpty && _scanner.emoji.isNotEmpty) {
+            _tab = 1;
+          }
+        }
+      });
+      // Let the frame with this batch's results paint before the next one.
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (mounted) setState(() => _scanning = false);
   }
 
-  /// Keeps loading while the list is too short to scroll to its end.
-  void _fillViewportSoon() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _loadingMore || _scanner.exhausted) return;
-      if (_autoFills >= _maxAutoFills || !_scroll.hasClients) return;
-      if (_scroll.position.extentAfter > _loadAheadExtent) return;
-      _autoFills += 1;
-      unawaited(_loadMore());
-    });
-  }
-
-  void _loadMoreByTap() {
-    _autoFills = 0;
-    unawaited(_loadMore());
+  void _togglePaused() {
+    setState(() => _paused = !_paused);
+    if (!_paused) unawaited(_scan());
   }
 
   void _selectTab(int index) {
     setState(() => _tab = index);
     if (_scroll.hasClients) _scroll.jumpTo(0);
-    _fillViewportSoon();
   }
 
   void _selectSort(ChatPackSort sort) {
@@ -234,10 +223,8 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
                   : null,
             ),
             _tabBar(dense),
-            if (!_firstBatch && _tabPacks.isNotEmpty) ...[
-              _toolbar(dense),
-              _summaryBar(dense, visible),
-            ],
+            if (!_firstBatch && _tabPacks.isNotEmpty) _toolbar(dense),
+            if (!_firstBatch) _summaryBar(dense, visible),
             Expanded(child: _body(dense, visible)),
           ],
         ),
@@ -277,10 +264,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
       hintText: AppStringKeys.chatStickerPacksFilterHint,
       controller: _filter,
       compact: true,
-      onChanged: (_) {
-        setState(() {});
-        _fillViewportSoon();
-      },
+      onChanged: (_) => setState(() {}),
     );
     final chips = <Widget>[
       _chip(
@@ -289,10 +273,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
         icon: HeroAppIcons.filter,
         selected: _onlyMissing,
         dense: dense,
-        onTap: () {
-          setState(() => _onlyMissing = !_onlyMissing);
-          _fillViewportSoon();
-        },
+        onTap: () => setState(() => _onlyMissing = !_onlyMissing),
       ),
       Container(
         width: 1,
@@ -424,6 +405,28 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
                 style: TextStyle(fontSize: fontSize, color: c.textSecondary),
               ),
             ),
+            if (!_scanner.exhausted)
+              AppInteractiveSurface(
+                key: const ValueKey('chat-sticker-packs-pause'),
+                onTap: _togglePaused,
+                isButton: true,
+                semanticLabel: AppStrings.t(
+                  _paused
+                      ? AppStringKeys.chatStickerPacksResumeScan
+                      : AppStringKeys.chatStickerPacksPauseScan,
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: SizedBox.square(
+                  dimension: dense ? 24 : 30,
+                  child: Center(
+                    child: AppIcon(
+                      _paused ? HeroAppIcons.play : HeroAppIcons.pause,
+                      size: dense ? 13 : 15,
+                      color: c.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
             if (missing > 0)
               AppInteractiveSurface(
                 key: const ValueKey('chat-sticker-packs-add-all'),
@@ -562,12 +565,36 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
     );
   }
 
-  /// Loading, a manual "Load more" once auto-filling pauses, or the end.
+  /// The scan's state at the end of the list: reading, paused, or done.
   Widget _footer(bool dense) {
     final c = context.colors;
     final fontSize = dense ? AppTextSize.caption : AppTextSize.footnote;
     final Widget child;
-    if (_loadingMore) {
+    if (_scanner.exhausted) {
+      child = Text(
+        AppStrings.t(AppStringKeys.chatStickerPacksNoOlder),
+        style: TextStyle(fontSize: fontSize, color: c.textTertiary),
+      );
+    } else if (_paused) {
+      child = AppInteractiveSurface(
+        key: const ValueKey('chat-sticker-packs-resume'),
+        onTap: _togglePaused,
+        isButton: true,
+        semanticLabel: AppStrings.t(AppStringKeys.chatStickerPacksResumeScan),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            AppStrings.t(AppStringKeys.chatStickerPacksResumeScan),
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: AppTextWeight.semibold,
+              color: c.linkBlue,
+            ),
+          ),
+        ),
+      );
+    } else {
       child = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -578,30 +605,6 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
             style: TextStyle(fontSize: fontSize, color: c.textTertiary),
           ),
         ],
-      );
-    } else if (_scanner.exhausted) {
-      child = Text(
-        AppStrings.t(AppStringKeys.chatStickerPacksNoOlder),
-        style: TextStyle(fontSize: fontSize, color: c.textTertiary),
-      );
-    } else {
-      child = AppInteractiveSurface(
-        key: const ValueKey('chat-sticker-packs-load-more'),
-        onTap: _loadMoreByTap,
-        isButton: true,
-        semanticLabel: AppStrings.t(AppStringKeys.chatStickerPacksLoadMore),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Text(
-            AppStrings.t(AppStringKeys.chatStickerPacksLoadMore),
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: AppTextWeight.semibold,
-              color: c.linkBlue,
-            ),
-          ),
-        ),
       );
     }
     return SizedBox(

@@ -1072,12 +1072,13 @@
     <string name="chatStickerPacksEmptyStickers">Aún no se han usado paquetes de stickers en este chat</string>
     <string name="chatStickerPacksFilterHint">Filtrar paquetes</string>
     <string name="chatStickerPacksFinderTitle">Buscador de stickers y emojis</string>
-    <string name="chatStickerPacksLoadMore">Cargar más</string>
     <string name="chatStickerPacksLoadingMore">Cargando más…</string>
     <string name="chatStickerPacksNoMatches">Ningún paquete coincide</string>
     <string name="chatStickerPacksNoOlder">No hay mensajes anteriores</string>
     <string name="chatStickerPacksNoneFound">No se encontraron paquetes en tus mensajes</string>
     <string name="chatStickerPacksNotAdded">No añadidos</string>
+    <string name="chatStickerPacksPauseScan">Pausar el análisis</string>
+    <string name="chatStickerPacksResumeScan">Reanudar el análisis</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="one">De {count} mensaje reciente</item>
         <item quantity="other">De los últimos {count} mensajes</item>

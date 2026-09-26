@@ -1068,12 +1068,13 @@
     <string name="chatStickerPacksEmptyStickers">이 채팅에서 아직 사용된 스티커 팩이 없습니다</string>
     <string name="chatStickerPacksFilterHint">팩 필터</string>
     <string name="chatStickerPacksFinderTitle">스티커 및 이모티콘 찾기</string>
-    <string name="chatStickerPacksLoadMore">더 불러오기</string>
     <string name="chatStickerPacksLoadingMore">더 불러오는 중…</string>
     <string name="chatStickerPacksNoMatches">일치하는 팩이 없습니다</string>
     <string name="chatStickerPacksNoOlder">이전 메시지가 없습니다</string>
     <string name="chatStickerPacksNoneFound">메시지에서 찾은 팩이 없습니다</string>
     <string name="chatStickerPacksNotAdded">추가 안 됨</string>
+    <string name="chatStickerPacksPauseScan">검색 일시정지</string>
+    <string name="chatStickerPacksResumeScan">검색 재개</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">최근 메시지 {count}개에서</item>
     </plurals>
