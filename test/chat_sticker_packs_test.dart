@@ -13,8 +13,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/l10n_fixtures.dart';
 
-Map<String, dynamic> _sticker(int setId, {int date = 0}) => {
+Map<String, dynamic> _sticker(int id, int date, int setId) => {
   '@type': 'message',
+  'id': id,
   'date': date,
   'content': {
     '@type': 'messageSticker',
@@ -23,11 +24,13 @@ Map<String, dynamic> _sticker(int setId, {int date = 0}) => {
 };
 
 Map<String, dynamic> _text(
+  int id,
+  int date,
   List<int> emojiIds, {
   int? reactionEmojiId,
-  int date = 0,
 }) => {
   '@type': 'message',
+  'id': id,
   'date': date,
   'content': {
     '@type': 'messageText',
@@ -35,12 +38,12 @@ Map<String, dynamic> _text(
       '@type': 'formattedText',
       'text': 'x',
       'entities': [
-        for (final id in emojiIds)
+        for (final emojiId in emojiIds)
           {
             '@type': 'textEntity',
             'type': {
               '@type': 'textEntityTypeCustomEmoji',
-              'custom_emoji_id': '$id',
+              'custom_emoji_id': '$emojiId',
             },
           },
       ],
@@ -61,30 +64,31 @@ Map<String, dynamic> _text(
     },
 };
 
-/// A fake TDLib. Chat 1 has two history pages; chat 2 one sticker message.
-/// Custom emoji 501/502 belong to set 50, 601 to set 60. Set N has N % 17
-/// items, so sizes differ between sets.
+/// A fake TDLib. Chats 1 and 2 are in the main list, chat 3 in the archive;
+/// histories are newest first. Custom emoji 501/502 belong to set 50, 601 to
+/// set 60. Set N has N % 17 items, so sizes differ between sets.
 class _FakeTd {
+  _FakeTd({Map<int, List<Map<String, dynamic>>>? history})
+    : history =
+          history ??
+          {
+            1: [
+              _sticker(30, 900, 10),
+              _sticker(20, 500, 10),
+              _text(10, 100, [501, 502]),
+            ],
+            2: [
+              _sticker(31, 800, 20),
+              _text(21, 600, [601], reactionEmojiId: 501),
+            ],
+            3: [_sticker(5, 700, 30)],
+          },
+      archive = history == null ? {3} : const {};
+
+  final Map<int, List<Map<String, dynamic>>> history;
+  final Set<int> archive;
   final requests = <Map<String, dynamic>>[];
   final installed = <int>{20};
-
-  late final Map<int, List<List<Map<String, dynamic>>>> history = {
-    1: [
-      [
-        _sticker(10, date: 400),
-        _sticker(20, date: 900),
-        _sticker(10, date: 300),
-        _text([501, 502], date: 200),
-      ],
-      [
-        _sticker(10, date: 100),
-        _text([601], reactionEmojiId: 501, date: 950),
-      ],
-    ],
-    2: [
-      [_sticker(30, date: 1000)],
-    ],
-  };
 
   // Round-trip through JSON so nested maps are typed like real TDLib output.
   Future<Map<String, dynamic>> call(Map<String, dynamic> request) async =>
@@ -94,19 +98,26 @@ class _FakeTd {
     requests.add(request);
     switch (request['@type']) {
       case 'getChats':
-        return {'total_count': 2, 'chat_ids': history.keys.toList()};
-      case 'getChatHistory':
-        final pages = history[request['chat_id']]!;
-        final from = request['from_message_id'] as int;
-        final index = from == 0 ? 0 : from ~/ 1000 + 1;
-        if (index >= pages.length) return {'messages': []};
-        var id = index * 1000 + 999;
+        final archived = request['chat_list']['@type'] == 'chatListArchive';
+        final ids = [
+          for (final id in history.keys)
+            if (archive.contains(id) == archived) id,
+        ];
+        return {'chat_ids': ids.take(request['limit'] as int).toList()};
+      case 'getChat':
+        final messages = history[request['chat_id']]!;
         return {
-          'messages': [
-            for (final m in pages[index].take(request['limit'] as int))
-              {...m, 'id': id--},
-          ],
+          'id': request['chat_id'],
+          if (messages.isNotEmpty) 'last_message': messages.first,
         };
+      case 'getChatHistory':
+        final from = request['from_message_id'] as int;
+        final older = history[request['chat_id']]!.where(
+          (m) => from == 0 || (m['id'] as int) < from,
+        );
+        // Like TDLib, an uncached first read returns only the newest message.
+        final limit = from == 0 ? 1 : request['limit'] as int;
+        return {'messages': older.take(limit).toList()};
       case 'getCustomEmojiStickers':
         final ids = (request['custom_emoji_ids'] as List).cast<String>();
         return {
@@ -128,7 +139,9 @@ class _FakeTd {
           'title': 'Pack $id',
           'is_installed': installed.contains(id),
           'sticker_type': {
-            '@type': id >= 50 ? 'stickerTypeCustomEmoji' : 'stickerTypeRegular',
+            '@type': id >= 50 && id < 100
+                ? 'stickerTypeCustomEmoji'
+                : 'stickerTypeRegular',
           },
           // Animated with no thumbnail: previews fall back to the emoji glyph,
           // so widget tests never start file downloads.
@@ -149,6 +162,19 @@ class _FakeTd {
   }
 }
 
+/// One chat of [count] messages; message i uses set 1000 + i ~/ 4, or none
+/// when [withPacks] is false.
+_FakeTd _longChat(int count, {bool withPacks = true}) => _FakeTd(
+  history: {
+    9: [
+      for (var i = 0; i < count; i++)
+        withPacks
+            ? _sticker(count - i, 100000 - i, 1000 + i ~/ 4)
+            : _text(count - i, 100000 - i, const []),
+    ],
+  },
+);
+
 ChatUsedPack _pack(
   int id,
   String title, {
@@ -166,6 +192,13 @@ ChatUsedPack _pack(
   installed: installed,
 );
 
+Map<int, int> _uses(List<ChatUsedPack> packs) => {
+  for (final p in packs) p.id: p.uses,
+};
+
+int _historyReads(_FakeTd td) =>
+    td.requests.where((r) => r['@type'] == 'getChatHistory').length;
+
 void main() {
   final fixtures = L10nFixtures.load();
 
@@ -174,27 +207,52 @@ void main() {
     AppStrings.setLocale(const Locale('en'));
   });
 
-  test('dedupes packs by set and ranks by use count', () async {
+  test('one chat: dedupes packs by set and counts uses', () async {
     final td = _FakeTd();
-    final result = await ChatStickerPacksService(query: td.call).scan(1);
+    final scanner = ChatStickerPacksService(query: td.call).chatScanner(1);
+    await scanner.loadMore();
 
-    expect(result.scannedMessages, 6);
-    expect(result.stickers.map((p) => p.id), [10, 20]);
-    expect(result.stickers.map((p) => p.uses), [3, 1]);
-    expect(result.stickers.map((p) => p.lastUsed), [400, 900]);
-    expect(result.stickers.first.itemCount, 10);
-    expect(result.stickers.first.previews, hasLength(10));
-    expect(result.emoji.map((p) => p.id), [50, 60]);
-    // 501 twice (text + reaction) and 502 once all land on set 50.
-    expect(result.emoji.first.uses, 3);
-    expect(result.emoji.first.lastUsed, 950);
-    expect(result.stickers[1].installed, isTrue);
-    expect(
-      td.requests.where((r) => r['@type'] == 'getStickerSet').length,
-      4,
-      reason: 'each set is looked up once',
-    );
+    expect(scanner.scannedMessages, 3);
+    expect(scanner.exhausted, isTrue);
+    expect(_uses(scanner.stickers), {10: 2});
+    expect(scanner.stickers.single.lastUsed, 900);
+    expect(scanner.stickers.single.itemCount, 10);
+    expect(scanner.stickers.single.previews, hasLength(10));
+    expect(_uses(scanner.emoji), {50: 2});
   });
+
+  test(
+    'global scan merges every chat by message date, batch by batch',
+    () async {
+      final td = _FakeTd();
+      final scanner = ChatStickerPacksService(query: td.call).globalScanner();
+
+      // The two newest messages overall: chat 1 at 900, chat 2 at 800.
+      await scanner.loadMore(messages: 2);
+      expect(scanner.scannedMessages, 2);
+      expect(_uses(scanner.stickers), {10: 1, 20: 1});
+      expect(scanner.emoji, isEmpty);
+      expect(scanner.exhausted, isFalse);
+
+      // Next: the archived chat 3 at 700, then chat 2 at 600.
+      await scanner.loadMore(messages: 2);
+      expect(_uses(scanner.stickers), {10: 1, 20: 1, 30: 1});
+      expect(_uses(scanner.emoji), {60: 1, 50: 1});
+
+      await scanner.loadMore();
+      expect(scanner.scannedMessages, 6);
+      expect(scanner.exhausted, isTrue);
+      expect(_uses(scanner.stickers), {10: 2, 20: 1, 30: 1});
+      // 501 twice (reaction + text) and 502 once all land on set 50.
+      expect(_uses(scanner.emoji), {60: 1, 50: 3});
+      expect(scanner.stickers.firstWhere((p) => p.id == 20).installed, isTrue);
+      expect(
+        td.requests.where((r) => r['@type'] == 'getStickerSet').length,
+        5,
+        reason: 'each set is looked up once across batches',
+      );
+    },
+  );
 
   test('plain animated emoji do not surface the built-in emoji set', () {
     final refs = ChatPackReferences()
@@ -225,37 +283,6 @@ void main() {
       });
     expect(refs.stickerSets, isEmpty);
     expect(refs.customEmoji, {501: 1});
-  });
-
-  test('stops paging at the message limit', () async {
-    final td = _FakeTd();
-    final result = await ChatStickerPacksService(
-      query: td.call,
-    ).scan(1, messageLimit: 3);
-    expect(result.scannedMessages, 3);
-    expect(td.requests.first['limit'], 3);
-  });
-
-  test('recent-chats scan merges packs across chats', () async {
-    final td = _FakeTd();
-    final progress = <(int, int)>[];
-    final packProgress = <(int, int)>[];
-    final result = await ChatStickerPacksService(query: td.call)
-        .scanRecentChats(
-          onProgress: (phase, done, total) =>
-              (phase == ChatPackScanPhase.chats ? progress : packProgress).add((
-                done,
-                total,
-              )),
-        );
-    expect(result.scannedChats, 2);
-    expect(result.scannedMessages, 7);
-    expect(result.stickers.map((p) => p.id), [10, 20, 30]);
-    expect(progress.first, (0, 2));
-    expect(progress.last, (2, 2));
-    // Sets 10, 20, 30 plus emoji sets 50 and 60.
-    expect(packProgress.first, (0, 5));
-    expect(packProgress.last, (5, 5));
   });
 
   test('sorts by each key in both directions, stable on ties', () {
@@ -297,36 +324,33 @@ void main() {
     await tester.pumpWidget(
       await _app(
         ChatStickerPacksView(
-          chatId: 1,
+          chatId: 2,
           service: ChatStickerPacksService(query: td.call),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Pack 10'), findsOneWidget);
-    expect(find.text('Add (10)'), findsOneWidget);
+    expect(find.text('Pack 20'), findsOneWidget);
+    expect(find.text('Added'), findsOneWidget, reason: 'set 20 is installed');
     expect(find.textContaining(RegExp(r'used \d')), findsNothing);
-    expect(find.text('😀'), findsWidgets, reason: 'preview strip renders');
-    expect(find.text('Pack 50'), findsNothing);
-    expect(find.byType(GridView), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('chat-sticker-pack-add-10')));
-    await tester.pumpAndSettle();
-    expect(td.installed, contains(10));
-    expect(
-      find.byKey(const ValueKey('chat-sticker-packs-add-all')),
-      findsNothing,
-    );
+    expect(find.text('No older messages'), findsOneWidget);
+    expect(find.byType(SliverGrid), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('chat-sticker-packs-tab-1')));
     await tester.pumpAndSettle();
     expect(find.text('Pack 50'), findsOneWidget);
     expect(find.text('Pack 60'), findsOneWidget);
+    expect(find.text('Add (${60 % 17})'), findsOneWidget);
+    expect(find.text('😀'), findsWidgets, reason: 'preview strip renders');
+
+    await tester.tap(find.byKey(const ValueKey('chat-sticker-pack-add-50')));
+    await tester.pumpAndSettle();
+    expect(td.installed, contains(50));
 
     await tester.tap(find.byKey(const ValueKey('chat-sticker-packs-add-all')));
     await tester.pumpAndSettle();
-    expect(td.installed, containsAll([50, 60]));
+    expect(td.installed, contains(60));
     expect(find.text('Added'), findsNWidgets(2));
     await tester.pump(const Duration(seconds: 2));
   });
@@ -337,10 +361,7 @@ void main() {
     final td = _FakeTd();
     await tester.pumpWidget(
       await _app(
-        ChatStickerPacksView(
-          chatId: 1,
-          service: ChatStickerPacksService(query: td.call),
-        ),
+        ChatStickerPacksView(service: ChatStickerPacksService(query: td.call)),
       ),
     );
     await tester.pumpAndSettle();
@@ -349,17 +370,17 @@ void main() {
     expect(top('Pack 10'), lessThan(top('Pack 20')), reason: 'most used');
 
     await tester.tap(
-      find.byKey(const ValueKey('chat-sticker-packs-sort-recent')),
+      find.byKey(const ValueKey('chat-sticker-packs-sort-name')),
     );
     await tester.pumpAndSettle();
-    expect(top('Pack 20'), lessThan(top('Pack 10')));
+    expect(top('Pack 10'), lessThan(top('Pack 30')));
 
     // Tapping the active sort flips its direction.
     await tester.tap(
-      find.byKey(const ValueKey('chat-sticker-packs-sort-recent')),
+      find.byKey(const ValueKey('chat-sticker-packs-sort-name')),
     );
     await tester.pumpAndSettle();
-    expect(top('Pack 10'), lessThan(top('Pack 20')));
+    expect(top('Pack 30'), lessThan(top('Pack 10')));
 
     await tester.tap(
       find.byKey(const ValueKey('chat-sticker-packs-not-added')),
@@ -373,7 +394,9 @@ void main() {
     expect(find.text('No packs match'), findsOneWidget);
   });
 
-  testWidgets('global finder scans recent chats', (tester) async {
+  testWidgets('global finder reads every chat, newest messages first', (
+    tester,
+  ) async {
     final td = _FakeTd();
     await tester.pumpWidget(
       await _app(
@@ -382,8 +405,58 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Sticker & Emoji Finder'), findsOneWidget);
-    expect(find.text('From 2 recent chats'), findsOneWidget);
-    expect(find.text('Pack 30'), findsOneWidget);
+    expect(find.text('From your last 6 messages'), findsOneWidget);
+    expect(find.text('Pack 30'), findsOneWidget, reason: 'archived chat');
+  });
+
+  testWidgets('scrolling to the end loads the next batch of messages', (
+    tester,
+  ) async {
+    final td = _longChat(1000);
+    await tester.pumpWidget(
+      await _app(
+        ChatStickerPacksView(
+          chatId: 9,
+          service: ChatStickerPacksService(query: td.call),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // 400 messages, four per set: 100 packs, far taller than the screen.
+    expect(find.text('From the last 400 messages'), findsOneWidget);
+    expect(find.text('Pack 1099'), findsNothing);
+
+    await tester.dragUntilVisible(
+      find.text('Pack 1099'),
+      find.byType(CustomScrollView),
+      const Offset(0, -600),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('From the last 800 messages'), findsOneWidget);
+  });
+
+  testWidgets('filling a short list pauses and offers Load more', (
+    tester,
+  ) async {
+    final td = _longChat(4000, withPacks: false);
+    await tester.pumpWidget(
+      await _app(
+        ChatStickerPacksView(
+          chatId: 9,
+          service: ChatStickerPacksService(query: td.call),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // The first batch plus four automatic ones, then it waits for the user.
+    expect(find.text('Load more'), findsOneWidget);
+    final reads = _historyReads(td);
+
+    await tester.tap(
+      find.byKey(const ValueKey('chat-sticker-packs-load-more')),
+    );
+    await tester.pumpAndSettle();
+    expect(_historyReads(td), greaterThan(reads));
   });
 
   testWidgets('wide desktop layout uses two compact columns', (tester) async {
@@ -402,7 +475,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(GridView), findsOneWidget);
+      expect(find.byType(SliverGrid), findsOneWidget);
       expect(
         tester
             .getSize(find.byKey(const ValueKey('chat-sticker-pack-10')))

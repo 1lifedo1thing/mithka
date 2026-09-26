@@ -1072,19 +1072,20 @@
     <string name="chatStickerPacksEmptyStickers">No sticker packs used in this chat yet</string>
     <string name="chatStickerPacksFilterHint">Filter packs</string>
     <string name="chatStickerPacksFinderTitle">Sticker &amp; Emoji Finder</string>
-    <string name="chatStickerPacksLoadingPacks">Loading packs… {value1}/{value2}</string>
+    <string name="chatStickerPacksLoadMore">Load more</string>
+    <string name="chatStickerPacksLoadingMore">Loading more…</string>
     <string name="chatStickerPacksNoMatches">No packs match</string>
-    <string name="chatStickerPacksNoneFound">No packs found in recent chats</string>
+    <string name="chatStickerPacksNoOlder">No older messages</string>
+    <string name="chatStickerPacksNoneFound">No packs found in your messages</string>
     <string name="chatStickerPacksNotAdded">Not added</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="one">From the last {count} message</item>
         <item quantity="other">From the last {count} messages</item>
     </plurals>
-    <plurals name="chatStickerPacksScannedChats">
-        <item quantity="one">From {count} recent chat</item>
-        <item quantity="other">From {count} recent chats</item>
+    <plurals name="chatStickerPacksScannedGlobal">
+        <item quantity="one">From your last {count} message</item>
+        <item quantity="other">From your last {count} messages</item>
     </plurals>
-    <string name="chatStickerPacksScanning">Scanning chats… {value1}/{value2}</string>
     <string name="chatStickerPacksSortName">Name</string>
     <string name="chatStickerPacksSortRecent">Recent</string>
     <string name="chatStickerPacksSortSize">Size</string>

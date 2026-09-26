@@ -1072,19 +1072,20 @@
     <string name="chatStickerPacksEmptyStickers">Aún no se han usado paquetes de stickers en este chat</string>
     <string name="chatStickerPacksFilterHint">Filtrar paquetes</string>
     <string name="chatStickerPacksFinderTitle">Buscador de stickers y emojis</string>
-    <string name="chatStickerPacksLoadingPacks">Cargando paquetes… {value1}/{value2}</string>
+    <string name="chatStickerPacksLoadMore">Cargar más</string>
+    <string name="chatStickerPacksLoadingMore">Cargando más…</string>
     <string name="chatStickerPacksNoMatches">Ningún paquete coincide</string>
-    <string name="chatStickerPacksNoneFound">No se encontraron paquetes en los chats recientes</string>
+    <string name="chatStickerPacksNoOlder">No hay mensajes anteriores</string>
+    <string name="chatStickerPacksNoneFound">No se encontraron paquetes en tus mensajes</string>
     <string name="chatStickerPacksNotAdded">No añadidos</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="one">De {count} mensaje reciente</item>
         <item quantity="other">De los últimos {count} mensajes</item>
     </plurals>
-    <plurals name="chatStickerPacksScannedChats">
-        <item quantity="one">De {count} chat reciente</item>
-        <item quantity="other">De {count} chats recientes</item>
+    <plurals name="chatStickerPacksScannedGlobal">
+        <item quantity="one">De tu último mensaje ({count})</item>
+        <item quantity="other">De tus últimos {count} mensajes</item>
     </plurals>
-    <string name="chatStickerPacksScanning">Analizando chats… {value1}/{value2}</string>
     <string name="chatStickerPacksSortName">Nombre</string>
     <string name="chatStickerPacksSortRecent">Recientes</string>
     <string name="chatStickerPacksSortSize">Tamaño</string>

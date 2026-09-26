@@ -1068,17 +1068,18 @@
     <string name="chatStickerPacksEmptyStickers">このチャットではまだスタンプセットが使われていません</string>
     <string name="chatStickerPacksFilterHint">セットを絞り込む</string>
     <string name="chatStickerPacksFinderTitle">スタンプと絵文字を探す</string>
-    <string name="chatStickerPacksLoadingPacks">セットを読み込み中… {value1}/{value2}</string>
+    <string name="chatStickerPacksLoadMore">さらに読み込む</string>
+    <string name="chatStickerPacksLoadingMore">さらに読み込み中…</string>
     <string name="chatStickerPacksNoMatches">一致するセットはありません</string>
-    <string name="chatStickerPacksNoneFound">最近のチャットにセットは見つかりませんでした</string>
+    <string name="chatStickerPacksNoOlder">これより古いメッセージはありません</string>
+    <string name="chatStickerPacksNoneFound">メッセージにセットは見つかりませんでした</string>
     <string name="chatStickerPacksNotAdded">未追加</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">直近 {count} 件のメッセージから</item>
     </plurals>
-    <plurals name="chatStickerPacksScannedChats">
-        <item quantity="other">最近の {count} 件のチャットから</item>
+    <plurals name="chatStickerPacksScannedGlobal">
+        <item quantity="other">直近 {count} 件のメッセージから</item>
     </plurals>
-    <string name="chatStickerPacksScanning">チャットをスキャン中… {value1}/{value2}</string>
     <string name="chatStickerPacksSortName">名前</string>
     <string name="chatStickerPacksSortRecent">最近</string>
     <string name="chatStickerPacksSortSize">数</string>

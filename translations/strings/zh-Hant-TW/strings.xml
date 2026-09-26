@@ -1068,17 +1068,18 @@
     <string name="chatStickerPacksEmptyStickers">此聊天中尚未使用過貼圖包</string>
     <string name="chatStickerPacksFilterHint">篩選貼圖包</string>
     <string name="chatStickerPacksFinderTitle">貼圖與表情搜尋</string>
-    <string name="chatStickerPacksLoadingPacks">正在載入貼圖包… {value1}/{value2}</string>
+    <string name="chatStickerPacksLoadMore">載入更多</string>
+    <string name="chatStickerPacksLoadingMore">正在載入更多…</string>
     <string name="chatStickerPacksNoMatches">沒有符合的貼圖包</string>
-    <string name="chatStickerPacksNoneFound">最近的聊天中沒有找到貼圖包</string>
+    <string name="chatStickerPacksNoOlder">沒有更早的訊息</string>
+    <string name="chatStickerPacksNoneFound">你的訊息中沒有找到貼圖包</string>
     <string name="chatStickerPacksNotAdded">未新增</string>
     <plurals name="chatStickerPacksScanned">
         <item quantity="other">來自最近 {count} 則訊息</item>
     </plurals>
-    <plurals name="chatStickerPacksScannedChats">
-        <item quantity="other">來自最近 {count} 個聊天</item>
+    <plurals name="chatStickerPacksScannedGlobal">
+        <item quantity="other">來自你最近的 {count} 則訊息</item>
     </plurals>
-    <string name="chatStickerPacksScanning">正在掃描聊天… {value1}/{value2}</string>
     <string name="chatStickerPacksSortName">名稱</string>
     <string name="chatStickerPacksSortRecent">最近</string>
     <string name="chatStickerPacksSortSize">數量</string>

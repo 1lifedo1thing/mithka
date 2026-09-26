@@ -51,12 +51,18 @@ class ChatStickerPacksView extends StatefulWidget {
 class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   late final ChatStickerPacksService _service =
       widget.service ?? ChatStickerPacksService();
+  late final ChatPackScanner _scanner = widget.chatId == null
+      ? _service.globalScanner()
+      : _service.chatScanner(widget.chatId!);
   final TextEditingController _filter = TextEditingController();
-  ChatUsedPacks _result = ChatUsedPacks.empty;
-  bool _loading = true;
-  ChatPackScanPhase _phase = ChatPackScanPhase.chats;
-  int _progressDone = 0;
-  int _progressTotal = 0;
+  final ScrollController _scroll = ScrollController();
+  bool _firstBatch = true;
+  bool _loadingMore = false;
+
+  /// Batches loaded in a row without the user scrolling. Filling a short
+  /// list stops after a few, so a filter that matches nothing cannot walk
+  /// the whole account in the background; the footer offers "Load more".
+  int _autoFills = 0;
   int _tab = 0;
   ChatPackSort _sort = ChatPackSort.usage;
   bool _descending = true;
@@ -64,10 +70,13 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   final Set<int> _working = {};
   bool _addingAll = false;
 
+  static const double _loadAheadExtent = 600;
+  static const int _maxAutoFills = 4;
+
   bool get _global => widget.chatId == null;
 
   List<ChatUsedPack> get _tabPacks =>
-      _tab == 0 ? _result.stickers : _result.emoji;
+      _tab == 0 ? _scanner.stickers : _scanner.emoji;
 
   List<ChatUsedPack> get _visible => sortPacks(
     filterPacks(_tabPacks, query: _filter.text, onlyMissing: _onlyMissing),
@@ -78,40 +87,62 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    _scroll.addListener(_onScroll);
+    unawaited(_loadMore());
   }
 
   @override
   void dispose() {
+    _scroll.dispose();
     _filter.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    try {
-      void progress(ChatPackScanPhase phase, int done, int total) {
-        if (!mounted) return;
-        setState(() {
-          _phase = phase;
-          _progressDone = done;
-          _progressTotal = total;
-        });
-      }
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    if (_scroll.position.extentAfter > _loadAheadExtent) return;
+    _autoFills = 0;
+    unawaited(_loadMore());
+  }
 
-      final chatId = widget.chatId;
-      final result = chatId == null
-          ? await _service.scanRecentChats(onProgress: progress)
-          : await _service.scan(chatId, onProgress: progress);
-      if (!mounted) return;
-      setState(() {
-        _result = result;
-        _loading = false;
+  Future<void> _loadMore() async {
+    if (_loadingMore || _scanner.exhausted) return;
+    setState(() => _loadingMore = true);
+    try {
+      await _scanner.loadMore();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _loadingMore = false;
+      if (_firstBatch) {
+        _firstBatch = false;
         // Open on whichever tab has content.
-        if (result.stickers.isEmpty && result.emoji.isNotEmpty) _tab = 1;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+        if (_scanner.stickers.isEmpty && _scanner.emoji.isNotEmpty) _tab = 1;
+      }
+    });
+    _fillViewportSoon();
+  }
+
+  /// Keeps loading while the list is too short to scroll to its end.
+  void _fillViewportSoon() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _loadingMore || _scanner.exhausted) return;
+      if (_autoFills >= _maxAutoFills || !_scroll.hasClients) return;
+      if (_scroll.position.extentAfter > _loadAheadExtent) return;
+      _autoFills += 1;
+      unawaited(_loadMore());
+    });
+  }
+
+  void _loadMoreByTap() {
+    _autoFills = 0;
+    unawaited(_loadMore());
+  }
+
+  void _selectTab(int index) {
+    setState(() => _tab = index);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _fillViewportSoon();
   }
 
   void _selectSort(ChatPackSort sort) {
@@ -185,7 +216,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final dense = isDesktopTargetPlatform(Theme.of(context).platform);
-    final visible = _loading ? const <ChatUsedPack>[] : _visible;
+    final visible = _firstBatch ? const <ChatUsedPack>[] : _visible;
     // Transparent Material: the filter's TextField needs one above it, and
     // this page is pushed on routes that do not provide it.
     return Material(
@@ -203,7 +234,7 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
                   : null,
             ),
             _tabBar(dense),
-            if (!_loading && _tabPacks.isNotEmpty) ...[
+            if (!_firstBatch && _tabPacks.isNotEmpty) ...[
               _toolbar(dense),
               _summaryBar(dense, visible),
             ],
@@ -219,9 +250,9 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
       child: SettingsFilterChip(
         key: ValueKey('chat-sticker-packs-tab-$index'),
         label: AppStrings.t(key),
-        trailingLabel: _loading ? null : '$count',
+        trailingLabel: _firstBatch ? null : '$count',
         selected: _tab == index,
-        onTap: () => setState(() => _tab = index),
+        onTap: () => _selectTab(index),
       ),
     );
     return Padding(
@@ -231,10 +262,10 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
           tab(
             0,
             AppStringKeys.chatStickerPacksTabStickers,
-            _result.stickers.length,
+            _scanner.stickers.length,
           ),
           SizedBox(width: dense ? 6 : 8),
-          tab(1, AppStringKeys.chatStickerPacksTabEmoji, _result.emoji.length),
+          tab(1, AppStringKeys.chatStickerPacksTabEmoji, _scanner.emoji.length),
         ],
       ),
     );
@@ -246,7 +277,10 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
       hintText: AppStringKeys.chatStickerPacksFilterHint,
       controller: _filter,
       compact: true,
-      onChanged: (_) => setState(() {}),
+      onChanged: (_) {
+        setState(() {});
+        _fillViewportSoon();
+      },
     );
     final chips = <Widget>[
       _chip(
@@ -255,7 +289,10 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
         icon: HeroAppIcons.filter,
         selected: _onlyMissing,
         dense: dense,
-        onTap: () => setState(() => _onlyMissing = !_onlyMissing),
+        onTap: () {
+          setState(() => _onlyMissing = !_onlyMissing);
+          _fillViewportSoon();
+        },
       ),
       Container(
         width: 1,
@@ -366,15 +403,12 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   Widget _summaryBar(bool dense, List<ChatUsedPack> visible) {
     final c = context.colors;
     final missing = visible.where((p) => !p.installed).length;
-    final scope = _global
-        ? AppStrings.plural(
-            AppStringKeys.chatStickerPacksScannedChats,
-            _result.scannedChats,
-          )
-        : AppStrings.plural(
-            AppStringKeys.chatStickerPacksScanned,
-            _result.scannedMessages,
-          );
+    final scope = AppStrings.plural(
+      _global
+          ? AppStringKeys.chatStickerPacksScannedGlobal
+          : AppStringKeys.chatStickerPacksScanned,
+      _scanner.scannedMessages,
+    );
     final fontSize = dense ? AppTextSize.caption : AppTextSize.footnote;
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 8, dense ? 2 : 4),
@@ -420,124 +454,160 @@ class _ChatStickerPacksViewState extends State<ChatStickerPacksView> {
   }
 
   Widget _body(bool dense, List<ChatUsedPack> visible) {
+    if (_firstBatch) return const Center(child: AppActivityIndicator(size: 22));
     final c = context.colors;
-    if (_loading) return _loadingState(dense);
-    if (visible.isEmpty) {
-      final String message;
-      if (_tabPacks.isNotEmpty) {
-        message = AppStringKeys.chatStickerPacksNoMatches;
-      } else if (_global) {
-        message = AppStringKeys.chatStickerPacksNoneFound;
-      } else {
-        message = _tab == 0
-            ? AppStringKeys.chatStickerPacksEmptyStickers
-            : AppStringKeys.chatStickerPacksEmptyEmoji;
-      }
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppIcon(
-                _tab == 0 ? HeroAppIcons.grip : HeroAppIcons.solidFaceSmile,
-                size: dense ? 28 : 34,
-                color: c.textTertiary,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                AppStrings.t(message),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: dense ? AppTextSize.footnote : AppTextSize.callout,
-                  color: c.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     final rowHeight = dense ? 58.0 : 72.0;
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (dense && constraints.maxWidth >= 620) {
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 2, 12, 16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisExtent: rowHeight,
-              crossAxisSpacing: 6,
-              mainAxisSpacing: 6,
-            ),
-            itemCount: visible.length,
-            itemBuilder: (context, index) => DecoratedBox(
-              decoration: BoxDecoration(
-                color: c.card,
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
-              child: _row(visible[index], dense: dense, height: rowHeight),
-            ),
-          );
-        }
+        final twoColumns = dense && constraints.maxWidth >= 620;
         final radius = Radius.circular(
           dense ? AppRadius.control : AppRadius.card,
         );
-        return ListView.builder(
-          padding: EdgeInsets.fromLTRB(12, 2, 12, dense ? 16 : 24),
-          itemCount: visible.length,
-          itemBuilder: (context, index) => Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: c.card,
-              borderRadius: BorderRadius.vertical(
-                top: index == 0 ? radius : Radius.zero,
-                bottom: index == visible.length - 1 ? radius : Radius.zero,
-              ),
+        return CustomScrollView(
+          controller: _scroll,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 0),
+              sliver: twoColumns
+                  ? SliverGrid.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisExtent: rowHeight,
+                        crossAxisSpacing: 6,
+                        mainAxisSpacing: 6,
+                      ),
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) => DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: c.card,
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
+                        ),
+                        child: _row(
+                          visible[index],
+                          dense: dense,
+                          height: rowHeight,
+                        ),
+                      ),
+                    )
+                  : SliverList.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) => Container(
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: c.card,
+                          borderRadius: BorderRadius.vertical(
+                            top: index == 0 ? radius : Radius.zero,
+                            bottom: index == visible.length - 1
+                                ? radius
+                                : Radius.zero,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            if (index > 0)
+                              InsetDivider(leadingInset: dense ? 10 : 12),
+                            _row(
+                              visible[index],
+                              dense: dense,
+                              height: rowHeight,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
             ),
-            child: Column(
-              children: [
-                if (index > 0) InsetDivider(leadingInset: dense ? 10 : 12),
-                _row(visible[index], dense: dense, height: rowHeight),
-              ],
-            ),
-          ),
+            if (visible.isEmpty && (_scanner.exhausted || _tabPacks.isNotEmpty))
+              SliverToBoxAdapter(child: _emptyMessage(dense)),
+            SliverToBoxAdapter(child: _footer(dense)),
+          ],
         );
       },
     );
   }
 
-  Widget _loadingState(bool dense) {
+  Widget _emptyMessage(bool dense) {
     final c = context.colors;
-    // A single chat's history reads in a moment; only the pack lookups, and
-    // the global finder's chat walk, take long enough to count.
-    if (_progressTotal == 0 ||
-        (!_global && _phase == ChatPackScanPhase.chats)) {
-      return const Center(child: AppActivityIndicator(size: 22));
+    final String message;
+    if (_tabPacks.isNotEmpty) {
+      message = AppStringKeys.chatStickerPacksNoMatches;
+    } else if (_global) {
+      message = AppStringKeys.chatStickerPacksNoneFound;
+    } else {
+      message = _tab == 0
+          ? AppStringKeys.chatStickerPacksEmptyStickers
+          : AppStringKeys.chatStickerPacksEmptyEmoji;
     }
-    return Center(
-      child: SizedBox(
-        width: 200,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              AppStrings.t(
-                _phase == ChatPackScanPhase.chats
-                    ? AppStringKeys.chatStickerPacksScanning
-                    : AppStringKeys.chatStickerPacksLoadingPacks,
-                {'value1': _progressDone, 'value2': _progressTotal},
-              ),
-              style: TextStyle(
-                fontSize: dense ? AppTextSize.caption : AppTextSize.footnote,
-                color: c.textSecondary,
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 48, 32, 8),
+      child: Column(
+        children: [
+          AppIcon(
+            _tab == 0 ? HeroAppIcons.grip : HeroAppIcons.solidFaceSmile,
+            size: dense ? 28 : 34,
+            color: c.textTertiary,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            AppStrings.t(message),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: dense ? AppTextSize.footnote : AppTextSize.callout,
+              color: c.textSecondary,
             ),
-            const SizedBox(height: 8),
-            AppProgressBar(value: _progressDone / _progressTotal),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Loading, a manual "Load more" once auto-filling pauses, or the end.
+  Widget _footer(bool dense) {
+    final c = context.colors;
+    final fontSize = dense ? AppTextSize.caption : AppTextSize.footnote;
+    final Widget child;
+    if (_loadingMore) {
+      child = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppActivityIndicator(size: dense ? 12 : 14, color: c.textTertiary),
+          const SizedBox(width: 6),
+          Text(
+            AppStrings.t(AppStringKeys.chatStickerPacksLoadingMore),
+            style: TextStyle(fontSize: fontSize, color: c.textTertiary),
+          ),
+        ],
+      );
+    } else if (_scanner.exhausted) {
+      child = Text(
+        AppStrings.t(AppStringKeys.chatStickerPacksNoOlder),
+        style: TextStyle(fontSize: fontSize, color: c.textTertiary),
+      );
+    } else {
+      child = AppInteractiveSurface(
+        key: const ValueKey('chat-sticker-packs-load-more'),
+        onTap: _loadMoreByTap,
+        isButton: true,
+        semanticLabel: AppStrings.t(AppStringKeys.chatStickerPacksLoadMore),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            AppStrings.t(AppStringKeys.chatStickerPacksLoadMore),
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: AppTextWeight.semibold,
+              color: c.linkBlue,
+            ),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      key: const ValueKey('chat-sticker-packs-footer'),
+      height: dense ? 44 : 52,
+      child: Center(child: child),
     );
   }
 
