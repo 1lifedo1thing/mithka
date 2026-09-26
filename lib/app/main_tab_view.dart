@@ -24,7 +24,6 @@ import '../chat/chat_members_view.dart';
 import '../chat/chat_picker_view.dart';
 import '../chat/chat_view.dart';
 import '../chat/desktop_chat_context_pane.dart';
-import '../chat/emoji_store.dart';
 import '../chat/media_send_preview_view.dart';
 import '../chat/music_player_controller.dart';
 import '../chat/outgoing_attachment.dart';
@@ -849,8 +848,8 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
           ),
         ),
     ];
-    // Recomputed on each rail rebuild: the premium gate below changes after
-    // the first frame, and a list captured in build() would stay stale.
+    // Recomputed on each rail rebuild, so a Premium change (bought, lapsed)
+    // reaches the menu without a list captured in build() going stale.
     List<DesktopNavigationAction> applicationMenuActions() => [
       if (!isBotApi)
         DesktopNavigationAction(
@@ -863,8 +862,10 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
           ),
         ),
       // Business tools need Telegram Premium; without it the screen is only a
-      // wall of locked rows, so it does not earn a place in the menu.
-      if (!isBotApi && EmojiStore.shared.isPremium)
+      // wall of locked rows, so it does not earn a place in the menu. The
+      // account's cached Premium flag decides it from the first frame, so
+      // the rows below never shift when the account answers.
+      if (!isBotApi && accounts.activeIsPremium)
         DesktopNavigationAction(
           id: 'business-profile',
           label: AppStrings.t(AppStringKeys.businessSettingsTitle),
@@ -922,12 +923,8 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         ),
     ];
     final rail = AnimatedBuilder(
-      // EmojiStore carries the is_premium option, which decides
-      // whether the business entry is in the menu at all and
-      // lands after the first frame.
       animation: Listenable.merge([
         _unread,
-        EmojiStore.shared,
         _chatListController.sideFolders,
       ]),
       builder: (context, _) => DesktopNavigationRail(

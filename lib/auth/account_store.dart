@@ -46,6 +46,7 @@ class AccountSummary {
     required this.phone,
     this.avatarPath,
     this.emojiStatusId = 0,
+    this.isPremium = false,
     this.isBotApi = false,
     this.botApiEndpoint,
   });
@@ -55,6 +56,11 @@ class AccountSummary {
   final String phone;
   final String? avatarPath; // resolved via this account's OWN TDLib client
   final int emojiStatusId;
+
+  /// Telegram Premium, from getMe. Cached with the rest so Premium-only
+  /// entries (Business, the emoji status button) are right from the first
+  /// frame instead of appearing once the account answers.
+  final bool isPremium;
   final bool isBotApi;
   final Uri? botApiEndpoint;
 
@@ -65,6 +71,7 @@ class AccountSummary {
     phone: phone,
     avatarPath: avatarPath ?? this.avatarPath,
     emojiStatusId: emojiStatusId,
+    isPremium: isPremium,
     isBotApi: isBotApi,
     botApiEndpoint: botApiEndpoint,
   );
@@ -76,6 +83,7 @@ class AccountSummary {
     'phone': phone,
     'avatarPath': avatarPath,
     'emojiStatusId': emojiStatusId,
+    'isPremium': isPremium,
     'isBotApi': isBotApi,
     'botApiEndpoint': botApiEndpoint?.toString(),
   };
@@ -99,6 +107,7 @@ class AccountSummary {
       phone: phone is String ? phone : '',
       avatarPath: avatarPath is String ? avatarPath : null,
       emojiStatusId: statusId is int ? statusId : 0,
+      isPremium: json['isPremium'] == true,
       isBotApi: json['isBotApi'] == true,
       botApiEndpoint: endpoint is String ? Uri.tryParse(endpoint) : null,
     );
@@ -217,6 +226,15 @@ class AccountStore extends ChangeNotifier {
   int get activeSlot => _activeSlot;
   List<AccountSummary> get summaries => _summaries;
   bool get activeIsBotApi => TdClient.shared.isBotApiSlot(_activeSlot);
+
+  /// Whether the active account has Telegram Premium, as last seen.
+  bool get activeIsPremium {
+    for (final summary in _summaries) {
+      if (summary.slot == _activeSlot) return summary.isPremium;
+    }
+    return false;
+  }
+
   int? get activeUserId {
     for (final summary in _summaries) {
       if (summary.slot == _activeSlot) return summary.userId;
@@ -399,6 +417,7 @@ class AccountStore extends ChangeNotifier {
         phone: phone,
         avatarPath: avatarFileId == null ? null : cachedAvatar,
         emojiStatusId: TDParse.emojiStatusCustomEmojiId(me.obj('emoji_status')),
+        isPremium: me.boolean('is_premium') ?? false,
         isBotApi: botApiAccount != null,
         botApiEndpoint: botApiAccount?.endpoint,
       ),

@@ -15,6 +15,7 @@ void main() {
     phone: '+372 5555 5555',
     avatarPath: '/tmp/avatar.jpg',
     emojiStatusId: 77,
+    isPremium: true,
     isBotApi: true,
     botApiEndpoint: Uri.parse('https://api.example.test'),
   );
@@ -29,6 +30,7 @@ void main() {
     expect(restored.phone, '+372 5555 5555');
     expect(restored.avatarPath, '/tmp/avatar.jpg');
     expect(restored.emojiStatusId, 77);
+    expect(restored.isPremium, isTrue);
     expect(restored.isBotApi, isTrue);
     expect(restored.botApiEndpoint, Uri.parse('https://api.example.test'));
   });
@@ -42,6 +44,8 @@ void main() {
 
     expect(store.summaries.single.name, 'Natu');
     expect(store.activeUserId, 4242);
+    // Premium-only menu entries are decided from this before getMe answers.
+    expect(store.activeIsPremium, isTrue);
     // The primary window is keyed on this identity; knowing it up front is
     // what keeps the window from remounting when getMe lands.
     expect(
