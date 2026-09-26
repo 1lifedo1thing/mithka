@@ -2362,98 +2362,142 @@ void main() {
     },
   );
 
-  testWidgets('a loopback buffering stall automatically replaces the player', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(() {
-      tester.view.resetDevicePixelRatio();
-      tester.view.resetPhysicalSize();
-    });
+  for (final scenario in <String>[
+    'buffering stall',
+    'silent playback stall',
+    'playback progress followed by a stall',
+    'deliberate pause',
+    'backgrounded playback',
+  ]) {
+    testWidgets('a loopback $scenario recovers only when playing', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(() {
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPhysicalSize();
+      });
 
-    late Directory directory;
-    late File sparseFile;
-    await tester.runAsync(() async {
-      directory = await Directory.systemTemp.createTemp(
-        'mithka-buffering-recovery-test-',
+      late Directory directory;
+      late File sparseFile;
+      await tester.runAsync(() async {
+        directory = await Directory.systemTemp.createTemp(
+          'mithka-buffering-recovery-test-',
+        );
+        sparseFile = File('${directory.path}/sparse.mp4');
+        final handle = await sparseFile.open(mode: FileMode.write);
+        await handle.writeFrom(List<int>.generate(64, (index) => index));
+        await handle.truncate(1024 * 1024);
+        await handle.close();
+      });
+
+      final query = _SparseVideoQuery(
+        fileId: 709,
+        path: sparseFile.path,
+        totalBytes: 1024 * 1024,
+        downloadedBytes: 64,
       );
-      sparseFile = File('${directory.path}/sparse.mp4');
-      final handle = await sparseFile.open(mode: FileMode.write);
-      await handle.writeFrom(List<int>.generate(64, (index) => index));
-      await handle.truncate(1024 * 1024);
-      await handle.close();
-    });
-
-    final query = _SparseVideoQuery(
-      fileId: 709,
-      path: sparseFile.path,
-      totalBytes: 1024 * 1024,
-      downloadedBytes: 64,
-    );
-    final previousPlatform = VideoPlayerPlatform.instance;
-    final platform = _FakeMobileVideoPlatform();
-    VideoPlayerPlatform.instance = platform;
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    try {
-      SharedPreferences.setMockInitialValues(const {});
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('en'),
-          localizationsDelegates: const [AppLocalizations.delegate],
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: VideoPlayerView(
-              video: TdFileRef(id: 709, localPath: sparseFile.path),
-              width: 1920,
-              height: 1080,
-              onClose: () {},
-              streamQuery: query.call,
+      final previousPlatform = VideoPlayerPlatform.instance;
+      final platform = _FakeMobileVideoPlatform();
+      VideoPlayerPlatform.instance = platform;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        SharedPreferences.setMockInitialValues(const {});
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: const [AppLocalizations.delegate],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: VideoPlayerView(
+                video: TdFileRef(id: 709, localPath: sparseFile.path),
+                width: 1920,
+                height: 1080,
+                onClose: () {},
+                streamQuery: query.call,
+              ),
             ),
           ),
-        ),
-      );
-      await _pumpUntilPlayerReady(tester);
+        );
+        await _pumpUntilPlayerReady(tester);
 
-      final firstPlayer = tester.widget<FVideoPlayer>(
-        find.byType(FVideoPlayer),
-      );
-      final firstController = firstPlayer.controller!;
-      platform.emitBufferingStart(platform.createdPlayerIds.single);
-      platform.emitIsPlayingStateUpdate(
-        platform.createdPlayerIds.single,
-        isPlaying: false,
-      );
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 15));
-      await _pumpUntilReplacementPlayerReady(
-        tester,
-        platform,
-        previousController: firstController,
-      );
+        final firstPlayer = tester.widget<FVideoPlayer>(
+          find.byType(FVideoPlayer),
+        );
+        final firstController = firstPlayer.controller!;
+        if (scenario == 'buffering stall') {
+          platform.emitBufferingStart(platform.createdPlayerIds.single);
+          platform.emitIsPlayingStateUpdate(
+            platform.createdPlayerIds.single,
+            isPlaying: false,
+          );
+        } else if (scenario == 'deliberate pause') {
+          await firstController.pause();
+        } else if (scenario == 'backgrounded playback') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.paused,
+          );
+        }
+        await tester.pump();
+        if (scenario == 'playback progress followed by a stall') {
+          await tester.pump(const Duration(seconds: 8));
+          await firstController.seekTo(const Duration(seconds: 2));
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 7));
+          expect(platform.createCalls, 1);
+          await tester.pump(const Duration(seconds: 8));
+        } else {
+          await tester.pump(const Duration(seconds: 15));
+        }
+        final shouldRecover =
+            scenario == 'buffering stall' ||
+            scenario == 'silent playback stall' ||
+            scenario == 'playback progress followed by a stall';
+        if (shouldRecover) {
+          await _pumpUntilReplacementPlayerReady(
+            tester,
+            platform,
+            previousController: firstController,
+          );
+        }
 
-      expect(tester.takeException(), isNull);
-      expect(platform.createCalls, 2);
-      expect(platform.initializedEvents, 2);
-      expect(platform.disposedPlayerIds, [1]);
-      expect(
-        platform.creationOptions.map(
-          (options) => options.dataSource.sourceType,
-        ),
-        [DataSourceType.network, DataSourceType.network],
-      );
+        expect(tester.takeException(), isNull);
+        final expectedPlayers = shouldRecover ? 2 : 1;
+        expect(platform.createCalls, expectedPlayers);
+        expect(platform.initializedEvents, expectedPlayers);
+        expect(platform.disposedPlayerIds, shouldRecover ? [1] : []);
+        expect(
+          platform.creationOptions.map(
+            (options) => options.dataSource.sourceType,
+          ),
+          List<DataSourceType>.filled(expectedPlayers, DataSourceType.network),
+        );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await _pumpUntilDisposed(tester, platform, expectedCalls: 2);
-      expect(platform.disposedPlayerIds, [1, 2]);
-    } finally {
-      VideoPlayerPlatform.instance = previousPlatform;
-      debugDefaultTargetPlatformOverride = null;
-      await tester.runAsync(() async {
-        if (await directory.exists()) await directory.delete(recursive: true);
-      });
-    }
-  });
+        await tester.pumpWidget(const SizedBox.shrink());
+        if (scenario == 'backgrounded playback') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+        }
+        await _pumpUntilDisposed(
+          tester,
+          platform,
+          expectedCalls: expectedPlayers,
+        );
+        expect(
+          platform.disposedPlayerIds,
+          List<int>.generate(expectedPlayers, (index) => index + 1),
+        );
+      } finally {
+        VideoPlayerPlatform.instance = previousPlatform;
+        debugDefaultTargetPlatformOverride = null;
+        await tester.runAsync(() async {
+          if (await directory.exists()) await directory.delete(recursive: true);
+        });
+      }
+    });
+  }
 
   testWidgets(
     'scrub previews continue during a drag and recover after timeout',
@@ -2589,6 +2633,137 @@ void main() {
       }
     },
   );
+
+  testWidgets('an older seek cannot dismiss a newer scrub preview', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    final previousPlatform = VideoPlayerPlatform.instance;
+    final platform = _FakeMobileVideoPlatform();
+    VideoPlayerPlatform.instance = platform;
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      SharedPreferences.setMockInitialValues(const {});
+      final sourcePath = File('pubspec.yaml').absolute.path;
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [AppLocalizations.delegate],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: VideoPlayerView(
+            video: TdFileRef(id: 704, localPath: sourcePath),
+            initialPlaying: false,
+            onClose: () {},
+            streamQuery: _completedVideoQuery(sourcePath, fileId: 704),
+          ),
+        ),
+      );
+      await _pumpUntilPlayerReady(tester);
+      final firstSeek = Completer<void>();
+      platform.nextSeekBarrier = firstSeek;
+      final rect = tester.getRect(_timeline);
+      final first = await tester.startGesture(
+        Offset(rect.center.dx - 35, rect.center.dy),
+      );
+      await first.moveBy(const Offset(45, 0));
+      await tester.pump();
+      await first.up();
+      await tester.pump();
+      expect(platform.seekPositions, isNotEmpty);
+      expect(_compactScrubPreview, findsOneWidget);
+
+      final second = await tester.startGesture(
+        Offset(rect.center.dx - 25, rect.center.dy),
+      );
+      await second.moveBy(const Offset(60, 0));
+      await tester.pump();
+      firstSeek.complete();
+      await tester.pump();
+      expect(_compactScrubPreview, findsOneWidget);
+
+      await second.up();
+      await _pumpUntilPreviewGone(tester);
+      expect(_compactScrubPreview, findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpUntilDisposed(tester, platform);
+      VideoPlayerPlatform.instance = previousPlatform;
+      debugDefaultTargetPlatformOverride = null;
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    }
+  });
+
+  testWidgets('a stale thumbnail is not shown for the new scrub position', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    final previousPlatform = VideoPlayerPlatform.instance;
+    final platform = _FakeMobileVideoPlatform();
+    VideoPlayerPlatform.instance = platform;
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final firstThumbnail = Completer<Uint8List?>();
+    var requests = 0;
+    try {
+      SharedPreferences.setMockInitialValues(const {});
+      final sourcePath = File('pubspec.yaml').absolute.path;
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [AppLocalizations.delegate],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: VideoPlayerView(
+            video: TdFileRef(id: 705, localPath: sourcePath),
+            initialPlaying: false,
+            onClose: () {},
+            streamQuery: _completedVideoQuery(sourcePath, fileId: 705),
+            thumbnailProvider: (_) {
+              requests++;
+              return requests == 1
+                  ? firstThumbnail.future
+                  : Future<Uint8List?>.value(_transparentPixelPng);
+            },
+          ),
+        ),
+      );
+      await _pumpUntilPlayerReady(tester);
+      final rect = tester.getRect(_timeline);
+      final gesture = await tester.startGesture(
+        Offset(rect.center.dx - 50, rect.center.dy),
+      );
+      await gesture.moveBy(const Offset(30, 0));
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(requests, 1);
+      await gesture.moveBy(const Offset(50, 0));
+      await tester.pump();
+      firstThumbnail.complete(_transparentPixelPng);
+      await tester.pump();
+      expect(
+        find.descendant(of: _compactScrubPreview, matching: find.byType(Image)),
+        findsNothing,
+      );
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.pump();
+      expect(requests, 2);
+      expect(
+        find.descendant(of: _compactScrubPreview, matching: find.byType(Image)),
+        findsOneWidget,
+      );
+      await gesture.up();
+      await _pumpUntilPreviewGone(tester);
+    } finally {
+      if (!firstThumbnail.isCompleted) firstThumbnail.complete(null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpUntilDisposed(tester, platform);
+      VideoPlayerPlatform.instance = previousPlatform;
+      debugDefaultTargetPlatformOverride = null;
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    }
+  });
 
   testWidgets('PiP restore snapshot overrides resume and remains paused', (
     tester,
@@ -2893,6 +3068,7 @@ class _FakeMobileVideoPlatform extends VideoPlayerPlatform {
   final disposedPlayerIds = <int>[];
   final seekPositions = <Duration>[];
   final volumeValues = <double>[];
+  Completer<void>? nextSeekBarrier;
 
   @override
   Future<void> init() async {}
@@ -2989,6 +3165,9 @@ class _FakeMobileVideoPlatform extends VideoPlayerPlatform {
   Future<void> seekTo(int playerId, Duration position) async {
     _positions[playerId] = position;
     seekPositions.add(position);
+    final barrier = nextSeekBarrier;
+    nextSeekBarrier = null;
+    await barrier?.future;
   }
 
   @override

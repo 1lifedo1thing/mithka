@@ -399,6 +399,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   Object? _lastControllerInitializationError;
   Timer? _streamStallTimer;
   Duration? _streamStallPosition;
+  bool _appInForeground = true;
   bool _retryInFlight = false;
   bool _retryFromPlaybackSnapshot = false;
   bool _lastKnownPlaybackWasPlaying = false;
@@ -534,6 +535,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appInForeground = state == AppLifecycleState.resumed;
+    _syncStreamStallRecovery(_controller?.value);
     // Leaving the app is where the resume position has to become durable: the
     // process may never be resumed, and the periodic save is coarse.
     if (state == AppLifecycleState.hidden ||
@@ -926,6 +929,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       '${_debugTimestamp()}  controller ready  ${_fmt(c.value.duration)}',
     );
     setState(() => _controller = c);
+    _syncStreamStallRecovery(c.value);
     if (_usesAndroidSystemMediaVolume) {
       unawaited(_syncAndroidSystemVolume(c));
     }
@@ -1362,13 +1366,16 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   void _syncStreamStallRecovery(VideoPlayerValue? value) {
     final controller = _controller;
     final source = _localPath;
+    final wasPlayingBeforeBuffering =
+        value?.isBuffering == true && _lastKnownPlaybackWasPlaying;
     final shouldWatch =
         controller != null &&
         value != null &&
         value.isInitialized &&
-        value.isBuffering &&
+        (value.isPlaying || wasPlayingBeforeBuffering) &&
         !value.hasError &&
-        _lastKnownPlaybackWasPlaying &&
+        !_completionHandled &&
+        _appInForeground &&
         source != null &&
         (source.startsWith('http://') || source.startsWith('https://')) &&
         _streamServer != null &&
@@ -1399,12 +1406,22 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       final stalledAt = _streamStallPosition;
       _streamStallPosition = null;
       if (!mounted ||
+          !identical(activeController, controller) ||
           activeController == null ||
           activeValue == null ||
-          !activeValue.isBuffering ||
-          stalledAt == null ||
-          (activeValue.position - stalledAt).abs() >=
-              const Duration(milliseconds: 250)) {
+          !(activeValue.isPlaying ||
+              (activeValue.isBuffering && _lastKnownPlaybackWasPlaying)) ||
+          activeValue.hasError ||
+          _completionHandled ||
+          !_appInForeground ||
+          _systemPiPHandoff ||
+          _systemPiPBusy ||
+          stalledAt == null) {
+        return;
+      }
+      if ((activeValue.position - stalledAt).abs() >=
+          const Duration(milliseconds: 250)) {
+        _syncStreamStallRecovery(activeValue);
         return;
       }
       _recoverAfterStreamFailure(
@@ -6153,7 +6170,9 @@ class _MithkaVideoTimelineState extends State<_MithkaVideoTimeline> {
   bool _thumbnailRequestInFlight = false;
   double? _pendingThumbnailFraction;
   double? _scrubFraction;
+  double? _thumbnailFraction;
   Uint8List? _thumbnail;
+  int _scrubGeneration = 0;
 
   @override
   void dispose() {
@@ -6170,34 +6189,51 @@ class _MithkaVideoTimelineState extends State<_MithkaVideoTimeline> {
   }
 
   void _beginScrub(double fraction) {
+    _scrubGeneration++;
     _cancelThumbnailWork();
     widget.scope.actions.beginScrub(fraction);
     setState(() {
       _scrubFraction = fraction;
       _thumbnail = null;
+      _thumbnailFraction = null;
     });
     _queueThumbnail(fraction);
   }
 
   void _updateScrub(double fraction) {
     widget.scope.actions.updateScrub(fraction);
-    setState(() => _scrubFraction = fraction);
+    setState(() {
+      _scrubFraction = fraction;
+      if (_thumbnailFraction != null &&
+          (_thumbnailFraction! - fraction).abs() > 0.005) {
+        _thumbnail = null;
+        _thumbnailFraction = null;
+      }
+    });
     _queueThumbnail(fraction);
   }
 
   void _endScrub(double fraction) {
     _cancelThumbnailWork();
     final finalFraction = _scrubFraction ?? fraction;
-    unawaited(_commitScrub(finalFraction));
+    unawaited(_commitScrub(finalFraction, _scrubGeneration));
   }
 
-  Future<void> _commitScrub(double fraction) async {
-    await widget.scope.actions.endScrub(fraction);
-    if (!mounted) return;
-    setState(() {
-      _scrubFraction = null;
-      _thumbnail = null;
-    });
+  Future<void> _commitScrub(double fraction, int generation) async {
+    try {
+      await widget.scope.actions.endScrub(fraction);
+    } catch (_) {
+      // The player owns command errors; always release this timeline's scrub
+      // preview so the controls remain usable after a failed seek.
+    } finally {
+      if (mounted && generation == _scrubGeneration) {
+        setState(() {
+          _scrubFraction = null;
+          _thumbnail = null;
+          _thumbnailFraction = null;
+        });
+      }
+    }
   }
 
   void _cancelThumbnailWork() {
@@ -6230,7 +6266,10 @@ class _MithkaVideoTimelineState extends State<_MithkaVideoTimeline> {
       _thumbnailGeneration++;
       _thumbnailTimeout = null;
       _thumbnailRequestInFlight = false;
-      setState(() => _thumbnail = null);
+      setState(() {
+        _thumbnail = null;
+        _thumbnailFraction = null;
+      });
       _schedulePendingThumbnail();
     });
 
@@ -6248,7 +6287,12 @@ class _MithkaVideoTimelineState extends State<_MithkaVideoTimeline> {
     if (pending != null && (pending - fraction).abs() < 0.0001) {
       _pendingThumbnailFraction = null;
     }
-    setState(() => _thumbnail = result);
+    if ((_scrubFraction! - fraction).abs() <= 0.005) {
+      setState(() {
+        _thumbnail = result;
+        _thumbnailFraction = result == null ? null : fraction;
+      });
+    }
     _schedulePendingThumbnail();
   }
 
