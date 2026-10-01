@@ -286,16 +286,21 @@ class _ForumTopicBrowserViewState extends State<ForumTopicBrowserView> {
   Future<void> _openTopic(_ForumTopicEntry topic) async {
     final chat = _selectedChat;
     if (context.read<ThemeController>().forumTopicsAsGroupChat) {
-      await replaceWithAppChatRoute<void, void>(
+      // Keep the topic list underneath so back returns to it, as the topic
+      // feed route does.
+      await pushAppChatRoute<void>(
         context,
         AppChatPageRoute<void>(
           builder: (_) => ChatView(
             chatId: chat.id,
             title: chat.title,
-            seedMessage: chat.lastChatMessage,
+            forumTopicId: topic.id,
+            seedMessage: topic.lastMessage,
           ),
         ),
       );
+      if (!mounted) return;
+      await _loadTopics(chat, refresh: true);
       return;
     }
     final routeSession = TopicChatRouteSession();
