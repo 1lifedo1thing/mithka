@@ -406,6 +406,7 @@
     <string name="appearanceFontLoadFailed">불러오기 실패</string>
     <string name="appearanceFontSize">글꼴 크기</string>
     <string name="appearanceFontUnused">미사용</string>
+    <string name="appearanceForumTopicsAsGroupChat">포럼 주제를 일반 그룹으로 표시</string>
     <string name="appearanceGestures">제스처</string>
     <string name="appearanceGoogleDownloaded">Google 다운로드됨</string>
     <string name="appearanceGroupAssistantPosition">보관된 대화 위치</string>

@@ -406,6 +406,7 @@
     <string name="appearanceFontLoadFailed">読み込みに失敗しました</string>
     <string name="appearanceFontSize">フォントサイズ</string>
     <string name="appearanceFontUnused">未使用</string>
+    <string name="appearanceForumTopicsAsGroupChat">フォーラムのトピックを通常のグループとして表示</string>
     <string name="appearanceGestures">ジェスチャー</string>
     <string name="appearanceGoogleDownloaded">Google ダウンロード済み</string>
     <string name="appearanceGroupAssistantPosition">アーカイブしたチャットの位置</string>
