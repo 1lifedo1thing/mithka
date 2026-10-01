@@ -1632,6 +1632,8 @@
     <string name="groupManagementAdvancedControls">Advanced controls</string>
     <string name="groupManagementBasicSection">Basic management</string>
     <string name="groupManagementBoostsAndGiveaways">Boosts and giveaways</string>
+    <string name="groupManagementDeleteChannel">Delete channel</string>
+    <string name="groupManagementDeleteGroup">Delete group</string>
     <string name="groupManagementEditFailed">Failed to update</string>
     <string name="groupManagementEditable">Editable</string>
     <string name="groupManagementForumTopics">Forum topics</string>

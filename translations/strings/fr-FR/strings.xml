@@ -1632,6 +1632,8 @@
     <string name="groupManagementAdvancedControls">Contrôles avancés</string>
     <string name="groupManagementBasicSection">Gestion de base</string>
     <string name="groupManagementBoostsAndGiveaways">Boosts et tirages au sort</string>
+    <string name="groupManagementDeleteChannel">Supprimer le canal</string>
+    <string name="groupManagementDeleteGroup">Supprimer le groupe</string>
     <string name="groupManagementEditFailed">Échec de la modification</string>
     <string name="groupManagementEditable">Modifiable</string>
     <string name="groupManagementForumTopics">Sujets du forum</string>
