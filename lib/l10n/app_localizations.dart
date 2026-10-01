@@ -1654,6 +1654,8 @@ abstract final class AppStringKeys {
   static const groupManagementAdminApprovalRequired =
       'groupManagementAdminApprovalRequired';
   static const groupManagementBasicSection = 'groupManagementBasicSection';
+  static const groupManagementDeleteChannel = 'groupManagementDeleteChannel';
+  static const groupManagementDeleteGroup = 'groupManagementDeleteGroup';
   static const groupManagementEditable = 'groupManagementEditable';
   static const groupManagementEditFailed = 'groupManagementEditFailed';
   static const groupManagementGroupName = 'groupManagementGroupName';

@@ -1625,6 +1625,8 @@
     <string name="groupManagementAdvancedControls">詳細設定</string>
     <string name="groupManagementBasicSection">基本管理</string>
     <string name="groupManagementBoostsAndGiveaways">ブーストとプレゼント企画</string>
+    <string name="groupManagementDeleteChannel">チャンネルを削除</string>
+    <string name="groupManagementDeleteGroup">グループを削除</string>
     <string name="groupManagementEditFailed">変更できませんでした</string>
     <string name="groupManagementEditable">設定可能</string>
     <string name="groupManagementForumTopics">フォーラムトピック</string>

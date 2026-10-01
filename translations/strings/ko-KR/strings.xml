@@ -1625,6 +1625,8 @@
     <string name="groupManagementAdvancedControls">고급 설정</string>
     <string name="groupManagementBasicSection">기본 관리</string>
     <string name="groupManagementBoostsAndGiveaways">부스트 및 경품 행사</string>
+    <string name="groupManagementDeleteChannel">채널 삭제</string>
+    <string name="groupManagementDeleteGroup">그룹 삭제</string>
     <string name="groupManagementEditFailed">수정 실패</string>
     <string name="groupManagementEditable">설정 가능</string>
     <string name="groupManagementForumTopics">포럼 주제</string>

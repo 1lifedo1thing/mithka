@@ -1625,6 +1625,8 @@
     <string name="groupManagementAdvancedControls">高级控制</string>
     <string name="groupManagementBasicSection">基础管理</string>
     <string name="groupManagementBoostsAndGiveaways">助力和抽奖</string>
+    <string name="groupManagementDeleteChannel">永久删除频道</string>
+    <string name="groupManagementDeleteGroup">永久解散群聊</string>
     <string name="groupManagementEditFailed">修改失败</string>
     <string name="groupManagementEditable">可设置</string>
     <string name="groupManagementForumTopics">论坛话题</string>
