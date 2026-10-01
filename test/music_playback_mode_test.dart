@@ -199,4 +199,64 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('player bar places previous before play and next', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final theme = ThemeController(prefs);
+    final player = MusicPlayerController.shared;
+    final track = ChatMessage(
+      id: 1,
+      isOutgoing: false,
+      text: '',
+      date: 1,
+      chatId: 2,
+      music: MessageMusic(
+        title: 'Track',
+        duration: 120,
+        file: TdFileRef(id: 3),
+      ),
+    );
+    player
+      ..current = track
+      ..queue = [track]
+      ..hidden = false
+      ..collapsed = false;
+    addTearDown(() {
+      player
+        ..current = null
+        ..queue = const []
+        ..hidden = true
+        ..collapsed = false;
+      theme.dispose();
+    });
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ThemeController>.value(
+        value: theme,
+        child: const MaterialApp(
+          locale: Locale('en'),
+          localizationsDelegates: [AppLocalizations.delegate],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Column(children: [Spacer(), GlobalMusicPlayerBar()]),
+          ),
+        ),
+      ),
+    );
+
+    Finder control(String label) => find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.label == label,
+    );
+    final previous = control('Previous');
+    final play = control('Play');
+    final next = control('Next');
+    expect(previous, findsOneWidget);
+    expect(play, findsOneWidget);
+    expect(next, findsOneWidget);
+    expect(tester.getCenter(previous).dx, lessThan(tester.getCenter(play).dx));
+    expect(tester.getCenter(play).dx, lessThan(tester.getCenter(next).dx));
+  });
 }
