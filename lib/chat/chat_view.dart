@@ -1369,6 +1369,7 @@ class _ChatViewState extends State<ChatView> {
         ? _sessionCache.read(
             accountSlot: _sessionKey.accountSlot,
             chatId: _sessionKey.chatId,
+            forumTopicId: _sessionKey.forumTopicId,
           )
         : null;
     _olderHistoryExhaustedHint =
@@ -1952,7 +1953,8 @@ class _ChatViewState extends State<ChatView> {
     }
     _sessionCache.store(
       accountSlot: _sessionKey.accountSlot,
-      chatId: widget.chatId,
+      chatId: _sessionKey.chatId,
+      forumTopicId: _sessionKey.forumTopicId,
       messages: _vm.messages,
       anchoredHistory: _vm.anchoredHistory,
       olderHistoryExhausted: olderHistoryExhausted,
