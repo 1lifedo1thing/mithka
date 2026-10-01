@@ -14,9 +14,13 @@ import 'support/l10n_fixtures.dart';
 
 const _chatId = -1004242;
 
+String _transcriptText(dynamic forumTopicId) => forumTopicId is int
+    ? 'Message in topic $forumTopicId'
+    : 'Message in the whole chat';
+
 Map<String, dynamic> _topicMessage(dynamic forumTopicId) => {
   '@type': 'message',
-  'id': 5,
+  'id': forumTopicId is int ? 5 + forumTopicId : 5,
   'chat_id': _chatId,
   'date': 1785862260,
   'is_outgoing': false,
@@ -27,7 +31,11 @@ Map<String, dynamic> _topicMessage(dynamic forumTopicId) => {
   'sender_id': {'@type': 'messageSenderUser', 'user_id': 2},
   'content': {
     '@type': 'messageText',
-    'text': {'@type': 'formattedText', 'text': 'Forum message', 'entities': []},
+    'text': {
+      '@type': 'formattedText',
+      'text': _transcriptText(forumTopicId),
+      'entities': [],
+    },
   },
 };
 
@@ -121,7 +129,7 @@ void main() {
     translation.dispose();
   });
 
-  Widget app({int? forumTopicId}) => MultiProvider(
+  Widget app({int? forumTopicId, Key? key}) => MultiProvider(
     providers: [
       ChangeNotifierProvider<ThemeController>.value(value: theme),
       ChangeNotifierProvider<TranslationController>.value(value: translation),
@@ -132,6 +140,7 @@ void main() {
       localizationsDelegates: const [AppLocalizations.delegate],
       supportedLocales: AppLocalizations.supportedLocales,
       home: ChatView(
+        key: key,
         chatId: _chatId,
         title: 'Forum group',
         forumTopicId: forumTopicId,
@@ -156,10 +165,58 @@ void main() {
     await tester.pumpAndSettle();
     // The topic's own transcript, in the ordinary chat surface, with the
     // topic's name in the header instead of the post-feed header.
-    expect(find.text('Forum message', findRichText: true), findsOneWidget);
+    expect(find.text(_transcriptText(7), findRichText: true), findsOneWidget);
     expect(find.text('Topic 7'), findsOneWidget);
     expect(find.byKey(const ValueKey('topic-header-back')), findsNothing);
     expect(tester.takeException(), isNull);
     clearChatMemoryCaches();
   });
+
+  testWidgets(
+    'topics and the whole chat never restore each other\'s transcript',
+    (tester) async {
+      clearChatMemoryCaches();
+      theme.forumTopicsAsGroupChat = true;
+
+      Future<void> open(int? forumTopicId) async {
+        await tester.pumpWidget(
+          app(
+            forumTopicId: forumTopicId,
+            key: ValueKey('chat-${forumTopicId ?? 'whole'}'),
+          ),
+        );
+        // The first frame is what the session cache paints before any reload.
+        for (final other in <int?>[7, 9, null]..remove(forumTopicId)) {
+          expect(
+            find.text(_transcriptText(other), findRichText: true),
+            findsNothing,
+          );
+        }
+        await tester.pumpAndSettle();
+        expect(
+          find.text(_transcriptText(forumTopicId), findRichText: true),
+          findsOneWidget,
+        );
+        for (final other in <int?>[7, 9, null]..remove(forumTopicId)) {
+          expect(
+            find.text(_transcriptText(other), findRichText: true),
+            findsNothing,
+          );
+        }
+        // Leave the chat so its transcript is written back to the cache.
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }
+
+      // Caches stay warm between hops: every reopen reads a populated entry.
+      await open(7);
+      await open(9);
+      await open(null);
+      await open(7);
+      await open(null);
+      await open(9);
+      expect(tester.takeException(), isNull);
+      clearChatMemoryCaches();
+    },
+  );
 }
