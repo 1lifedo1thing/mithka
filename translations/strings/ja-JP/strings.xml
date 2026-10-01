@@ -2146,6 +2146,7 @@
     <string name="musicPlayerPlaylistLoadFailed">プレイリストを読み込めませんでした</string>
     <string name="musicPlayerPlaylistName">プレイリスト名</string>
     <string name="musicPlayerPlaylists">プレイリスト</string>
+    <string name="musicPlayerPreviousTrack">前の曲</string>
     <string name="musicPlayerQueueTitleWithCount">現在のプレイリスト ({value1})</string>
     <string name="musicPlayerRemoveFromPlaylist">プレイリストから削除</string>
     <string name="musicPlayerRemovedFromPlaylist">プレイリストから削除しました</string>

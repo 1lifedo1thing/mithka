@@ -2155,6 +2155,7 @@
     <string name="musicPlayerPlaylistLoadFailed">Wiedergabelisten konnten nicht geladen werden</string>
     <string name="musicPlayerPlaylistName">Name der Wiedergabeliste</string>
     <string name="musicPlayerPlaylists">Wiedergabelisten</string>
+    <string name="musicPlayerPreviousTrack">Zurück</string>
     <string name="musicPlayerQueueTitleWithCount">Warteschlange ({value1})</string>
     <string name="musicPlayerRemoveFromPlaylist">Aus der Wiedergabeliste entfernen</string>
     <string name="musicPlayerRemovedFromPlaylist">Aus der Wiedergabeliste entfernt</string>

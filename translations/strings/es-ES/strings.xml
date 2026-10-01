@@ -2155,6 +2155,7 @@
     <string name="musicPlayerPlaylistLoadFailed">No se pudieron cargar las listas</string>
     <string name="musicPlayerPlaylistName">Nombre de la lista</string>
     <string name="musicPlayerPlaylists">Listas de reproducción</string>
+    <string name="musicPlayerPreviousTrack">Anterior</string>
     <string name="musicPlayerQueueTitleWithCount">Cola de reproducción ({value1})</string>
     <string name="musicPlayerRemoveFromPlaylist">Eliminar de la lista de reproducción</string>
     <string name="musicPlayerRemovedFromPlaylist">Eliminado de la lista de reproducción</string>

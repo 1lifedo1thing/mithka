@@ -2146,6 +2146,7 @@
     <string name="musicPlayerPlaylistLoadFailed">無法載入播放清單</string>
     <string name="musicPlayerPlaylistName">播放清單名稱</string>
     <string name="musicPlayerPlaylists">播放清單</string>
+    <string name="musicPlayerPreviousTrack">上一首</string>
     <string name="musicPlayerQueueTitleWithCount">目前播放清單 ({value1})</string>
     <string name="musicPlayerRemoveFromPlaylist">從播放清單移除</string>
     <string name="musicPlayerRemovedFromPlaylist">已從播放清單移除</string>
