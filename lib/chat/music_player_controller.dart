@@ -850,6 +850,15 @@ class _MusicPlayerBarContents extends StatelessWidget {
           ),
         ),
         _MiniButton(
+          tooltip: AppStrings.t(AppStringKeys.musicPlayerPreviousTrack),
+          onTap: controller.previous,
+          child: AppIcon(
+            const AppIconData(HeroiconsOutline.backward),
+            size: 21,
+            color: c.textPrimary,
+          ),
+        ),
+        _MiniButton(
           tooltip: controller.isPlaying
               ? AppStrings.t(AppStringKeys.musicPlayerPause)
               : AppStrings.t(AppStringKeys.musicPlayerPlay),
