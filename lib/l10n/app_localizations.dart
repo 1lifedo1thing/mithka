@@ -467,6 +467,8 @@ abstract final class AppStringKeys {
   static const appearanceFontLoadFailed = 'appearanceFontLoadFailed';
   static const appearanceFontSize = 'appearanceFontSize';
   static const appearanceFontUnused = 'appearanceFontUnused';
+  static const appearanceForumTopicsAsGroupChat =
+      'appearanceForumTopicsAsGroupChat';
   static const appearanceGoogleDownloaded = 'appearanceGoogleDownloaded';
   static const gesturesChatActions = 'gesturesChatActions';
   static const gesturesChatActionsModeDescription =

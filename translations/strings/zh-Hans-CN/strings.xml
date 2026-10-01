@@ -406,6 +406,7 @@
     <string name="appearanceFontLoadFailed">加载失败</string>
     <string name="appearanceFontSize">字体大小</string>
     <string name="appearanceFontUnused">未使用</string>
+    <string name="appearanceForumTopicsAsGroupChat">论坛话题显示为正常群组</string>
     <string name="appearanceGestures">手势</string>
     <string name="appearanceGoogleDownloaded">Google 已下载</string>
     <string name="appearanceGroupAssistantPosition">归档的聊天位置</string>

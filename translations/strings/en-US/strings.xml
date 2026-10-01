@@ -406,6 +406,7 @@
     <string name="appearanceFontLoadFailed">Failed to load</string>
     <string name="appearanceFontSize">Font Size</string>
     <string name="appearanceFontUnused">Unused</string>
+    <string name="appearanceForumTopicsAsGroupChat">Show Forum Topics as Regular Group</string>
     <string name="appearanceGestures">Gestures</string>
     <string name="appearanceGoogleDownloaded">Google downloaded</string>
     <string name="appearanceGroupAssistantPosition">Archived Chats Position</string>
