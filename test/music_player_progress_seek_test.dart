@@ -141,4 +141,33 @@ void main() {
     expect(find.text('1:40'), findsOneWidget);
     expect(find.text('-1:40'), findsOneWidget);
   });
+
+  testWidgets('shell scope tells panes not to add their own bar', (
+    tester,
+  ) async {
+    late bool inside;
+    late bool outside;
+    await tester.pumpWidget(
+      Column(
+        children: [
+          Builder(
+            builder: (context) {
+              outside = MusicPlayerShellScope.providesPlayer(context);
+              return const SizedBox();
+            },
+          ),
+          MusicPlayerShellScope(
+            child: Builder(
+              builder: (context) {
+                inside = MusicPlayerShellScope.providesPlayer(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+    expect(outside, isFalse);
+    expect(inside, isTrue);
+  });
 }

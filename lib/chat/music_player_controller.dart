@@ -616,6 +616,20 @@ class _GlobalMusicPlayerOverlayState extends State<GlobalMusicPlayerOverlay> {
   }
 }
 
+/// Marks a subtree whose shell already renders the expanded
+/// [GlobalMusicPlayerBar]. Panes inside it (a split-view conversation) must
+/// not add a second bar of their own.
+class MusicPlayerShellScope extends InheritedWidget {
+  const MusicPlayerShellScope({super.key, required super.child});
+
+  static bool providesPlayer(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MusicPlayerShellScope>() !=
+      null;
+
+  @override
+  bool updateShouldNotify(MusicPlayerShellScope oldWidget) => false;
+}
+
 class GlobalMusicPlayerBar extends StatefulWidget {
   const GlobalMusicPlayerBar({super.key, this.bottomPadding = 0});
 
