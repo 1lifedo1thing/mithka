@@ -824,16 +824,13 @@ class _MusicPlayerBarContents extends StatelessWidget {
                     color: c.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: _MusicProgress(
-                    fraction: fraction,
-                    backgroundColor: c.searchFill,
-                  ),
+                _MusicProgress(
+                  key: musicPlayerProgressKey,
+                  fraction: fraction,
+                  backgroundColor: c.searchFill,
+                  onSeek: controller.seekFraction,
                 ),
                 if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
                   Text(
                     subtitle,
                     maxLines: 1,
@@ -973,29 +970,79 @@ class _MusicCover extends StatelessWidget {
   }
 }
 
-class _MusicProgress extends StatelessWidget {
-  const _MusicProgress({required this.fraction, required this.backgroundColor});
+@visibleForTesting
+const musicPlayerProgressKey = ValueKey<String>('music-player-progress');
+
+/// Seekable progress line of the expanded player bar. The 3px line sits in a
+/// 12px hit area; taps seek immediately, drags preview locally and seek once on
+/// release so playback progress events don't fight the finger.
+class _MusicProgress extends StatefulWidget {
+  const _MusicProgress({
+    super.key,
+    required this.fraction,
+    required this.backgroundColor,
+    required this.onSeek,
+  });
 
   final double fraction;
   final Color backgroundColor;
+  final ValueChanged<double> onSeek;
+
+  @override
+  State<_MusicProgress> createState() => _MusicProgressState();
+}
+
+class _MusicProgressState extends State<_MusicProgress> {
+  double? _dragFraction;
+
+  double _fractionAt(double dx) {
+    final width = context.size?.width ?? 0;
+    if (width <= 0) return 0;
+    return (dx / width).clamp(0.0, 1.0);
+  }
+
+  void _endDrag() {
+    final value = _dragFraction;
+    if (value == null) return;
+    setState(() => _dragFraction = null);
+    widget.onSeek(value);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 3,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ColoredBox(color: backgroundColor),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: fraction.clamp(0.0, 1.0),
-              heightFactor: 1,
-              child: const ColoredBox(color: musicPlayerAccent),
+    final fraction = (_dragFraction ?? widget.fraction).clamp(0.0, 1.0);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (details) =>
+          widget.onSeek(_fractionAt(details.localPosition.dx)),
+      onHorizontalDragStart: (details) =>
+          setState(() => _dragFraction = _fractionAt(details.localPosition.dx)),
+      onHorizontalDragUpdate: (details) =>
+          setState(() => _dragFraction = _fractionAt(details.localPosition.dx)),
+      onHorizontalDragEnd: (_) => _endDrag(),
+      onHorizontalDragCancel: _endDrag,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 5, bottom: 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: SizedBox(
+            height: 3,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(color: widget.backgroundColor),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: fraction,
+                    heightFactor: 1,
+                    child: const ColoredBox(color: musicPlayerAccent),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
