@@ -633,6 +633,24 @@ class _GlobalMusicPlayerBarState extends State<GlobalMusicPlayerBar> {
 
   MusicPlayerController get controller => MusicPlayerController.shared;
 
+  // Hosts build this as a const widget, so a parent rebuild never reaches it.
+  // Listen directly or the bar freezes on stale progress and play state.
+  @override
+  void initState() {
+    super.initState();
+    controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onHorizontalDragStart(DragStartDetails details) {
     if (_settling) return;
     _settleRevision++;
@@ -703,11 +721,7 @@ class _GlobalMusicPlayerBarState extends State<GlobalMusicPlayerBar> {
             1.0,
           )
         : 0.0;
-    final subtitle = [
-      if ((music.performer ?? '').trim().isNotEmpty) music.performer!.trim(),
-      if (total.inSeconds > 0)
-        '${_duration(controller.position.inSeconds)} / ${_duration(total.inSeconds)}',
-    ].join(' · ');
+    final subtitle = (music.performer ?? '').trim().replaceAll('\n', ' ');
     final width = MediaQuery.sizeOf(context).width;
     final slideDuration = _dragging
         ? Duration.zero
@@ -723,7 +737,7 @@ class _GlobalMusicPlayerBarState extends State<GlobalMusicPlayerBar> {
       onHorizontalDragCancel: _onHorizontalDragCancel,
       child: SizedBox(
         width: double.infinity,
-        height: 70 + widget.bottomPadding,
+        height: musicPlayerBarHeight + widget.bottomPadding,
         child: ClipRect(
           child: Stack(
             fit: StackFit.expand,
@@ -752,7 +766,7 @@ class _GlobalMusicPlayerBarState extends State<GlobalMusicPlayerBar> {
                     14,
                     8,
                     10,
-                    8 + widget.bottomPadding,
+                    2 + widget.bottomPadding,
                   ),
                   decoration: BoxDecoration(
                     color: c.background,
@@ -772,6 +786,7 @@ class _GlobalMusicPlayerBarState extends State<GlobalMusicPlayerBar> {
                     message: message,
                     music: music,
                     fraction: fraction,
+                    total: total,
                     subtitle: subtitle,
                   ),
                 ),
@@ -790,6 +805,7 @@ class _MusicPlayerBarContents extends StatelessWidget {
     required this.message,
     required this.music,
     required this.fraction,
+    required this.total,
     required this.subtitle,
   });
 
@@ -797,14 +813,29 @@ class _MusicPlayerBarContents extends StatelessWidget {
   final ChatMessage message;
   final MessageMusic music;
   final double fraction;
+  final Duration total;
   final String subtitle;
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(child: _infoRow(context)),
+        _MusicScrubber(
+          key: musicPlayerProgressKey,
+          fraction: fraction,
+          total: total,
+          onSeek: controller.seekFraction,
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(BuildContext context) {
     final c = context.colors;
     return Row(
       children: [
-        _MusicCover(music: music, size: 46),
+        _MusicCover(music: music, size: 40),
         const SizedBox(width: 10),
         Expanded(
           child: GestureDetector(
@@ -824,18 +855,13 @@ class _MusicPlayerBarContents extends StatelessWidget {
                     color: c.textPrimary,
                   ),
                 ),
-                _MusicProgress(
-                  key: musicPlayerProgressKey,
-                  fraction: fraction,
-                  backgroundColor: c.searchFill,
-                  onSeek: controller.seekFraction,
-                ),
                 if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: c.textTertiary),
+                    style: TextStyle(fontSize: 12, color: c.textTertiary),
                   ),
                 ],
               ],
@@ -973,79 +999,205 @@ class _MusicCover extends StatelessWidget {
 @visibleForTesting
 const musicPlayerProgressKey = ValueKey<String>('music-player-progress');
 
-/// Seekable progress line of the expanded player bar. The 3px line sits in a
-/// 12px hit area; taps seek immediately, drags preview locally and seek once on
-/// release so playback progress events don't fight the finger.
-class _MusicProgress extends StatefulWidget {
-  const _MusicProgress({
+/// Height of the expanded player bar, excluding host bottom padding.
+const double musicPlayerBarHeight = 82;
+
+/// Seekable scrubber of the expanded player bar, modeled on Telegram iOS:
+/// a rounded line with elapsed time on the left and remaining time on the
+/// right. The whole row is the touch target. A tap jumps to that point; a drag
+/// moves relative to where it started, so grabbing the line never makes the
+/// position jump. While touched the line thickens and a knob appears. The
+/// drag previews locally and seeks once on release, so progress events from
+/// the player don't fight the finger.
+class _MusicScrubber extends StatefulWidget {
+  const _MusicScrubber({
     super.key,
     required this.fraction,
-    required this.backgroundColor,
+    required this.total,
     required this.onSeek,
   });
 
   final double fraction;
-  final Color backgroundColor;
+  final Duration total;
   final ValueChanged<double> onSeek;
 
   @override
-  State<_MusicProgress> createState() => _MusicProgressState();
+  State<_MusicScrubber> createState() => _MusicScrubberState();
 }
 
-class _MusicProgressState extends State<_MusicProgress> {
-  double? _dragFraction;
+class _MusicScrubberState extends State<_MusicScrubber> {
+  static const double _labelWidth = 44;
+  static const double _labelGap = 8;
 
-  double _fractionAt(double dx) {
-    final width = context.size?.width ?? 0;
-    if (width <= 0) return 0;
-    return (dx / width).clamp(0.0, 1.0);
+  final GlobalKey _trackKey = GlobalKey();
+  bool _touching = false;
+  double? _scrubFraction;
+  double _dragStartFraction = 0;
+  double _dragStartX = 0;
+
+  double get _trackWidth => _trackKey.currentContext?.size?.width ?? 0;
+
+  double _fractionAt(Offset globalPosition) {
+    final box = _trackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || box.size.width <= 0) return 0;
+    return (box.globalToLocal(globalPosition).dx / box.size.width).clamp(
+      0.0,
+      1.0,
+    );
+  }
+
+  void _setTouching(bool value) {
+    if (_touching != value) setState(() => _touching = value);
+  }
+
+  void _onDragStart(DragStartDetails details) {
+    setState(() {
+      _touching = true;
+      _dragStartFraction = widget.fraction.clamp(0.0, 1.0);
+      _dragStartX = details.globalPosition.dx;
+      _scrubFraction = _dragStartFraction;
+    });
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    final width = _trackWidth;
+    if (width <= 0) return;
+    final delta = (details.globalPosition.dx - _dragStartX) / width;
+    setState(
+      () => _scrubFraction = (_dragStartFraction + delta).clamp(0.0, 1.0),
+    );
   }
 
   void _endDrag() {
-    final value = _dragFraction;
-    if (value == null) return;
-    setState(() => _dragFraction = null);
-    widget.onSeek(value);
+    final value = _scrubFraction;
+    setState(() {
+      _touching = false;
+      _scrubFraction = null;
+    });
+    if (value != null) widget.onSeek(value);
   }
 
   @override
   Widget build(BuildContext context) {
-    final fraction = (_dragFraction ?? widget.fraction).clamp(0.0, 1.0);
+    final c = context.colors;
+    final fraction = (_scrubFraction ?? widget.fraction).clamp(0.0, 1.0);
+    final totalMs = widget.total.inMilliseconds;
+    final elapsed = Duration(milliseconds: (totalMs * fraction).round());
+    final remaining = widget.total - elapsed;
+    final labelStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: _touching ? c.textSecondary : c.textTertiary,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapUp: (details) =>
-          widget.onSeek(_fractionAt(details.localPosition.dx)),
-      onHorizontalDragStart: (details) =>
-          setState(() => _dragFraction = _fractionAt(details.localPosition.dx)),
-      onHorizontalDragUpdate: (details) =>
-          setState(() => _dragFraction = _fractionAt(details.localPosition.dx)),
+      onTapDown: (_) => _setTouching(true),
+      onTapUp: (details) {
+        _setTouching(false);
+        widget.onSeek(_fractionAt(details.globalPosition));
+      },
+      onTapCancel: () => _setTouching(false),
+      onHorizontalDragStart: _onDragStart,
+      onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: (_) => _endDrag(),
       onHorizontalDragCancel: _endDrag,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 5, bottom: 4),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: SizedBox(
-            height: 3,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ColoredBox(color: widget.backgroundColor),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: fraction,
-                    heightFactor: 1,
-                    child: const ColoredBox(color: musicPlayerAccent),
+      child: SizedBox(
+        height: 26,
+        child: Row(
+          children: [
+            SizedBox(
+              width: _labelWidth,
+              child: Text(
+                totalMs > 0 ? _duration(elapsed.inSeconds) : '-:--',
+                style: labelStyle,
+              ),
+            ),
+            const SizedBox(width: _labelGap),
+            Expanded(
+              child: TweenAnimationBuilder<double>(
+                key: _trackKey,
+                tween: Tween(end: _touching ? 1 : 0),
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutBack,
+                builder: (context, emphasis, _) => CustomPaint(
+                  size: const Size(double.infinity, 26),
+                  painter: _MusicScrubberPainter(
+                    fraction: fraction,
+                    emphasis: emphasis,
+                    trackColor: c.textTertiary.withValues(alpha: 0.24),
+                    fillColor: musicPlayerAccent,
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(width: _labelGap),
+            SizedBox(
+              width: _labelWidth,
+              child: Text(
+                totalMs > 0 ? '-${_duration(remaining.inSeconds)}' : '-:--',
+                textAlign: TextAlign.right,
+                style: labelStyle,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _MusicScrubberPainter extends CustomPainter {
+  const _MusicScrubberPainter({
+    required this.fraction,
+    required this.emphasis,
+    required this.trackColor,
+    required this.fillColor,
+  });
+
+  final double fraction;
+
+  /// 0 at rest, 1 while touched. Overshoots slightly with the spring curve.
+  final double emphasis;
+  final Color trackColor;
+  final Color fillColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final thickness = 4 + 3 * emphasis;
+    final radius = Radius.circular(thickness / 2);
+    final top = (size.height - thickness) / 2;
+    final track = Rect.fromLTWH(0, top, size.width, thickness);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(track, radius),
+      Paint()..color = trackColor,
+    );
+    final x = size.width * fraction.clamp(0.0, 1.0);
+    if (x > 0) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, top, max(x, thickness), thickness),
+          radius,
+        ),
+        Paint()..color = fillColor,
+      );
+    }
+    final knob = 7 * emphasis;
+    if (knob > 0.5) {
+      canvas.drawCircle(
+        Offset(x, size.height / 2),
+        knob,
+        Paint()..color = fillColor,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MusicScrubberPainter old) =>
+      old.fraction != fraction ||
+      old.emphasis != emphasis ||
+      old.trackColor != trackColor ||
+      old.fillColor != fillColor;
 }
 
 class _ArcSpinner extends StatefulWidget {

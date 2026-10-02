@@ -73,38 +73,72 @@ void main() {
     );
   }
 
-  testWidgets('dragging the progress line seeks instead of swiping the bar', (
+  testWidgets('dragging the scrubber seeks relative to the grab point', (
     tester,
   ) async {
     await pumpBar(tester);
-    final bar = find.byKey(musicPlayerProgressKey);
-    final rect = tester.getRect(bar);
-
+    final rect = tester.getRect(find.byKey(musicPlayerProgressKey));
     final gesture = await tester.startGesture(
-      Offset(rect.left + rect.width * 0.1, rect.center.dy),
+      Offset(rect.center.dx, rect.center.dy),
     );
-    await gesture.moveBy(Offset(rect.width * 0.2, 0));
-    await gesture.moveBy(Offset(rect.width * 0.45, 0));
+    await gesture.moveBy(const Offset(20, 0));
     await tester.pump();
-    // The preview follows the finger before release without seeking yet.
+    await gesture.moveBy(const Offset(80, 0));
+    await tester.pump(const Duration(milliseconds: 300));
+    // The drag previews locally and only seeks on release.
     expect(player.position, Duration.zero);
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(player.position.inSeconds, closeTo(150, 2));
+    // Playback was at 0, so grabbing mid-line must not jump to the middle.
+    // The first move only wins the drag arena; the second one scrubs.
+    final trackWidth = rect.width - 2 * (44 + 8);
+    expect(
+      player.position.inMilliseconds / 1000,
+      closeTo(200 * 80 / trackWidth, 1),
+    );
     expect(player.collapsed, isFalse);
     expect(player.current, isNotNull);
     expect(deepLinks.consumePending(), isNull);
   });
 
-  testWidgets('tapping the progress line seeks to that point', (tester) async {
+  testWidgets('tapping the scrubber seeks to that point', (tester) async {
     await pumpBar(tester);
     final rect = tester.getRect(find.byKey(musicPlayerProgressKey));
+    const label = 44 + 8;
+    final trackWidth = rect.width - 2 * label;
 
-    await tester.tapAt(Offset(rect.left + rect.width * 0.25, rect.center.dy));
-    await tester.pump();
+    await tester.tapAt(
+      Offset(rect.left + label + trackWidth * 0.25, rect.center.dy),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(player.position.inSeconds, closeTo(50, 1));
+    expect(find.text('0:50'), findsOneWidget);
+    expect(find.text('-2:30'), findsOneWidget);
     expect(deepLinks.consumePending(), isNull);
+  });
+
+  testWidgets('a const bar follows controller updates', (tester) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ThemeController>.value(
+        value: theme,
+        child: const MaterialApp(
+          locale: Locale('en'),
+          localizationsDelegates: [AppLocalizations.delegate],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Column(children: [Spacer(), GlobalMusicPlayerBar()]),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('0:00'), findsOneWidget);
+
+    player.seekFraction(0.5);
+    await tester.pump();
+
+    expect(find.text('1:40'), findsOneWidget);
+    expect(find.text('-1:40'), findsOneWidget);
   });
 }
