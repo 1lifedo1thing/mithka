@@ -169,6 +169,9 @@ class VoicePlayer extends ChangeNotifier {
   /// True when this player is the one bound to [file] (playing or paused).
   bool isActive(TdFileRef? file) => file != null && _fileId == file.id;
 
+  /// True when a loaded track is paused (not stopped or finished).
+  bool get isPaused => _fileId != null && _player?.isPaused == true;
+
   Future<void>? _opening;
 
   /// Opens the native player once. Rapid taps start several loads at the

@@ -66,6 +66,16 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   int _playbackSourceRevision = 0;
   bool playlistsLoading = false;
   MusicPlaybackMode mode = MusicPlaybackMode.sequence;
+
+  /// File ids in shuffle play order. Built lazily with the current track
+  /// first, so previous walks back through what was actually played.
+  List<int> _shuffleOrder = const [];
+  final Random _random = Random();
+
+  /// Previous restarts the current track once it has played this long, like
+  /// Telegram and the system players do.
+  static const previousRestartThreshold = Duration(seconds: 3);
+  static const _modePrefsKey = 'mithka.musicPlaybackMode.v1';
   bool hidden = true;
   bool collapsed = false;
 
@@ -105,6 +115,9 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   // opened. main() calls this before TDLib reaches authorizationStateReady.
   void initialize(SharedPreferences prefs) {
     _prefs = prefs;
+    mode =
+        MusicPlaybackMode.values.asNameMap()[prefs.getString(_modePrefsKey)] ??
+        mode;
     _nowPlaying.attach();
     setActiveAccountSlot(TdClient.shared.activeSlot);
     _loadPlayedMusicChats(force: true);
@@ -247,6 +260,7 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     ChatMessage message,
     int chatId, {
     String? title,
+    bool toggleIfActive = true,
   }) async {
     final accountSlot = _accountSlot;
     _recordPlayedMusicChat(chatId, title ?? message.senderName);
@@ -258,7 +272,7 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     // Replace the previous source immediately. The full chat track list is
     // loaded asynchronously, but an old playlist must never remain visible or
     // become eligible for next-track playback in the meantime.
-    play(message, visibleQueue: [message]);
+    play(message, visibleQueue: [message], toggleIfActive: toggleIfActive);
     try {
       final tracks = await _playlistServiceForSlot(
         accountSlot,
@@ -279,13 +293,21 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     } catch (_) {}
   }
 
-  void playPlaylist(MusicPlaylist playlist, ChatMessage message) {
+  void playPlaylist(
+    MusicPlaylist playlist,
+    ChatMessage message, {
+    bool toggleIfActive = false,
+  }) {
     _setPlaybackSource(
       chatId: playlist.chatId,
       title: playlist.title,
       isPlaylist: true,
     );
-    play(message, visibleQueue: playlist.tracks);
+    play(
+      message,
+      visibleQueue: playlist.tracks,
+      toggleIfActive: toggleIfActive,
+    );
   }
 
   Future<List<ChatMessage>> loadChatTracks(int chatId) {
@@ -293,10 +315,28 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     return _playlistServiceForSlot(slot).loadTracks(chatId);
   }
 
+  /// Plays [message] with [visibleQueue] as the queue. With [toggleIfActive]
+  /// (a play/pause button on the track itself) the loaded track pauses or
+  /// resumes; otherwise (picking it from a list) it keeps playing.
   void play(
     ChatMessage message, {
     List<ChatMessage> visibleQueue = const [],
     bool reveal = true,
+    bool toggleIfActive = true,
+  }) => _playTrack(
+    message,
+    visibleQueue: visibleQueue,
+    reveal: reveal,
+    toggle: toggleIfActive,
+  );
+
+  void _playTrack(
+    ChatMessage message, {
+    required List<ChatMessage> visibleQueue,
+    required bool reveal,
+    bool toggle = false,
+    bool keepShuffleOrder = false,
+    bool restart = false,
   }) {
     final music = message.music;
     final file = music?.file;
@@ -306,11 +346,29 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     );
     current = _playlistCopyOf(message);
     queue = nextQueue.isEmpty ? [current!] : nextQueue;
+    // A track picked by hand starts a new shuffle pass from that track.
+    if (!keepShuffleOrder) _shuffleOrder = const [];
     if (reveal) {
       hidden = false;
       collapsed = false;
     }
     notifyListeners();
+    if (_player.isActive(file)) {
+      if (restart) {
+        seekFraction(0);
+        if (_player.isPaused) unawaited(_player.resume());
+        return;
+      }
+      if (_player.isLoading) return;
+      if (_player.isPlaying) {
+        if (toggle) unawaited(_player.pause());
+        return;
+      }
+      if (_player.isPaused) {
+        unawaited(_player.resume());
+        return;
+      }
+    }
     // The player resolves the file at foreground priority, which also keeps
     // the track in TDLib's persistent local cache. Once it is playing, warm
     // the next track so skipping or auto-advance starts from disk.
@@ -326,15 +384,22 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     unawaited(TdFileCenter.shared.pathFor(next));
   }
 
-  /// The track automatic advance would play next, or null when it is not
-  /// predictable (shuffle) or playback would stop at the end of the queue.
+  /// The track automatic advance would play next, or null for repeat one and
+  /// when playback would stop at the end of the queue (or shuffle pass).
   @visibleForTesting
   ChatMessage? upcomingTrack() {
     final active = current;
     if (active == null) return null;
     if (mode == MusicPlaybackMode.repeatOne) return null;
-    if (mode == MusicPlaybackMode.shuffle) return null;
     final playable = queue.where((item) => item.music?.file != null).toList();
+    if (mode == MusicPlaybackMode.shuffle) {
+      final activeId = active.music?.file?.id;
+      if (activeId == null || playable.length < 2) return null;
+      final order = _ensureShuffleOrder(playable, activeId);
+      final index = order.indexOf(activeId);
+      if (index < 0 || index + 1 >= order.length) return null;
+      return _trackWithId(playable, order[index + 1]);
+    }
     final index = playable.indexWhere(
       (item) => item.music?.file?.id == active.music?.file?.id,
     );
@@ -352,7 +417,7 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   @override
   void toggleCurrent() {
     final file = current?.music?.file;
-    if (file == null) return;
+    if (file == null || isLoading) return;
     hidden = false;
     notifyListeners();
     unawaited(_player.toggleAudio(file));
@@ -378,7 +443,17 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   void next() => _playAdjacent(1, manual: true);
 
   @override
-  void previous() => _playAdjacent(-1, manual: true);
+  void previous() {
+    final file = current?.music?.file;
+    if (file != null &&
+        _player.isActive(file) &&
+        !_player.isLoading &&
+        position >= previousRestartThreshold) {
+      seekFraction(0);
+      return;
+    }
+    _playAdjacent(-1, manual: true);
+  }
 
   void seekFraction(double fraction) {
     final fallback = current?.music?.duration ?? 0;
@@ -403,7 +478,34 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
       MusicPlaybackMode.repeatOne => MusicPlaybackMode.shuffle,
       MusicPlaybackMode.shuffle => MusicPlaybackMode.sequence,
     };
+    _shuffleOrder = const [];
+    unawaited(_prefs?.setString(_modePrefsKey, mode.name));
     notifyListeners();
+  }
+
+  /// A shuffle pass over [ids] that starts with [first].
+  @visibleForTesting
+  static List<int> shuffledOrder(List<int> ids, int first, Random random) {
+    final rest = ids.where((id) => id != first).toList()..shuffle(random);
+    return [first, ...rest];
+  }
+
+  List<int> _ensureShuffleOrder(List<ChatMessage> playable, int currentId) {
+    final ids = [for (final item in playable) item.music!.file!.id];
+    final order = _shuffleOrder;
+    if (order.length == ids.length &&
+        order.contains(currentId) &&
+        ids.toSet().containsAll(order)) {
+      return order;
+    }
+    return _shuffleOrder = shuffledOrder(ids, currentId, _random);
+  }
+
+  ChatMessage? _trackWithId(List<ChatMessage> playable, int fileId) {
+    for (final item in playable) {
+      if (item.music?.file?.id == fileId) return item;
+    }
+    return null;
   }
 
   @visibleForTesting
@@ -452,7 +554,12 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
     if (mode == MusicPlaybackMode.repeatOne) {
       final currentMessage = current;
       if (currentMessage != null) {
-        play(currentMessage, visibleQueue: queue, reveal: false);
+        _playTrack(
+          currentMessage,
+          visibleQueue: queue,
+          reveal: false,
+          keepShuffleOrder: true,
+        );
       }
       return;
     }
@@ -460,25 +567,56 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   }
 
   void _playAdjacent(int delta, {required bool manual}) {
-    final active = current;
+    final activeId = current?.music?.file?.id;
+    final step = _adjacent(delta, manual: manual);
+    if (step == null) return;
+    if (step.shuffleOrder != null) _shuffleOrder = step.shuffleOrder!;
+    _playTrack(
+      step.track,
+      visibleQueue: queue,
+      reveal: manual,
+      keepShuffleOrder: true,
+      // A one-track queue wraps onto itself: start it over, don't pause it.
+      restart: step.track.music?.file?.id == activeId,
+    );
+  }
+
+  /// The track next ([delta] 1) or previous ([delta] -1) leads to. A manual
+  /// skip wraps around the queue; automatic advance stops at its end. Shuffle
+  /// walks a fixed random order, so every track plays once per pass and
+  /// previous returns to the track that actually played before.
+  @visibleForTesting
+  ChatMessage? adjacentTrack(int delta, {required bool manual}) =>
+      _adjacent(delta, manual: manual)?.track;
+
+  ({ChatMessage track, List<int>? shuffleOrder})? _adjacent(
+    int delta, {
+    required bool manual,
+  }) {
     final playable = queue.where((item) => item.music?.file != null).toList();
-    if (active == null || playable.isEmpty) return;
+    final activeId = current?.music?.file?.id;
+    if (activeId == null || playable.isEmpty) return null;
     if (mode == MusicPlaybackMode.shuffle && playable.length > 1) {
-      final activeFileId = active.music?.file?.id;
-      final choices = playable
-          .where((item) => item.music?.file?.id != activeFileId)
-          .toList();
-      play(
-        choices[Random().nextInt(choices.length)],
-        visibleQueue: playable,
-        reveal: manual,
+      final order = _ensureShuffleOrder(playable, activeId);
+      final index = order.indexOf(activeId) + delta;
+      if (index >= order.length) {
+        // The pass is over: continue with a fresh one that doesn't open with
+        // the track that just played.
+        final fresh = shuffledOrder(order, activeId, _random);
+        final track = _trackWithId(playable, fresh[1]);
+        return track == null ? null : (track: track, shuffleOrder: fresh);
+      }
+      if (index < 0 && !manual) return null;
+      final track = _trackWithId(
+        playable,
+        order[index < 0 ? order.length - 1 : index],
       );
-      return;
+      return track == null ? null : (track: track, shuffleOrder: null);
     }
     final index = playable.indexWhere(
-      (item) => item.music?.file?.id == active.music?.file?.id,
+      (item) => item.music?.file?.id == activeId,
     );
-    if (index < 0) return;
+    if (index < 0) return null;
     final nextIndex = resolveAdjacentIndex(
       currentIndex: index,
       itemCount: playable.length,
@@ -486,8 +624,9 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
       wrap: manual,
       mode: mode,
     );
-    if (nextIndex == null) return;
-    play(playable[nextIndex], visibleQueue: playable, reveal: manual);
+    return nextIndex == null
+        ? null
+        : (track: playable[nextIndex], shuffleOrder: null);
   }
 
   void _stopPlayback({required bool clearCurrent}) {
@@ -1038,11 +1177,15 @@ class _CollapsedMusicPlayer extends StatelessWidget {
                   color: _musicBlack.withValues(alpha: 0.22),
                   borderRadius: BorderRadius.circular(AppRadius.card),
                 ),
-                child: AppIcon(
-                  controller.isPlaying ? HeroAppIcons.pause : HeroAppIcons.play,
-                  size: 20,
-                  color: _musicWhite,
-                ),
+                child: controller.isLoading
+                    ? const _ArcSpinner(size: 18, color: _musicWhite)
+                    : AppIcon(
+                        controller.isPlaying
+                            ? HeroAppIcons.pause
+                            : HeroAppIcons.play,
+                        size: 20,
+                        color: _musicWhite,
+                      ),
               ),
             ),
           ],
@@ -1430,8 +1573,65 @@ void _showMusicQueue(BuildContext context, MusicPlayerController controller) {
   if (navigatorContext == null) return;
   _showMusicBottomSheet<void>(
     navigatorContext,
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (sheetContext, setSheetState) {
+    builder: (_) => _MusicQueueSheet(
+      controller: controller,
+      navigatorContext: navigatorContext,
+    ),
+  );
+}
+
+/// The now-playing queue. It follows the controller live, so auto-advance
+/// and mode changes show up while it is open, and it opens scrolled to the
+/// current track.
+class _MusicQueueSheet extends StatefulWidget {
+  const _MusicQueueSheet({
+    required this.controller,
+    required this.navigatorContext,
+  });
+
+  final MusicPlayerController controller;
+  final BuildContext navigatorContext;
+
+  @override
+  State<_MusicQueueSheet> createState() => _MusicQueueSheetState();
+}
+
+class _MusicQueueSheetState extends State<_MusicQueueSheet> {
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey _firstRowKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _revealCurrent() {
+    if (!mounted || !_scroll.hasClients) return;
+    final controller = widget.controller;
+    final currentId = controller.current?.music?.file?.id;
+    final index = controller.displayQueue.indexWhere(
+      (item) => item.music?.file?.id == currentId,
+    );
+    final row = _firstRowKey.currentContext?.size?.height ?? 0;
+    if (index <= 0 || row <= 0) return;
+    final position = _scroll.position;
+    final target = index * row - (position.viewportDimension - row) / 2;
+    _scroll.jumpTo(target.clamp(0.0, position.maxScrollExtent));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (sheetContext, _) {
         final c = sheetContext.colors;
         final queue = controller.queue;
         final displayQueue = controller.displayQueue;
@@ -1475,10 +1675,7 @@ void _showMusicQueue(BuildContext context, MusicPlayerController controller) {
                           Expanded(
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                controller.cycleMode();
-                                setSheetState(() {});
-                              },
+                              onTap: controller.cycleMode,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 6,
@@ -1510,7 +1707,9 @@ void _showMusicQueue(BuildContext context, MusicPlayerController controller) {
                             ),
                             onTap: () {
                               Navigator.of(sheetContext).pop();
-                              unawaited(showMusicPlaylists(navigatorContext));
+                              unawaited(
+                                showMusicPlaylists(widget.navigatorContext),
+                              );
                             },
                           ),
                         ],
@@ -1533,16 +1732,25 @@ void _showMusicQueue(BuildContext context, MusicPlayerController controller) {
                           ),
                         )
                       : ListView.builder(
+                          controller: _scroll,
                           shrinkWrap: true,
                           padding: const EdgeInsets.only(bottom: 78),
-                          itemCount: displayQueue.length,
-                          itemBuilder: (context, index) => _QueueRow(
-                            key: ValueKey(
-                              'music-queue-${displayQueue[index].music?.file?.id ?? displayQueue[index].id}',
-                            ),
-                            message: displayQueue[index],
+                          prototypeItem: _QueueRow(
+                            message: displayQueue.first,
                             playQueue: queue,
                             controller: controller,
+                          ),
+                          itemCount: displayQueue.length,
+                          itemBuilder: (context, index) => KeyedSubtree(
+                            key: index == 0 ? _firstRowKey : null,
+                            child: _QueueRow(
+                              key: ValueKey(
+                                'music-queue-${displayQueue[index].music?.file?.id ?? displayQueue[index].id}',
+                              ),
+                              message: displayQueue[index],
+                              playQueue: queue,
+                              controller: controller,
+                            ),
                           ),
                         ),
                 ),
@@ -1551,8 +1759,8 @@ void _showMusicQueue(BuildContext context, MusicPlayerController controller) {
           ),
         );
       },
-    ),
-  );
+    );
+  }
 }
 
 Future<void> showMusicPlaylists(
@@ -2278,6 +2486,7 @@ class _PlayedChatTracksSheet extends StatelessWidget {
                                 tracks.first,
                                 source.chatId,
                                 title: source.title,
+                                toggleIfActive: false,
                               ),
                             );
                           },
@@ -2305,6 +2514,7 @@ class _PlayedChatTracksSheet extends StatelessWidget {
                             message,
                             source.chatId,
                             title: source.title,
+                            toggleIfActive: false,
                           ),
                         ),
                       ),
@@ -2372,7 +2582,11 @@ class _QueueRow extends StatelessWidget {
         if (play != null) {
           play(message);
         } else {
-          controller.play(message, visibleQueue: playQueue);
+          controller.play(
+            message,
+            visibleQueue: playQueue,
+            toggleIfActive: false,
+          );
         }
       },
       child: Container(
