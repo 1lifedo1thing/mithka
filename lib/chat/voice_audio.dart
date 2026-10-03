@@ -41,6 +41,64 @@ class AudioInterruptionResumePolicy {
   void clear() => _resumeAfterInterruption = false;
 }
 
+/// Reads the native playback position on a fixed cadence while playing.
+///
+/// flutter_sound's `onProgress` stream is driven by a native timer that does
+/// not fire reliably on every device (Android MediaPlayer sessions can go
+/// silent after prepare, upstream issue #1155), which froze the scrubber and
+/// elapsed time. Polling the same native position keeps progress moving no
+/// matter which source delivers it. A read that started before a seek is
+/// discarded, so a stale position never snaps the scrubber back.
+@visibleForTesting
+class PlaybackProgressPoller {
+  PlaybackProgressPoller({
+    required this.read,
+    required this.onProgress,
+    this.interval = const Duration(milliseconds: 250),
+  });
+
+  final Future<({Duration position, Duration duration})?> Function() read;
+  final void Function(Duration position, Duration duration) onProgress;
+  final Duration interval;
+
+  Timer? _timer;
+  int _generation = 0;
+  bool _reading = false;
+
+  bool get isRunning => _timer != null;
+
+  void start() {
+    if (_timer != null) return;
+    _timer = Timer.periodic(interval, (_) => unawaited(_tick()));
+  }
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+    _generation++;
+  }
+
+  /// Drops any read already in flight. Call when the position jumps (seek).
+  void invalidate() => _generation++;
+
+  Future<void> _tick() async {
+    if (_reading) return;
+    _reading = true;
+    final generation = _generation;
+    try {
+      final value = await read();
+      if (value == null || generation != _generation || _timer == null) {
+        return;
+      }
+      onProgress(value.position, value.duration);
+    } catch (_) {
+      // The player may be between tracks; the next tick reads again.
+    } finally {
+      _reading = false;
+    }
+  }
+}
+
 class VoicePlayer extends ChangeNotifier {
   FlutterSoundPlayer? _player;
   bool isPlaying = false;
@@ -58,9 +116,40 @@ class VoicePlayer extends ChangeNotifier {
   StreamSubscription<AudioInterruptionEvent>? _interruption;
   StreamSubscription<void>? _becomingNoisy;
   final _interruptionPolicy = AudioInterruptionResumePolicy();
+  late final PlaybackProgressPoller _poller = PlaybackProgressPoller(
+    read: _readProgress,
+    onProgress: _applyProgress,
+  );
 
   FlutterSoundPlayer get _sound =>
       _player ??= FlutterSoundPlayer(logLevel: Level.warning);
+
+  Future<({Duration position, Duration duration})?> _readProgress() async {
+    final player = _player;
+    if (_disposed || player == null || !player.isPlaying) return null;
+    // ignore: deprecated_member_use
+    final progress = await player.getProgress();
+    final position = progress['progress'];
+    if (position == null) return null;
+    return (position: position, duration: progress['duration'] ?? total);
+  }
+
+  void _applyProgress(Duration nextPosition, Duration duration) {
+    if (_disposed || !isPlaying) return;
+    final nextTotal = duration.inMilliseconds > 0 ? duration : total;
+    if (nextPosition == position && nextTotal == total) return;
+    position = nextPosition;
+    total = nextTotal;
+    notifyListeners();
+  }
+
+  void _syncPolling() {
+    if (isPlaying && !_disposed) {
+      _poller.start();
+    } else {
+      _poller.stop();
+    }
+  }
 
   Future<AudioSession> _prepareAudioSession() async {
     // Re-apply the music category before every new track. Calls and other
@@ -110,6 +199,7 @@ class VoicePlayer extends ChangeNotifier {
     isLoading = false;
     position = Duration.zero;
     total = Duration.zero;
+    _syncPolling();
     notifyListeners();
   }
 
@@ -130,6 +220,7 @@ class VoicePlayer extends ChangeNotifier {
         await player.resumePlayer();
         isPlaying = true;
       }
+      _syncPolling();
       notifyListeners();
       return;
     }
@@ -146,6 +237,7 @@ class VoicePlayer extends ChangeNotifier {
     total = Duration.zero;
     isPlaying = false;
     isLoading = true;
+    _syncPolling();
     notifyListeners();
     final path = await TdFileCenter.shared.pathFor(file);
     if (_disposed) return;
@@ -171,12 +263,11 @@ class VoicePlayer extends ChangeNotifier {
       final player = _sound;
       unawaited(_progress?.cancel());
       _progress = player.onProgress?.listen((e) {
-        position = e.position;
-        if (e.duration.inMilliseconds > 0) total = e.duration;
-        notifyListeners();
+        _applyProgress(e.position, e.duration);
       });
       isPlaying = true;
       position = Duration(milliseconds: fromMs);
+      _syncPolling();
       notifyListeners();
       await player.startPlayer(
         fromURI: _path,
@@ -188,6 +279,7 @@ class VoicePlayer extends ChangeNotifier {
           final finishedFileId = _fileId;
           isPlaying = false;
           position = Duration.zero;
+          _syncPolling();
           notifyListeners();
           if (finishedFileId != null) onFinished?.call(finishedFileId);
         },
@@ -199,6 +291,7 @@ class VoicePlayer extends ChangeNotifier {
     } catch (_) {
       if (_disposed) return;
       isPlaying = false;
+      _syncPolling();
       notifyListeners();
     }
   }
@@ -233,6 +326,7 @@ class VoicePlayer extends ChangeNotifier {
       }
       if (_disposed) return;
       isPlaying = false;
+      _syncPolling();
       notifyListeners();
       return;
     }
@@ -251,10 +345,12 @@ class VoicePlayer extends ChangeNotifier {
       await session.setActive(true);
       await current.resumePlayer();
       isPlaying = true;
+      _syncPolling();
       notifyListeners();
     } catch (_) {
       if (_disposed) return;
       isPlaying = false;
+      _syncPolling();
       notifyListeners();
     }
   }
@@ -267,6 +363,7 @@ class VoicePlayer extends ChangeNotifier {
     } catch (_) {}
     if (_disposed) return;
     isPlaying = false;
+    _syncPolling();
     notifyListeners();
   }
 
@@ -278,6 +375,7 @@ class VoicePlayer extends ChangeNotifier {
         ? total
         : Duration(seconds: fallbackSeconds);
     final target = Duration(milliseconds: (dur.inMilliseconds * f).round());
+    _poller.invalidate();
     position = target;
     notifyListeners();
     final player = _player;
@@ -285,12 +383,14 @@ class VoicePlayer extends ChangeNotifier {
       try {
         await player.seekToPlayer(target);
       } catch (_) {}
+      _poller.invalidate();
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _poller.stop();
     _interruptionPolicy.clear();
     _progress?.cancel();
     _interruption?.cancel();
