@@ -169,12 +169,22 @@ class VoicePlayer extends ChangeNotifier {
   /// True when this player is the one bound to [file] (playing or paused).
   bool isActive(TdFileRef? file) => file != null && _fileId == file.id;
 
-  Future<void> _ensureOpen() async {
-    if (_opened) return;
-    final player = _sound;
-    await player.openPlayer();
-    await player.setSubscriptionDuration(const Duration(milliseconds: 60));
-    _opened = true;
+  Future<void>? _opening;
+
+  /// Opens the native player once. Rapid taps start several loads at the
+  /// same time; they share one open instead of racing a second openPlayer.
+  Future<void> _ensureOpen() {
+    if (_opened) return Future.value();
+    return _opening ??= () async {
+      try {
+        final player = _sound;
+        await player.openPlayer();
+        await player.setSubscriptionDuration(const Duration(milliseconds: 60));
+        _opened = true;
+      } finally {
+        _opening = null;
+      }
+    }();
   }
 
   Future<void> toggleVoice(TdFileRef? file) =>
@@ -239,13 +249,20 @@ class VoicePlayer extends ChangeNotifier {
     isLoading = true;
     _syncPolling();
     notifyListeners();
-    final path = await TdFileCenter.shared.pathFor(file);
+    // Opening the native player and activating the audio session do not
+    // depend on the file. Run them while the path resolves instead of after
+    // it, so a cached track starts as soon as its path is known.
+    final audioReady = _prepareOutput();
+    final path =
+        TdFileCenter.shared.cachedPath(file) ??
+        await TdFileCenter.shared.pathFor(file, priority: 32);
+    final ready = await audioReady;
     if (_disposed) return;
     // The user may have tapped another note while this file resolved —
     // don't clobber the newer load's state or start the stale file.
     if (_fileId != file.id) return;
     isLoading = false;
-    if (path == null) {
+    if (path == null || ready == null) {
       _fileId = null;
       notifyListeners();
       return;
@@ -254,12 +271,20 @@ class VoicePlayer extends ChangeNotifier {
     await _start(0, codec: codec);
   }
 
-  Future<void> _start(int fromMs, {required Codec codec}) async {
+  Future<AudioSession?> _prepareOutput() async {
     try {
       await _ensureOpen();
       final session = await _prepareAudioSession();
-      if (_disposed) return;
       await session.setActive(true);
+      return session;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _start(int fromMs, {required Codec codec}) async {
+    try {
+      if (_disposed) return;
       final player = _sound;
       unawaited(_progress?.cancel());
       _progress = player.onProgress?.listen((e) {

@@ -302,11 +302,42 @@ class MusicPlayerController extends ChangeNotifier {
       collapsed = false;
     }
     notifyListeners();
-    // Keep every played track in TDLib's persistent local file cache. The
-    // player waits on the same coalesced download, so this does not duplicate
-    // network work.
-    unawaited(TdFileCenter.shared.pathFor(file));
-    unawaited(_player.toggleAudio(file));
+    // The player resolves the file at foreground priority, which also keeps
+    // the track in TDLib's persistent local cache. Once it is playing, warm
+    // the next track so skipping or auto-advance starts from disk.
+    unawaited(_startAndPrefetch(file));
+  }
+
+  Future<void> _startAndPrefetch(TdFileRef file) async {
+    await _player.toggleAudio(file);
+    if (!_player.isActive(file) || !_player.isPlaying) return;
+    final next = upcomingTrack()?.music?.file;
+    if (next == null || next.id == file.id) return;
+    if (TdFileCenter.shared.cachedPath(next) != null) return;
+    unawaited(TdFileCenter.shared.pathFor(next));
+  }
+
+  /// The track automatic advance would play next, or null when it is not
+  /// predictable (shuffle) or playback would stop at the end of the queue.
+  @visibleForTesting
+  ChatMessage? upcomingTrack() {
+    final active = current;
+    if (active == null) return null;
+    if (mode == MusicPlaybackMode.repeatOne) return null;
+    if (mode == MusicPlaybackMode.shuffle) return null;
+    final playable = queue.where((item) => item.music?.file != null).toList();
+    final index = playable.indexWhere(
+      (item) => item.music?.file?.id == active.music?.file?.id,
+    );
+    if (index < 0) return null;
+    final nextIndex = resolveAdjacentIndex(
+      currentIndex: index,
+      itemCount: playable.length,
+      delta: 1,
+      wrap: false,
+      mode: mode,
+    );
+    return nextIndex == null ? null : playable[nextIndex];
   }
 
   void toggleCurrent() {

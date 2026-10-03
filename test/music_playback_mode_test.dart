@@ -24,6 +24,44 @@ void main() {
     expect(player.mode, MusicPlaybackMode.sequence);
   });
 
+  test('the prefetched track follows the playback order', () {
+    final player = MusicPlayerController.shared;
+    ChatMessage track(int id) => ChatMessage(
+      id: id,
+      isOutgoing: false,
+      text: '',
+      date: 1,
+      music: MessageMusic(
+        title: 'Track $id',
+        file: TdFileRef(id: id),
+      ),
+    );
+    final tracks = [track(1), track(2), track(3)];
+    player
+      ..queue = tracks
+      ..current = tracks[1];
+    addTearDown(() {
+      player
+        ..mode = MusicPlaybackMode.sequence
+        ..queue = const []
+        ..current = null;
+    });
+
+    player.mode = MusicPlaybackMode.sequence;
+    expect(player.upcomingTrack()?.id, 3);
+    player.mode = MusicPlaybackMode.reverseSequence;
+    expect(player.upcomingTrack()?.id, 1);
+    player.mode = MusicPlaybackMode.repeatOne;
+    expect(player.upcomingTrack(), isNull);
+    player.mode = MusicPlaybackMode.shuffle;
+    expect(player.upcomingTrack(), isNull);
+
+    player
+      ..mode = MusicPlaybackMode.sequence
+      ..current = tracks[2];
+    expect(player.upcomingTrack(), isNull);
+  });
+
   test('reverse sequence next and finished traversal move backward', () {
     expect(
       MusicPlayerController.resolveAdjacentIndex(
