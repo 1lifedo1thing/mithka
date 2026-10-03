@@ -26,6 +26,7 @@ import '../tdlib/td_models.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import 'music_history.dart';
+import 'music_now_playing.dart';
 import 'music_playlist_service.dart';
 import 'voice_audio.dart';
 
@@ -38,7 +39,7 @@ const musicSheetGrabberKey = ValueKey<String>('music-sheet-grabber');
 
 enum MusicPlaybackMode { sequence, reverseSequence, repeatOne, shuffle }
 
-class MusicPlayerController extends ChangeNotifier {
+class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   MusicPlayerController._() {
     _player.onFinished = _onFinished;
     _player.addListener(notifyListeners);
@@ -47,12 +48,14 @@ class MusicPlayerController extends ChangeNotifier {
   static final MusicPlayerController shared = MusicPlayerController._();
 
   final VoicePlayer _player = VoicePlayer();
+  late final MusicNowPlayingBridge _nowPlaying = MusicNowPlayingBridge(this);
   final Set<Object> _embeddedPlayerHosts = <Object>{};
   SharedPreferences? _prefs;
   int _accountSlot = 0;
   int? _loadedSlot;
   int? _playedChatsSlot;
 
+  @override
   ChatMessage? current;
   List<ChatMessage> queue = const [];
   List<MusicPlaylist> playlists = const [];
@@ -68,10 +71,15 @@ class MusicPlayerController extends ChangeNotifier {
 
   bool get hasTrack => current?.music?.file != null;
   bool get isVisible => hasTrack && !hidden;
+  @override
   bool get isPlaying => _player.isPlaying;
+  @override
   bool get isLoading => _player.isLoading;
+  @override
   Duration get position => _player.position;
+  @override
   Duration get total => _player.total;
+  @override
   String get playbackSourceTitle {
     final title = _playbackSourceTitle.trim();
     if (title.isNotEmpty) return title;
@@ -97,6 +105,7 @@ class MusicPlayerController extends ChangeNotifier {
   // opened. main() calls this before TDLib reaches authorizationStateReady.
   void initialize(SharedPreferences prefs) {
     _prefs = prefs;
+    _nowPlaying.attach();
     setActiveAccountSlot(TdClient.shared.activeSlot);
     _loadPlayedMusicChats(force: true);
   }
@@ -340,6 +349,7 @@ class MusicPlayerController extends ChangeNotifier {
     return nextIndex == null ? null : playable[nextIndex];
   }
 
+  @override
   void toggleCurrent() {
     final file = current?.music?.file;
     if (file == null) return;
@@ -348,13 +358,42 @@ class MusicPlayerController extends ChangeNotifier {
     unawaited(_player.toggleAudio(file));
   }
 
+  /// Resumes the current track; used by lock-screen / control-center play.
+  @override
+  void resume() {
+    final file = current?.music?.file;
+    if (file == null || isPlaying) return;
+    if (_player.isActive(file)) {
+      unawaited(_player.resume());
+    } else {
+      unawaited(_player.toggleAudio(file));
+    }
+  }
+
+  /// Pauses the current track; used by lock-screen / control-center pause.
+  @override
+  void pause() => unawaited(_player.pause());
+
+  @override
   void next() => _playAdjacent(1, manual: true);
 
+  @override
   void previous() => _playAdjacent(-1, manual: true);
 
   void seekFraction(double fraction) {
     final fallback = current?.music?.duration ?? 0;
     unawaited(_player.seekFraction(fraction, fallback));
+  }
+
+  /// Seeks to an absolute [target]; used by the system media scrubber.
+  @override
+  void seekTo(Duration target) {
+    final fallback = current?.music?.duration ?? 0;
+    final totalMs = total.inMilliseconds > 0
+        ? total.inMilliseconds
+        : fallback * 1000;
+    if (totalMs <= 0) return;
+    seekFraction(target.inMilliseconds / totalMs);
   }
 
   void cycleMode() {
@@ -402,6 +441,7 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   void closeWidget() {
     _stopPlayback(clearCurrent: true);
     notifyListeners();

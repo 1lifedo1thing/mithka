@@ -321,6 +321,38 @@ class VoicePlayer extends ChangeNotifier {
     }
   }
 
+  /// Resumes a paused track. No-op when nothing is loaded or already playing.
+  Future<void> resume() async {
+    final player = _player;
+    if (_fileId == null || player == null || !player.isPaused) return;
+    _interruptionPolicy.clear();
+    try {
+      await player.resumePlayer();
+    } catch (_) {
+      return;
+    }
+    if (_disposed) return;
+    isPlaying = true;
+    _syncPolling();
+    notifyListeners();
+  }
+
+  /// Pauses the playing track. No-op when nothing is playing.
+  Future<void> pause() async {
+    final player = _player;
+    if (player == null || !player.isPlaying) return;
+    _interruptionPolicy.clear();
+    try {
+      await player.pausePlayer();
+    } catch (_) {
+      return;
+    }
+    if (_disposed) return;
+    isPlaying = false;
+    _syncPolling();
+    notifyListeners();
+  }
+
   Future<void> cycleSpeed() async {
     speed = switch (speed) {
       < 1.25 => 1.5,
