@@ -175,7 +175,13 @@ class NowPlayingPlugin(
             )
         launchIntent()?.let { builder.setContentIntent(it) }
         try {
-            manager.notify(NOTIFICATION_ID, builder.build())
+            val notification = builder.build()
+            // Keep the latest notification around and host it in the
+            // foreground service so playback survives backgrounding; the
+            // service re-reads it on every start.
+            lastNotification = notification
+            MediaPlaybackService.start(appContext)
+            manager.notify(NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {
             // Notification permission revoked; the session still serves
             // headset buttons and Bluetooth controls.
@@ -183,6 +189,8 @@ class NowPlayingPlugin(
     }
 
     private fun clear() {
+        MediaPlaybackService.stop(appContext)
+        lastNotification = null
         NotificationManagerCompat.from(appContext).cancel(NOTIFICATION_ID)
         session?.let {
             it.setPlaybackState(
@@ -273,7 +281,11 @@ class NowPlayingPlugin(
     companion object {
         const val CHANNEL = "mithka/now_playing"
         private const val NOTIFICATION_CHANNEL = "mithka_music_playback"
-        private const val NOTIFICATION_ID = 0x6d757369
+        const val NOTIFICATION_ID = 0x6d757369
+
+        /** Latest posted notification; [MediaPlaybackService] re-posts it as its foreground one. */
+        @Volatile
+        internal var lastNotification: Notification? = null
         private const val ARTWORK_SIZE = 512
         private const val SESSION_ACTIONS =
             PlaybackStateCompat.ACTION_PLAY or
