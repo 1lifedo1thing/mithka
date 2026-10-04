@@ -43,7 +43,7 @@ void main() {
 
     final updated = updatePlayedMusicChats(
       existing,
-      PlayedMusicChat(chatId: 999, title: 'New chat', lastPlayedAt: 1000),
+      const PlayedMusicChat(chatId: 999, title: 'New chat', lastPlayedAt: 1000),
     );
 
     expect(updated, hasLength(playedMusicChatsLimit));
