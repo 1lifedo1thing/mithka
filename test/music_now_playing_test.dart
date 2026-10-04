@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -134,6 +136,74 @@ void main() {
     target.notify();
     await pumpPlatform();
     expect(calls.single.method, 'clear');
+  });
+
+  test(
+    'clearing playback drops the cached cover for a reused file id',
+    () async {
+      target
+        ..current = track(1, cover: TdFileRef(id: 99))
+        ..isPlaying = true;
+      bridge.attach();
+      await pumpPlatform();
+      await pumpPlatform();
+      expect((calls.last.arguments as Map)['artworkPath'], '/tmp/cover-99.jpg');
+      calls.clear();
+
+      // Switching accounts clears playback; TDLib can later reuse the same
+      // track file id on the new account with a different cover.
+      target.current = null;
+      target.notify();
+      await pumpPlatform();
+      expect(calls.single.method, 'clear');
+      calls.clear();
+
+      target.current = track(1, cover: TdFileRef(id: 100));
+      target.notify();
+      await pumpPlatform();
+      await pumpPlatform();
+      expect(
+        (calls.last.arguments as Map)['artworkPath'],
+        '/tmp/cover-100.jpg',
+      );
+    },
+  );
+
+  test('a stale in-flight cover cannot publish after a clear', () async {
+    final pending = <int, Completer<String?>>{};
+    bridge = MusicNowPlayingBridge(
+      target,
+      enabled: true,
+      resolveArtwork: (cover) =>
+          pending.putIfAbsent(cover.id, Completer<String?>.new).future,
+    );
+    target
+      ..current = track(1, cover: TdFileRef(id: 99))
+      ..isPlaying = true;
+    bridge.attach();
+    await pumpPlatform();
+    expect((calls.last.arguments as Map)['artworkPath'], isNull);
+    calls.clear();
+
+    // Clear, then the same file id returns with a different cover.
+    target.current = null;
+    target.notify();
+    await pumpPlatform();
+    target.current = track(1, cover: TdFileRef(id: 100));
+    target.notify();
+    await pumpPlatform();
+    expect((calls.last.arguments as Map)['artworkPath'], isNull);
+
+    // The old account's cover resolves late; it must not publish.
+    pending[99]!.complete('/tmp/cover-99.jpg');
+    await pumpPlatform();
+    await pumpPlatform();
+    expect((calls.last.arguments as Map)['artworkPath'], isNull);
+
+    pending[100]!.complete('/tmp/cover-100.jpg');
+    await pumpPlatform();
+    await pumpPlatform();
+    expect((calls.last.arguments as Map)['artworkPath'], '/tmp/cover-100.jpg');
   });
 
   test('remote commands drive the player', () async {

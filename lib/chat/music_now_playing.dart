@@ -108,6 +108,12 @@ class MusicNowPlayingBridge {
   int? _artworkFileId;
   String? _artworkPath;
 
+  /// Bumped whenever the cached artwork stops being valid: playback clears,
+  /// the bridge detaches, or another track takes over the cache. TDLib file
+  /// ids are per account, so a late artwork completion from an older
+  /// generation must never publish onto a reused file id.
+  int _artworkGeneration = 0;
+
   static bool get _platformSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.iOS ||
@@ -132,6 +138,7 @@ class MusicNowPlayingBridge {
     if (_visible) unawaited(_invoke('clear'));
     _visible = false;
     _published = null;
+    _invalidateArtwork();
   }
 
   Future<void> _onCall(MethodCall call) async {
@@ -162,11 +169,16 @@ class MusicNowPlayingBridge {
       if (_visible) unawaited(_invoke('clear'));
       _visible = false;
       _published = null;
+      // Clearing playback also drops the cached cover: file ids are
+      // account-scoped, so the same id can later resolve a different
+      // account's artwork.
+      _invalidateArtwork();
       return;
     }
     if (_artworkFileId != file.id) {
       _artworkFileId = file.id;
       _artworkPath = null;
+      _artworkGeneration++;
       final cover = music.cover;
       if (cover != null) unawaited(_loadArtwork(file.id, cover));
     }
@@ -211,9 +223,24 @@ class MusicNowPlayingBridge {
     return (next.position - expected).abs() > seekTolerance;
   }
 
+  void _invalidateArtwork() {
+    _artworkFileId = null;
+    _artworkPath = null;
+    _artworkGeneration++;
+  }
+
   Future<void> _loadArtwork(int fileId, TdFileRef cover) async {
+    final generation = _artworkGeneration;
     final path = await _resolveArtwork(cover);
-    if (!_attached || _artworkFileId != fileId || path == null) return;
+    // Only the generation that started this load may publish it. After a
+    // clear the same file id can be reused by another account, whose cover
+    // must not be overwritten by the stale completion.
+    if (!_attached ||
+        _artworkFileId != fileId ||
+        _artworkGeneration != generation ||
+        path == null) {
+      return;
+    }
     _artworkPath = path;
     _sync();
   }
