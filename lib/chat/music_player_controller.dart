@@ -40,14 +40,21 @@ const musicSheetGrabberKey = ValueKey<String>('music-sheet-grabber');
 enum MusicPlaybackMode { sequence, reverseSequence, repeatOne, shuffle }
 
 class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
-  MusicPlayerController._() {
+  MusicPlayerController._({VoicePlayer? player})
+    : _player = player ?? VoicePlayer() {
     _player.onFinished = _onFinished;
     _player.addListener(notifyListeners);
   }
 
   static final MusicPlayerController shared = MusicPlayerController._();
 
-  final VoicePlayer _player = VoicePlayer();
+  /// A controller bound to an instrumented [VoicePlayer], for tests that
+  /// need real playback-state transitions without the native audio stack.
+  @visibleForTesting
+  factory MusicPlayerController.forTest({VoicePlayer? player}) =>
+      MusicPlayerController._(player: player);
+
+  final VoicePlayer _player;
   late final MusicNowPlayingBridge _nowPlaying = MusicNowPlayingBridge(this);
   final Set<Object> _embeddedPlayerHosts = <Object>{};
   SharedPreferences? _prefs;
@@ -428,7 +435,10 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   void resume() {
     final file = current?.music?.file;
     if (file == null || isPlaying) return;
-    if (_player.isActive(file)) {
+    // A track that finished (or whose native start failed) stays retained
+    // but stopped, not paused: the native resume is a no-op there, so start
+    // the current file again instead of ignoring the Play command.
+    if (_player.isActive(file) && _player.isPaused) {
       unawaited(_player.resume());
     } else {
       unawaited(_player.toggleAudio(file));
