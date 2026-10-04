@@ -434,7 +434,7 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   @override
   void resume() {
     final file = current?.music?.file;
-    if (file == null || isPlaying) return;
+    if (file == null || isPlaying || isLoading) return;
     // A track that finished (or whose native start failed) stays retained
     // but stopped, not paused: the native resume is a no-op there, so start
     // the current file again instead of ignoring the Play command.
@@ -1743,7 +1743,6 @@ class _MusicQueueSheetState extends State<_MusicQueueSheet> {
                         )
                       : ListView.builder(
                           controller: _scroll,
-                          shrinkWrap: true,
                           padding: const EdgeInsets.only(bottom: 78),
                           prototypeItem: _QueueRow(
                             message: displayQueue.first,
@@ -2017,7 +2016,6 @@ class _MusicPlaylistsSheet extends StatelessWidget {
               else
                 Flexible(
                   child: ListView.separated(
-                    shrinkWrap: true,
                     padding: const EdgeInsets.only(bottom: 12),
                     itemCount: controller.playlists.length,
                     separatorBuilder: (_, _) => Padding(

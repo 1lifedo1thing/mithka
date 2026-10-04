@@ -43,6 +43,26 @@ void main() {
     expect(player.isPlaying, isTrue);
   });
 
+  test('remote play is ignored while a track is still loading', () {
+    final voice = _RetainedVoicePlayer(2);
+    final player = MusicPlayerController.forTest(player: voice);
+    final first = track(1);
+    final last = track(2);
+    player
+      ..current = last
+      ..queue = [first, last];
+
+    // The native player is still opening the file: resume must not race the
+    // pending start with a second toggle of the same track.
+    voice.isLoading = true;
+    expect(player.isLoading, isTrue);
+
+    player.resume();
+
+    expect(voice.resumeCalls, 0);
+    expect(voice.restartCalls, 0);
+  });
+
   test('remote play resumes a paused track without restarting it', () {
     final voice = _RetainedVoicePlayer(2);
     final player = MusicPlayerController.forTest(player: voice);
