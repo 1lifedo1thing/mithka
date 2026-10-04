@@ -38,11 +38,7 @@ void main() {
   test('played music chats are capped at the persistence limit', () {
     final existing = List.generate(
       playedMusicChatsLimit,
-      (i) => PlayedMusicChat(
-        chatId: i + 1,
-        title: 'Chat $i',
-        lastPlayedAt: i,
-      ),
+      (i) => PlayedMusicChat(chatId: i + 1, title: 'Chat $i', lastPlayedAt: i),
     );
 
     final updated = updatePlayedMusicChats(
