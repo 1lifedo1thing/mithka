@@ -203,6 +203,17 @@ class VoicePlayer extends ChangeNotifier {
       try {
         await player.stopPlayer();
       } catch (_) {}
+      // Give the shared audio session back (calls, other media apps).
+      try {
+        final session = await _prepareAudioSession();
+        if (!_disposed) {
+          await session.setActive(
+            false,
+            avAudioSessionSetActiveOptions:
+                AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+          );
+        }
+      } catch (_) {}
     }
     unawaited(_progress?.cancel());
     _progress = null;
@@ -229,7 +240,15 @@ class VoicePlayer extends ChangeNotifier {
         await player.pausePlayer();
         isPlaying = false;
       } else {
+        // Calls and other audio apps can deactivate our shared audio
+        // session while we are paused; re-activate it before resuming, the
+        // same way interruption-end recovery does.
         _interruptionPolicy.clear();
+        try {
+          final session = await _prepareAudioSession();
+          if (_disposed) return;
+          await session.setActive(true);
+        } catch (_) {}
         await player.resumePlayer();
         isPlaying = true;
       }
@@ -329,6 +348,14 @@ class VoicePlayer extends ChangeNotifier {
     final player = _player;
     if (_fileId == null || player == null || !player.isPaused) return;
     _interruptionPolicy.clear();
+    // Calls and other audio apps can deactivate our shared audio session
+    // while we are paused; re-activate it before resuming, the same way
+    // interruption-end recovery does.
+    try {
+      final session = await _prepareAudioSession();
+      if (_disposed) return;
+      await session.setActive(true);
+    } catch (_) {}
     try {
       await player.resumePlayer();
     } catch (_) {
