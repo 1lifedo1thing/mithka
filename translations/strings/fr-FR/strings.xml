@@ -2204,6 +2204,7 @@
     <string name="musicPlayerRemoveFromPlaylist">Retirer de la liste de lecture</string>
     <string name="musicPlayerRemovedFromPlaylist">Retiré de la liste de lecture</string>
     <string name="musicPlayerShowPlaylist">Liste de lecture</string>
+<string name="musicPlayerStartFailed">Impossible de lire ce titre</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="one">{count} morceau</item>
         <item quantity="other">{count} morceaux</item>

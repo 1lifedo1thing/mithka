@@ -2204,6 +2204,7 @@
     <string name="musicPlayerRemoveFromPlaylist">Remove from playlist</string>
     <string name="musicPlayerRemovedFromPlaylist">Removed from playlist</string>
     <string name="musicPlayerShowPlaylist">Playlist</string>
+<string name="musicPlayerStartFailed">Could not play this track</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="one">{count} track</item>
         <item quantity="other">{count} tracks</item>

@@ -2195,6 +2195,7 @@
     <string name="musicPlayerRemoveFromPlaylist">재생 목록에서 제거</string>
     <string name="musicPlayerRemovedFromPlaylist">재생 목록에서 제거됨</string>
     <string name="musicPlayerShowPlaylist">재생 목록</string>
+<string name="musicPlayerStartFailed">이 곡을 재생할 수 없어요</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="other">{count}곡</item>
     </plurals>

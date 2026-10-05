@@ -2195,6 +2195,7 @@
     <string name="musicPlayerRemoveFromPlaylist">从播放列表移除</string>
     <string name="musicPlayerRemovedFromPlaylist">已从播放列表移除</string>
     <string name="musicPlayerShowPlaylist">播放列表</string>
+<string name="musicPlayerStartFailed">无法播放这首歌</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="other">{count} 首歌曲</item>
     </plurals>

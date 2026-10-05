@@ -2204,6 +2204,7 @@
     <string name="musicPlayerRemoveFromPlaylist">Aus der Wiedergabeliste entfernen</string>
     <string name="musicPlayerRemovedFromPlaylist">Aus der Wiedergabeliste entfernt</string>
     <string name="musicPlayerShowPlaylist">Wiedergabeliste</string>
+<string name="musicPlayerStartFailed">Titel konnte nicht abgespielt werden</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="one">{count} Titel</item>
         <item quantity="other">{count} Titel</item>
