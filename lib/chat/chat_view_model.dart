@@ -34,6 +34,7 @@ import 'chat_unread_progress.dart';
 import 'checklist_composer_view.dart';
 import 'checklist_service.dart';
 import 'forum_topic_transcript.dart';
+import 'forward_markdown.dart';
 import 'forward_options.dart';
 import 'gif_item.dart';
 import 'message_reaction_availability.dart';
@@ -2826,11 +2827,43 @@ class ChatViewModel extends ChangeNotifier {
     ForwardOptions options = const ForwardOptions(),
   }) async {
     if (hasProtectedContent) throw const ForwardBlockedException();
+    var richText = options.richText;
+    // Second gate: entry points already hide the option for non-Premium, but
+    // forwardMany is callable without them (bot relay, shortcuts), so the
+    // entitlement is re-checked here against the live TDLib state.
+    if (richText && !await currentUserIsPremium()) richText = false;
+    final remainingIds = richText ? <int>[] : messageIds;
+    if (richText) {
+      final byId = {for (final message in _allMessages) message.id: message};
+      for (final id in messageIds) {
+        final message = byId[id];
+        // Markdown detection is best-effort: any message that fails detection
+        // or conversion simply falls back to the regular forward below.
+        var sent = false;
+        try {
+          sent =
+              message != null &&
+              forwardMarkdownOfferForMessage(message).available &&
+              await sendMarkdownRichTextForward(
+                query: _client.query,
+                fromChatId: chatId,
+                messageId: id,
+                targetChatId: targetChatId,
+                text: message.text,
+                topicId: targetChatId == chatId ? _forumTopicRef : null,
+              );
+        } catch (_) {
+          sent = false;
+        }
+        if (!sent) remainingIds.add(id);
+      }
+      if (remainingIds.isEmpty) return;
+    }
     await forwardMessagesWithOptions(
       client: _client,
       targetChatId: targetChatId,
       fromChatId: chatId,
-      messageIds: messageIds,
+      messageIds: remainingIds,
       topicId: targetChatId == chatId ? _forumTopicRef : null,
       options: options,
     );

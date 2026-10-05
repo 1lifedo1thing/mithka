@@ -5,10 +5,19 @@ typedef ForwardQuery =
     Future<Map<String, dynamic>> Function(Map<String, dynamic> request);
 
 class ForwardOptions {
-  const ForwardOptions({this.removeCaption = false, this.removeSender = false});
+  const ForwardOptions({
+    this.removeCaption = false,
+    this.removeSender = false,
+    this.richText = false,
+  });
 
   final bool removeCaption;
   final bool removeSender;
+
+  /// Re-send literal Markdown markers as rich-text entities (a newly authored
+  /// message) instead of copying the message as-is. Ignored by the plain
+  /// forward request builders; callers branch on it first.
+  final bool richText;
 
   bool get sendCopy => removeSender || removeCaption;
 }

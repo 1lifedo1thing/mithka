@@ -807,6 +807,9 @@ abstract final class AppStringKeys {
   static const chatForwardProtected = 'chatForwardProtected';
   static const chatForwardRemoveCaption = 'chatForwardRemoveCaption';
   static const chatForwardRemoveSender = 'chatForwardRemoveSender';
+  static const chatForwardRenderMarkdown = 'chatForwardRenderMarkdown';
+  static const chatForwardRenderMarkdownPremium =
+      'chatForwardRenderMarkdownPremium';
   static const chatForwardToTitle = 'chatForwardToTitle';
   static const chatInfoAlbum = 'chatInfoAlbum';
   static const chatInfoAutoDeleteMessages = 'chatInfoAutoDeleteMessages';
@@ -1560,6 +1563,9 @@ abstract final class AppStringKeys {
   static const generalOpenChatAtLatestMessage =
       'generalOpenChatAtLatestMessage';
   static const generalRepeatPreserveSender = 'generalRepeatPreserveSender';
+  static const generalForwardRichMarkdown = 'generalForwardRichMarkdown';
+  static const generalForwardRichMarkdownHint =
+      'generalForwardRichMarkdownHint';
   static const generalSaveCapturedPhotos = 'generalSaveCapturedPhotos';
   static const generalSaveCapturedPhotosHint = 'generalSaveCapturedPhotosHint';
   static const generalSendMessageWithEnter = 'generalSendMessageWithEnter';
