@@ -9,8 +9,7 @@
 //  package installer finishes silently and the tap appears to do nothing.
 //
 
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mithka/components/app_confirm_dialog.dart';
 import 'package:mithka/components/toast.dart';
@@ -93,9 +92,11 @@ String? mimeForExtension(String ext) {
   return _mimeMap[normalized];
 }
 
-/// True when this path should be routed to the Android package installer.
-bool isApkPath(String path) {
-  if (!Platform.isAndroid) return false;
+/// True when [path] should be routed through the Android install-permission
+/// gate. Desktop and web open files directly: permission_handler has no
+/// install-packages switch there and would throw a missing-plugin error.
+bool _needsInstallPermission(String path) {
+  if (defaultTargetPlatform != TargetPlatform.android) return false;
   return path.toLowerCase().endsWith('.apk');
 }
 
@@ -106,9 +107,11 @@ Future<void> openDownloadedFile(
   String path, {
   String? mimeType,
 }) async {
-  var type = mimeType;
-  type ??= mimeForExtension(_extensionOf(path));
-  if (type == apkMime && !await _ensureInstallPermission(context)) return;
+  final type = mimeType ?? mimeForExtension(_extensionOf(path));
+  if (_needsInstallPermission(path) &&
+      !await _ensureInstallPermission(context)) {
+    return;
+  }
   final result = await OpenFilex.open(path, type: type);
   if (result.type != ResultType.done && context.mounted) {
     showToast(context, AppStringKeys.fileDetailNoAppCanOpenFile);
@@ -128,10 +131,14 @@ Future<bool> _ensureInstallPermission(BuildContext context) async {
   if (!proceed || !context.mounted) return false;
   final granted = await installPackagesGateway.request();
   if (!granted) return false;
-  if (!context.mounted) return true;
-  showToast(context, AppStringKeys.fileDetailApkInstallGranted);
+  if (context.mounted) {
+    // Capture the overlay while the context is still alive; the pause below
+    // can outlive the widget that started this flow.
+    showToast(context, AppStringKeys.fileDetailApkInstallGranted);
+  }
   // The special-permission screen finishes before the system re-reads the
   // switch on some devices; a short pause keeps the installer from racing.
+  // Nothing may touch [context] after this point.
   await Future<void>.delayed(const Duration(milliseconds: 400));
   return true;
 }
