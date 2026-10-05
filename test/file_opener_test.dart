@@ -33,87 +33,101 @@ void main() {
     installPackagesGateway = const SystemInstallPackagesGateway();
   });
 
-  testWidgets('a denied APK gate explains the switch before opening', (
-    tester,
-  ) async {
-    final gateway = _FakeGateway(false);
-    installPackagesGateway = gateway;
-    await tester.pumpWidget(_app());
-    await tester.tap(find.byKey(const ValueKey('open')));
-    await tester.pump();
-    expect(find.text('Allow app installs?'), findsOneWidget);
-    expect(gateway.requests, 0);
-    await tester.tap(find.text('Open Settings'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(gateway.requests, 1);
-    expect(
-      find.text('Install permission granted. Open the file again to install.'),
-      findsOneWidget,
-    );
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  testWidgets(
+    'a denied APK gate explains the switch before opening',
+    (tester) async {
+      final gateway = _FakeGateway(false);
+      installPackagesGateway = gateway;
+      await tester.pumpWidget(_app());
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pump();
+      expect(find.text('Allow app installs?'), findsOneWidget);
+      expect(gateway.requests, 0);
+      await tester.tap(find.text('Open Settings'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(gateway.requests, 1);
+      expect(
+        find.text(
+          'Install permission granted. Open the file again to install.',
+        ),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
-  testWidgets('cancelling the APK gate never reaches the installer', (
-    tester,
-  ) async {
-    final gateway = _FakeGateway(false);
-    installPackagesGateway = gateway;
-    await tester.pumpWidget(_app());
-    await tester.tap(find.byKey(const ValueKey('open')));
-    await tester.pump();
-    await tester.tap(find.text('Cancel'));
-    await tester.pump();
-    expect(gateway.requests, 0);
-    expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  testWidgets(
+    'cancelling the APK gate never reaches the installer',
+    (tester) async {
+      final gateway = _FakeGateway(false);
+      installPackagesGateway = gateway;
+      await tester.pumpWidget(_app());
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pump();
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      expect(gateway.requests, 0);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
-  testWidgets('an already-granted switch opens without prompting', (
-    tester,
-  ) async {
-    final gateway = _FakeGateway(true);
-    installPackagesGateway = gateway;
-    await tester.pumpWidget(_app());
-    await tester.tap(find.byKey(const ValueKey('open')));
-    await tester.pump();
-    expect(find.text('Allow app installs?'), findsNothing);
-    expect(gateway.checks, 1);
-    expect(gateway.requests, 0);
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  testWidgets(
+    'an already-granted switch opens without prompting',
+    (tester) async {
+      final gateway = _FakeGateway(true);
+      installPackagesGateway = gateway;
+      await tester.pumpWidget(_app());
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pump();
+      expect(find.text('Allow app installs?'), findsNothing);
+      expect(gateway.checks, 1);
+      expect(gateway.requests, 0);
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
-  testWidgets('desktop opens APKs without the install gate', (tester) async {
-    final gateway = _FakeGateway(true);
-    installPackagesGateway = gateway;
-    await tester.pumpWidget(_app());
-    await tester.tap(find.byKey(const ValueKey('open')));
-    await tester.pump();
-    expect(find.text('Allow app installs?'), findsNothing);
-    // The gate must not even query permission_handler on non-Android hosts.
-    expect(gateway.checks, 0);
-    expect(gateway.requests, 0);
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+  testWidgets(
+    'desktop opens APKs without the install gate',
+    (tester) async {
+      final gateway = _FakeGateway(true);
+      installPackagesGateway = gateway;
+      await tester.pumpWidget(_app());
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pump();
+      expect(find.text('Allow app installs?'), findsNothing);
+      // The gate must not even query permission_handler on non-Android hosts.
+      expect(gateway.checks, 0);
+      expect(gateway.requests, 0);
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 
-  testWidgets('the opener survives its page unmounting during the grant', (
-    tester,
-  ) async {
-    final gateway = _FakeGateway(false);
-    installPackagesGateway = gateway;
-    await tester.pumpWidget(_app());
-    await tester.tap(find.byKey(const ValueKey('open')));
-    await tester.pump();
-    await tester.tap(find.text('Open Settings'));
-    await tester.pump();
-    // The originating page goes away while the settings screen is up.
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(gateway.requests, 1);
-    expect(tester.takeException(), isNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  testWidgets(
+    'the opener survives its page unmounting during the grant',
+    (tester) async {
+      final gateway = _FakeGateway(false);
+      installPackagesGateway = gateway;
+      await tester.pumpWidget(_app());
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pump();
+      await tester.tap(find.text('Open Settings'));
+      await tester.pump();
+      // The originating page goes away while the settings screen is up.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(gateway.requests, 1);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
   test('the MIME map routes installs and common documents', () {
     expect(mimeForExtension('APK'), apkMime);
