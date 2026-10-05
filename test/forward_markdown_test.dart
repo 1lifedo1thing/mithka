@@ -11,11 +11,7 @@ ChatMessage _textMessage(String text, {List<Map<String, dynamic>>? entities}) =>
       'sender_id': {'@type': 'messageSenderUser', 'user_id': 2},
       'content': {
         '@type': 'messageText',
-        'text': {
-          '@type': 'formattedText',
-          'text': text,
-          if (entities != null) 'entities': entities,
-        },
+        'text': {'@type': 'formattedText', 'text': text, 'entities': ?entities},
       },
     })!;
 
