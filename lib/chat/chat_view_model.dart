@@ -19,6 +19,7 @@ import '../notifications/notification_settings_payload.dart';
 import '../settings/blocked_user_service.dart';
 import '../settings/hidden_sender_store.dart';
 import '../settings/keyword_blocker.dart';
+import '../tdlib/forum_topic_index.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -347,12 +348,19 @@ class ForumTopicOption {
     required this.name,
     this.iconCustomEmojiId = 0,
     this.iconColor = 0,
+    this.unreadCount = 0,
+    this.isMuted = false,
   });
 
   final int id;
   final String name;
   final int iconCustomEmojiId;
   final int iconColor;
+
+  /// Live unread messages in this topic, maintained through the shared topic
+  /// index; 0 when unknown.
+  final int unreadCount;
+  final bool isMuted;
 }
 
 class _DraftMention {
@@ -381,6 +389,12 @@ class ChatViewModel extends ChangeNotifier {
   }) : _accountClientId = TdClient.shared.activeClientId,
        _accountSlot = TdClient.shared.activeSlot,
        peerTitle = title {
+    // A pane rebuilt for another topic renders its rail from the shared index
+    // on the first frame; loadForumTopics refreshes it moments later.
+    final indexed = ForumTopicIndex.shared.topicsFor(_accountSlot, chatId);
+    if (indexed.isNotEmpty) {
+      forumTopics = [for (final entry in indexed) _optionFromIndex(entry)];
+    }
     _historyAnchorMessageId = initialMessageId ?? sessionAnchorMessageId;
     if (sessionMessages != null && sessionMessages.isNotEmpty) {
       _allMessages = List<ChatMessage>.from(sessionMessages);
@@ -402,6 +416,33 @@ class ChatViewModel extends ChangeNotifier {
   /// chat: history, search, drafts, sends and live updates are scoped to it.
   final int? forumTopicId;
   bool get isForumTopicTranscript => (forumTopicId ?? 0) != 0;
+
+  void _onForumTopicIndexChanged() {
+    // Only the rail is live-indexed here: a transcript's own unread state
+    // arrives through its chat-scoped updates, and topics of other chats
+    // never move this view model.
+    final indexed = ForumTopicIndex.shared.topicsFor(_accountSlot, chatId);
+    if (indexed.isEmpty) return;
+    if (indexed.length == forumTopics.length) {
+      var same = true;
+      for (var i = 0; i < indexed.length; i++) {
+        final entry = indexed[i];
+        final option = forumTopics[i];
+        if (entry.id != option.id ||
+            entry.unreadCount != option.unreadCount ||
+            entry.isMuted != option.isMuted ||
+            entry.name != option.name ||
+            entry.iconCustomEmojiId != option.iconCustomEmojiId ||
+            entry.iconColor != option.iconColor) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    forumTopics = [for (final entry in indexed) _optionFromIndex(entry)];
+    notifyListeners();
+  }
 
   Map<String, dynamic>? get _forumTopicRef => isForumTopicTranscript
       ? {'@type': 'messageTopicForum', 'forum_topic_id': forumTopicId}
@@ -1199,6 +1240,7 @@ class ChatViewModel extends ChangeNotifier {
     _isDisposed = true;
     KeywordBlocker.shared.removeListener(_applyKeywordFilter);
     HiddenSenderStore.shared.removeListener(_applyKeywordFilter);
+    ForumTopicIndex.shared.removeListener(_onForumTopicIndexChanged);
     _sub?.cancel();
     _typingTimer?.cancel();
     _draftSaveTimer?.cancel();
@@ -4020,6 +4062,7 @@ class ChatViewModel extends ChangeNotifier {
     if (!supportsTopics || forumTopicsLoading) return;
     forumTopicsLoading = true;
     notifyListeners();
+    ForumTopicIndex.shared.addListener(_onForumTopicIndexChanged);
     try {
       final response = await _client.query({
         '@type': 'getForumTopics',
@@ -4041,6 +4084,19 @@ class ChatViewModel extends ChangeNotifier {
             topic.str('name') ??
             AppStrings.t(AppStringKeys.topicChatTopicTitle);
         final icon = info.obj('icon') ?? topic.obj('icon');
+        final pageUnread =
+            topic.integer('unread_count') ?? info.integer('unread_count') ?? 0;
+        final live = ForumTopicIndex.shared.entryFor(_accountSlot, chatId, id);
+        final pageRead =
+            info.integer('last_read_inbox_message_id') ??
+            topic.integer('last_read_inbox_message_id') ??
+            0;
+        final pageLast = topic.obj('last_message')?.int64('id') ?? 0;
+        // A live counter that already saw newer traffic wins over the page's
+        // snapshot; otherwise the page is authoritative.
+        final unread = live != null && live.readsAheadOfPage(pageRead, pageLast)
+            ? live.unreadCount
+            : (pageUnread < 0 ? 0 : pageUnread);
         topics.add(
           ForumTopicOption(
             id: id,
@@ -4055,10 +4111,22 @@ class ChatViewModel extends ChangeNotifier {
                 info.integer('icon_color') ??
                 topic.integer('icon_color') ??
                 0,
+            unreadCount: unread,
+            isMuted:
+                (topic.obj('notification_settings')?.integer('mute_for') ?? 0) >
+                0,
           ),
         );
       }
       forumTopics = topics;
+      ForumTopicIndex.shared.storeAll(_accountSlot, chatId, [
+        for (final topic in raw) ?ForumTopicIndexEntry.fromTopic(topic),
+      ]);
+      // storeAll merged the live counters; show exactly what it kept.
+      final stored = ForumTopicIndex.shared.topicsFor(_accountSlot, chatId);
+      if (stored.isNotEmpty) {
+        forumTopics = [for (final entry in stored) _optionFromIndex(entry)];
+      }
     } catch (_) {
       forumTopics = const [];
     } finally {
@@ -4066,6 +4134,16 @@ class ChatViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  ForumTopicOption _optionFromIndex(ForumTopicIndexEntry entry) =>
+      ForumTopicOption(
+        id: entry.id,
+        name: entry.name,
+        iconCustomEmojiId: entry.iconCustomEmojiId,
+        iconColor: entry.iconColor,
+        unreadCount: entry.unreadCount,
+        isMuted: entry.isMuted,
+      );
 
   int? _forumTopicId(Map<String, dynamic> topic, Map<String, dynamic> info) {
     return info.integer('forum_topic_id') ??

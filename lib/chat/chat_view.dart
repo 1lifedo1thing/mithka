@@ -59,6 +59,7 @@ import '../settings/sensitive_content_controller.dart';
 import '../settings/topic_group_display_mode.dart';
 import '../settings/translation_api.dart';
 import '../settings/translation_controller.dart';
+import '../tdlib/forum_topic_index.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
@@ -1538,6 +1539,16 @@ class _ChatViewState extends State<ChatView> {
     _detachExitController?.call();
     _detachExitController = widget.exitController?.register(_prepareExitState);
   }
+
+  /// Whether this chat's topics are known — resolved live or seeded from the
+  /// process-wide index — so a pane rebuilt for another topic keeps its rail
+  /// instead of flashing an "All"-only strip until getChat resolves.
+  bool get _topicsKnown =>
+      _vm.supportsTopics ||
+      ForumTopicIndex.shared.knowsTopics(
+        _sessionKey.accountSlot,
+        widget.chatId,
+      );
 
   @override
   void didChangeDependencies() {
@@ -6420,7 +6431,7 @@ class _ChatViewState extends State<ChatView> {
   }
 
   Widget _withTopicNavigation(Widget child) {
-    if (!_vm.supportsTopics ||
+    if (!_topicsKnown ||
         !usesSplitSelectionLayout(MediaQuery.sizeOf(context))) {
       return child;
     }
@@ -6432,6 +6443,8 @@ class _ChatViewState extends State<ChatView> {
             name: topic.name,
             iconCustomEmojiId: topic.iconCustomEmojiId,
             iconColor: topic.iconColor,
+            unreadCount: topic.unreadCount,
+            isMuted: topic.isMuted,
           ),
       ],
       selectedTopicId: widget.forumTopicId,
@@ -7825,13 +7838,12 @@ class _ChatViewState extends State<ChatView> {
 
   /// Whether topics have a dedicated surface (topic feed mode).
   bool get _topicsFoldedIntoChat =>
-      _vm.supportsTopics &&
-      context.read<ThemeController>().forumTopicsAsGroupChat;
+      _topicsKnown && context.read<ThemeController>().forumTopicsAsGroupChat;
 
   /// Topics keep their dedicated surface — header chevron, topic picker, and
   /// the # header action — whenever the chat is a topic chat. In flattened
   /// mode the picker switches between topic transcripts instead of modes.
-  bool get _showsTopicSurfaces => _vm.supportsTopics;
+  bool get _showsTopicSurfaces => _topicsKnown;
 
   /// The join screen and a restricted peer both render the chat header over a
   /// page with no transcript behind it. Offering search there would open a
@@ -8083,6 +8095,22 @@ class _ChatViewState extends State<ChatView> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: c.textPrimary, fontSize: 16),
               ),
+              // The centered sheet variant lays tiles out at a narrow width;
+              // an unsized badge can exceed the whole row, so wrap it in a
+              // bounded box rather than handing the pill to ListTile directly.
+              trailing: topic == null || topic.unreadCount <= 0
+                  ? null
+                  : SizedBox(
+                      width: 64,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: UnreadBadge(
+                          key: ValueKey('topic-selector-unread-${topic.id}'),
+                          count: topic.unreadCount,
+                          muted: topic.isMuted,
+                        ),
+                      ),
+                    ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 if (context.read<ThemeController>().forumTopicsAsGroupChat) {
