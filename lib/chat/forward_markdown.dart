@@ -1,5 +1,5 @@
+import '../tdlib/json_helpers.dart';
 import '../tdlib/td_models.dart';
-import 'forward_options.dart';
 import 'rich_text_format.dart';
 
 /// Whether a plain text message carries literal Markdown markers that can be
@@ -91,6 +91,14 @@ ForwardMarkdownOffer forwardMarkdownOfferForMessage(ChatMessage message) {
     if (message.isService || !message.isPlainText) {
       return const ForwardMarkdownOffer.none();
     }
+    // Only genuinely unformatted text qualifies. isPlainText describes the
+    // content type, not the entity list: a message can already carry hidden
+    // links, custom emoji, mentions or spoilers while still showing literal
+    // markers. Re-authoring such text would parse only the markers and drop
+    // the existing entities, so those messages keep the regular forward.
+    if (message.textEntities.isNotEmpty || message.customEmoji.isNotEmpty) {
+      return const ForwardMarkdownOffer.none();
+    }
     if (message.richBlocks.any((block) => block.isTable)) {
       return const ForwardMarkdownOffer.none();
     }
@@ -118,18 +126,28 @@ Future<bool> sendMarkdownRichTextForward({
 }) async {
   try {
     if (text.trim().isEmpty) return false;
+    // A re-sent message is a copy of protected content. Unlike the server-
+    // enforced forward path, sendMessage no longer identifies the protected
+    // source, so permission must be verified up front and fail closed: only
+    // an explicit can_be_copied == true authorizes the re-send. A probe that
+    // errors or times out falls back to the regular forward instead.
+    final properties = await query({
+      '@type': 'getMessageProperties',
+      'chat_id': fromChatId,
+      'message_id': messageId,
+    });
+    if (properties.type == 'error' ||
+        properties.boolean('can_be_copied') != true) {
+      return false;
+    }
+    final chat = await query({'@type': 'getChat', 'chat_id': fromChatId});
+    if (chat.type == 'error' || chat.boolean('has_protected_content') == true) {
+      return false;
+    }
     final payload = await parseTelegramMarkdownWithTdLib(text, query: query);
     if (payload.entities.isEmpty) return false;
     final parsedText = payload.text;
     if (parsedText.trim().isEmpty || parsedText.length > 4096) return false;
-    // A re-sent message is a copy of protected content, so it must pass the same
-    // can_be_copied gate the send-copy forward path enforces.
-    await assertForwardAllowed(
-      query: query,
-      fromChatId: fromChatId,
-      messageIds: [messageId],
-      options: const ForwardOptions(removeSender: true),
-    );
     await query({
       '@type': 'sendMessage',
       'chat_id': targetChatId,
