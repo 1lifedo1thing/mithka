@@ -63,6 +63,9 @@ class _GroupManagementViewState extends State<GroupManagementView> {
 
   Map<String, bool> _permissions = _defaultPermissions;
 
+  // Default member permissions shown in the Posting Permissions section. The
+  // keys are TDLib 1.8.67 chatPermissions fields; can_create_topics is only
+  // meaningful in forum supergroups and is filtered out of the UI otherwise.
   static const _permissionLabels = <String, String>{
     'can_send_basic_messages':
         AppStringKeys.groupManagementPermissionSendMessages,
@@ -76,12 +79,15 @@ class _GroupManagementViewState extends State<GroupManagementView> {
     'can_send_polls': AppStringKeys.groupManagementPermissionSendPolls,
     'can_send_other_messages':
         AppStringKeys.groupManagementPermissionSendStickersAndGifs,
-    'can_add_web_page_previews':
+    'can_add_link_previews':
         AppStringKeys.groupManagementPermissionLinkPreviews,
+    'can_react_to_messages':
+        AppStringKeys.groupManagementPermissionSendReactions,
+    'can_edit_tag': AppStringKeys.groupManagementPermissionEditOwnTag,
     'can_invite_users': AppStringKeys.addMembersInviteMembersTitle,
     'can_pin_messages': AppStringKeys.groupManagementPermissionPinMessages,
     'can_change_info': AppStringKeys.groupManagementPermissionEditGroupInfo,
-    'can_manage_topics': AppStringKeys.groupManagementPermissionCreateTopics,
+    'can_create_topics': AppStringKeys.groupManagementPermissionCreateTopics,
   };
 
   static const _defaultPermissions = <String, bool>{
@@ -94,11 +100,13 @@ class _GroupManagementViewState extends State<GroupManagementView> {
     'can_send_audios': true,
     'can_send_polls': true,
     'can_send_other_messages': true,
-    'can_add_web_page_previews': true,
+    'can_add_link_previews': true,
+    'can_react_to_messages': true,
+    'can_edit_tag': true,
     'can_invite_users': true,
     'can_pin_messages': false,
     'can_change_info': false,
-    'can_manage_topics': true,
+    'can_create_topics': true,
   };
 
   @override
@@ -198,7 +206,11 @@ class _GroupManagementViewState extends State<GroupManagementView> {
       child: Column(
         children: [
           NavHeader(
-            title: AppStringKeys.chatInfoManageGroup,
+            title: AppStrings.t(
+              _isChannel
+                  ? AppStringKeys.chatInfoManageChannel
+                  : AppStringKeys.chatInfoManageGroup,
+            ),
             onBack: () => Navigator.of(context).pop(),
           ),
           Expanded(
@@ -425,7 +437,11 @@ class _GroupManagementViewState extends State<GroupManagementView> {
                             AppStringKeys.groupManagementPostingPermissions,
                           ),
                           [
-                            for (final entry in _permissionLabels.entries) ...[
+                            // can_create_topics is a member right only in
+                            // forum supergroups; hide it everywhere else.
+                            for (final entry in _permissionLabels.entries.where(
+                              (e) => e.key != 'can_create_topics' || _isForum,
+                            )) ...[
                               if (entry.key != _permissionLabels.keys.first)
                                 _divider(),
                               _switchRow(

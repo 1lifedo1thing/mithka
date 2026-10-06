@@ -849,6 +849,7 @@ abstract final class AppStringKeys {
   static const chatInfoGroupVideos = 'chatInfoGroupVideos';
   static const chatInfoLeaveGroup = 'chatInfoLeaveGroup';
   static const chatInfoLoadFoldersFailed = 'chatInfoLoadFoldersFailed';
+  static const chatInfoManageChannel = 'chatInfoManageChannel';
   static const chatInfoManageGroup = 'chatInfoManageGroup';
   static const chatInfoMoveToGroupAssistant = 'chatInfoMoveToGroupAssistant';
   static const chatInfoNewFolder = 'chatInfoNewFolder';
@@ -1741,6 +1742,8 @@ abstract final class AppStringKeys {
       'groupManagementPermissionCreateTopics';
   static const groupManagementPermissionEditGroupInfo =
       'groupManagementPermissionEditGroupInfo';
+  static const groupManagementPermissionEditOwnTag =
+      'groupManagementPermissionEditOwnTag';
   static const groupManagementPermissionLinkPreviews =
       'groupManagementPermissionLinkPreviews';
   static const groupManagementPermissionPinMessages =
@@ -1755,6 +1758,8 @@ abstract final class AppStringKeys {
       'groupManagementPermissionSendPhotos';
   static const groupManagementPermissionSendPolls =
       'groupManagementPermissionSendPolls';
+  static const groupManagementPermissionSendReactions =
+      'groupManagementPermissionSendReactions';
   static const groupManagementPermissionSendStickersAndGifs =
       'groupManagementPermissionSendStickersAndGifs';
   static const groupManagementPermissionSendVideoMessages =

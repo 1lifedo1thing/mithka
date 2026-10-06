@@ -907,6 +907,7 @@
     <string name="chatInfoGroupVideos">群組影片</string>
     <string name="chatInfoLeaveGroup">退出群組</string>
     <string name="chatInfoLoadFoldersFailed">無法載入聊天資料夾</string>
+    <string name="chatInfoManageChannel">管理頻道</string>
     <string name="chatInfoManageGroup">管理群組</string>
     <string name="chatInfoMoveToGroupAssistant">封存</string>
     <string name="chatInfoNewFolder">新增資料夾</string>
@@ -1682,6 +1683,7 @@
     <string name="groupManagementNotSet">未設定</string>
     <string name="groupManagementPermissionCreateTopics">建立話題</string>
     <string name="groupManagementPermissionEditGroupInfo">修改群組資料</string>
+    <string name="groupManagementPermissionEditOwnTag">修改自己的標籤</string>
     <string name="groupManagementPermissionLinkPreviews">連結預覽</string>
     <string name="groupManagementPermissionPinMessages">置頂訊息</string>
     <string name="groupManagementPermissionSendFiles">傳送檔案</string>
@@ -1689,6 +1691,7 @@
     <string name="groupManagementPermissionSendMusic">傳送音樂</string>
     <string name="groupManagementPermissionSendPhotos">傳送圖片</string>
     <string name="groupManagementPermissionSendPolls">傳送投票</string>
+    <string name="groupManagementPermissionSendReactions">傳送表情反應</string>
     <string name="groupManagementPermissionSendStickersAndGifs">傳送貼圖和 GIF</string>
     <string name="groupManagementPermissionSendVideoMessages">傳送視訊訊息</string>
     <string name="groupManagementPermissionSendVideos">傳送影片</string>

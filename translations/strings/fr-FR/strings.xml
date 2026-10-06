@@ -907,6 +907,7 @@
     <string name="chatInfoGroupVideos">Vidéos du groupe</string>
     <string name="chatInfoLeaveGroup">Quitter le groupe</string>
     <string name="chatInfoLoadFoldersFailed">Impossible de charger les dossiers de discussions</string>
+    <string name="chatInfoManageChannel">Gérer la chaîne</string>
     <string name="chatInfoManageGroup">Gérer le groupe</string>
     <string name="chatInfoMoveToGroupAssistant">Archiver</string>
     <string name="chatInfoNewFolder">Nouveau dossier</string>
@@ -1689,6 +1690,7 @@
     <string name="groupManagementNotSet">Non défini</string>
     <string name="groupManagementPermissionCreateTopics">Créer des sujets</string>
     <string name="groupManagementPermissionEditGroupInfo">Modifier les informations du groupe</string>
+    <string name="groupManagementPermissionEditOwnTag">Modifier son propre tag</string>
     <string name="groupManagementPermissionLinkPreviews">Aperçus des liens</string>
     <string name="groupManagementPermissionPinMessages">Épingler des messages</string>
     <string name="groupManagementPermissionSendFiles">Envoyer des fichiers</string>
@@ -1696,6 +1698,7 @@
     <string name="groupManagementPermissionSendMusic">Envoyer de la musique</string>
     <string name="groupManagementPermissionSendPhotos">Envoyer des images</string>
     <string name="groupManagementPermissionSendPolls">Envoyer des sondages</string>
+    <string name="groupManagementPermissionSendReactions">Envoyer des réactions</string>
     <string name="groupManagementPermissionSendStickersAndGifs">Envoyer des stickers et GIF</string>
     <string name="groupManagementPermissionSendVideoMessages">Envoyer des messages vidéo</string>
     <string name="groupManagementPermissionSendVideos">Envoyer des vidéos</string>

@@ -907,6 +907,7 @@
     <string name="chatInfoGroupVideos">グループ動画</string>
     <string name="chatInfoLeaveGroup">グループを退出</string>
     <string name="chatInfoLoadFoldersFailed">チャットフォルダを読み込めません</string>
+    <string name="chatInfoManageChannel">チャンネルを管理</string>
     <string name="chatInfoManageGroup">グループを管理</string>
     <string name="chatInfoMoveToGroupAssistant">アーカイブ</string>
     <string name="chatInfoNewFolder">新規フォルダ</string>
@@ -1682,6 +1683,7 @@
     <string name="groupManagementNotSet">未設定</string>
     <string name="groupManagementPermissionCreateTopics">トピックの作成</string>
     <string name="groupManagementPermissionEditGroupInfo">グループ情報の変更</string>
+    <string name="groupManagementPermissionEditOwnTag">自分のタグを編集</string>
     <string name="groupManagementPermissionLinkPreviews">リンクプレビュー</string>
     <string name="groupManagementPermissionPinMessages">メッセージの固定</string>
     <string name="groupManagementPermissionSendFiles">ファイルの送信</string>
@@ -1689,6 +1691,7 @@
     <string name="groupManagementPermissionSendMusic">音楽の送信</string>
     <string name="groupManagementPermissionSendPhotos">画像の送信</string>
     <string name="groupManagementPermissionSendPolls">投票の送信</string>
+    <string name="groupManagementPermissionSendReactions">リアクションを送信</string>
     <string name="groupManagementPermissionSendStickersAndGifs">ステッカーと GIF の送信</string>
     <string name="groupManagementPermissionSendVideoMessages">ビデオメッセージの送信</string>
     <string name="groupManagementPermissionSendVideos">動画の送信</string>

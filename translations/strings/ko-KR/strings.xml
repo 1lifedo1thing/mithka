@@ -907,6 +907,7 @@
     <string name="chatInfoGroupVideos">그룹 동영상</string>
     <string name="chatInfoLeaveGroup">그룹 나가기</string>
     <string name="chatInfoLoadFoldersFailed">채팅 폴더를 불러올 수 없습니다</string>
+    <string name="chatInfoManageChannel">채널 관리</string>
     <string name="chatInfoManageGroup">그룹 관리</string>
     <string name="chatInfoMoveToGroupAssistant">보관</string>
     <string name="chatInfoNewFolder">새 폴더</string>
@@ -1682,6 +1683,7 @@
     <string name="groupManagementNotSet">설정 안 됨</string>
     <string name="groupManagementPermissionCreateTopics">주제 만들기</string>
     <string name="groupManagementPermissionEditGroupInfo">그룹 정보 수정</string>
+    <string name="groupManagementPermissionEditOwnTag">자신의 태그 편집</string>
     <string name="groupManagementPermissionLinkPreviews">링크 미리보기</string>
     <string name="groupManagementPermissionPinMessages">메시지 고정</string>
     <string name="groupManagementPermissionSendFiles">파일 보내기</string>
@@ -1689,6 +1691,7 @@
     <string name="groupManagementPermissionSendMusic">음악 보내기</string>
     <string name="groupManagementPermissionSendPhotos">사진 보내기</string>
     <string name="groupManagementPermissionSendPolls">투표 보내기</string>
+    <string name="groupManagementPermissionSendReactions">리액션 보내기</string>
     <string name="groupManagementPermissionSendStickersAndGifs">스티커 및 GIF 보내기</string>
     <string name="groupManagementPermissionSendVideoMessages">동영상 메시지 보내기</string>
     <string name="groupManagementPermissionSendVideos">동영상 보내기</string>

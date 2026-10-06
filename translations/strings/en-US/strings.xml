@@ -907,6 +907,7 @@
     <string name="chatInfoGroupVideos">Group videos</string>
     <string name="chatInfoLeaveGroup">Leave group</string>
     <string name="chatInfoLoadFoldersFailed">Couldn’t load chat folders</string>
+    <string name="chatInfoManageChannel">Manage channel</string>
     <string name="chatInfoManageGroup">Manage group</string>
     <string name="chatInfoMoveToGroupAssistant">Archive</string>
     <string name="chatInfoNewFolder">New folder</string>
@@ -1689,6 +1690,7 @@
     <string name="groupManagementNotSet">Not set</string>
     <string name="groupManagementPermissionCreateTopics">Create topics</string>
     <string name="groupManagementPermissionEditGroupInfo">Edit group info</string>
+    <string name="groupManagementPermissionEditOwnTag">Edit own tag</string>
     <string name="groupManagementPermissionLinkPreviews">Link previews</string>
     <string name="groupManagementPermissionPinMessages">Pin messages</string>
     <string name="groupManagementPermissionSendFiles">Send files</string>
@@ -1696,6 +1698,7 @@
     <string name="groupManagementPermissionSendMusic">Send music</string>
     <string name="groupManagementPermissionSendPhotos">Send photos</string>
     <string name="groupManagementPermissionSendPolls">Send polls</string>
+    <string name="groupManagementPermissionSendReactions">Send reactions</string>
     <string name="groupManagementPermissionSendStickersAndGifs">Send stickers and GIFs</string>
     <string name="groupManagementPermissionSendVideoMessages">Send video messages</string>
     <string name="groupManagementPermissionSendVideos">Send videos</string>
