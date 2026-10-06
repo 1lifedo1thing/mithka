@@ -88,6 +88,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
   bool _canPromote = false;
   bool _canManageTags = false;
   bool _isCreator = false;
+  bool _isChannel = false;
   int? _openRowId;
 
   @override
@@ -104,6 +105,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
       });
       final type = chat.obj('type');
       await _loadSelfPermissions();
+      _isChannel =
+          type?.type == 'chatTypeSupergroup' &&
+          (type?.boolean('is_channel') ?? false);
       List<Map<String, dynamic>> raw = [];
       if (type?.type == 'chatTypeBasicGroup') {
         final gid = type?.int64('basic_group_id');
@@ -277,6 +281,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           status: member.rawStatus,
           canEdit: _canPromote && member.role != MemberRole.owner,
           canTransferOwnership: _isCreator && member.role != MemberRole.owner,
+          isChannel: _isChannel,
         ),
       ),
     );

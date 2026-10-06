@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">刪除訊息</string>
     <string name="chatAdminManageChat">管理群組</string>
     <string name="chatAdminManageVideoChats">管理視訊聊天</string>
+    <string name="chatAdminPermissionPostMessages">發布訊息</string>
+    <string name="chatAdminPermissionEditMessages">編輯訊息</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">編輯他人訊息</string>
+    <string name="chatAdminPermissionPostStories">發布短片</string>
+    <string name="chatAdminPermissionEditStories">編輯短片</string>
+    <string name="chatAdminPermissionDeleteStories">刪除短片</string>
+    <string name="chatAdminPermissionManageDirectMessages">管理直接訊息</string>
+    <string name="chatAdminPermissionManageTags">管理成員標籤</string>
+    <string name="chatAdminPermissionChangeInfoGroup">修改群組資訊</string>
+    <string name="chatAdminPermissionChangeInfoChannel">修改頻道資訊</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">刪除他人訊息</string>
     <string name="chatAdminPromoteMembers">新增管理員</string>
     <string name="chatAdminRestrictMembers">限制成員</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">無法轉移所有權。檢查密碼。</string>

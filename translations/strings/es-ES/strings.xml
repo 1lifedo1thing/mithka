@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">Eliminar mensajes</string>
     <string name="chatAdminManageChat">Administrar chat</string>
     <string name="chatAdminManageVideoChats">Administrar videochats</string>
+    <string name="chatAdminPermissionPostMessages">Publicar mensajes</string>
+    <string name="chatAdminPermissionEditMessages">Editar mensajes</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">Editar mensajes de otros</string>
+    <string name="chatAdminPermissionPostStories">Publicar historias</string>
+    <string name="chatAdminPermissionEditStories">Editar historias</string>
+    <string name="chatAdminPermissionDeleteStories">Eliminar historias</string>
+    <string name="chatAdminPermissionManageDirectMessages">Gestionar mensajes directos</string>
+    <string name="chatAdminPermissionManageTags">Gestionar etiquetas de miembros</string>
+    <string name="chatAdminPermissionChangeInfoGroup">Cambiar la información del grupo</string>
+    <string name="chatAdminPermissionChangeInfoChannel">Cambiar la información del canal</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">Eliminar mensajes de otros</string>
     <string name="chatAdminPromoteMembers">Añadir administradores</string>
     <string name="chatAdminRestrictMembers">Restringir miembros</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">No se pudo transferir la propiedad. Verifique la contraseña.</string>

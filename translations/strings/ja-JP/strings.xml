@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">メッセージを削除</string>
     <string name="chatAdminManageChat">チャットを管理</string>
     <string name="chatAdminManageVideoChats">ビデオチャットを管理</string>
+    <string name="chatAdminPermissionPostMessages">メッセージを投稿</string>
+    <string name="chatAdminPermissionEditMessages">メッセージを編集</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">他の人のメッセージを編集</string>
+    <string name="chatAdminPermissionPostStories">ストーリーを投稿</string>
+    <string name="chatAdminPermissionEditStories">ストーリーを編集</string>
+    <string name="chatAdminPermissionDeleteStories">ストーリーを削除</string>
+    <string name="chatAdminPermissionManageDirectMessages">ダイレクトメッセージを管理</string>
+    <string name="chatAdminPermissionManageTags">メンバータグを管理</string>
+    <string name="chatAdminPermissionChangeInfoGroup">グループ情報を変更</string>
+    <string name="chatAdminPermissionChangeInfoChannel">チャンネル情報を変更</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">他の人のメッセージを削除</string>
     <string name="chatAdminPromoteMembers">管理者を追加</string>
     <string name="chatAdminRestrictMembers">メンバーを制限</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">所有権を譲渡できませんでした。パスワードを確認してください。</string>

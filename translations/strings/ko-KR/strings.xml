@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">메시지 삭제</string>
     <string name="chatAdminManageChat">채팅 관리</string>
     <string name="chatAdminManageVideoChats">영상 채팅 관리</string>
+    <string name="chatAdminPermissionPostMessages">메시지 게시</string>
+    <string name="chatAdminPermissionEditMessages">메시지 편집</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">다른 사람의 메시지 편집</string>
+    <string name="chatAdminPermissionPostStories">스토리 게시</string>
+    <string name="chatAdminPermissionEditStories">스토리 편집</string>
+    <string name="chatAdminPermissionDeleteStories">스토리 삭제</string>
+    <string name="chatAdminPermissionManageDirectMessages">다이렉트 메시지 관리</string>
+    <string name="chatAdminPermissionManageTags">멤버 태그 관리</string>
+    <string name="chatAdminPermissionChangeInfoGroup">그룹 정보 변경</string>
+    <string name="chatAdminPermissionChangeInfoChannel">채널 정보 변경</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">다른 사람의 메시지 삭제</string>
     <string name="chatAdminPromoteMembers">새 관리자 추가</string>
     <string name="chatAdminRestrictMembers">멤버 제한</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">소유권을 이전할 수 없습니다. 비밀번호를 확인하세요.</string>

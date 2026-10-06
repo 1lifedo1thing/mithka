@@ -753,6 +753,27 @@ abstract final class AppStringKeys {
   static const chatAdminDeleteMessages = 'chatAdminDeleteMessages';
   static const chatAdminManageChat = 'chatAdminManageChat';
   static const chatAdminManageVideoChats = 'chatAdminManageVideoChats';
+  static const chatAdminPermissionChangeInfoChannel =
+      'chatAdminPermissionChangeInfoChannel';
+  static const chatAdminPermissionChangeInfoGroup =
+      'chatAdminPermissionChangeInfoGroup';
+  static const chatAdminPermissionDeleteMessagesOfOthers =
+      'chatAdminPermissionDeleteMessagesOfOthers';
+  static const chatAdminPermissionDeleteStories =
+      'chatAdminPermissionDeleteStories';
+  static const chatAdminPermissionEditMessages =
+      'chatAdminPermissionEditMessages';
+  static const chatAdminPermissionEditMessagesOfOthers =
+      'chatAdminPermissionEditMessagesOfOthers';
+  static const chatAdminPermissionEditStories =
+      'chatAdminPermissionEditStories';
+  static const chatAdminPermissionManageDirectMessages =
+      'chatAdminPermissionManageDirectMessages';
+  static const chatAdminPermissionManageTags = 'chatAdminPermissionManageTags';
+  static const chatAdminPermissionPostMessages =
+      'chatAdminPermissionPostMessages';
+  static const chatAdminPermissionPostStories =
+      'chatAdminPermissionPostStories';
   static const chatAdminPromoteMembers = 'chatAdminPromoteMembers';
   static const chatAdminRestrictMembers = 'chatAdminRestrictMembers';
   static const chatAdminsOnlyPosting = 'chatAdminsOnlyPosting';
