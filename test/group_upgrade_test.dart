@@ -14,7 +14,7 @@ void main() {
 
   final requests = <Map<String, dynamic>>[];
   var basicUpgraded = false;
-  Map<String, dynamic> selfStatus = {'@type': 'chatMemberStatusCreator'};
+  final Map<String, dynamic> selfStatus = {'@type': 'chatMemberStatusCreator'};
 
   setUpAll(() {
     TdClient.shared.configureProxy(
