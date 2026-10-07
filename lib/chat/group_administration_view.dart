@@ -24,10 +24,17 @@ class GroupAdvancedAdministrationView extends StatefulWidget {
     super.key,
     required this.chatId,
     required this.supergroupId,
+    @visibleForTesting this.fullInfoQuery,
   });
 
   final int chatId;
   final int supergroupId;
+
+  /// Test-only seam over the full-info query, so widget tests can hold,
+  /// fail or delay it without a real TdClient proxy. Production loads use
+  /// [GroupAdministrationService].
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function(int supergroupId)? fullInfoQuery;
 
   @override
   State<GroupAdvancedAdministrationView> createState() =>
@@ -55,6 +62,18 @@ class _GroupAdvancedAdministrationViewState
   String _description = '';
   int _slowMode = 0;
   int _linkedChatId = 0;
+
+  /// Lifecycle of the full-info-backed values. The page renders from the
+  /// local database immediately, but description, slow mode, the linked
+  /// discussion group, the new-member history toggle and the photo flag
+  /// are only known once getSupergroupFullInfo lands; their editors stay
+  /// disabled until then so a save can never overwrite real configuration
+  /// with an unloaded default.
+  int _fullInfoEpoch = 0;
+  bool _fullInfoLoading = true;
+  bool _fullInfoFailed = false;
+
+  bool get _fullInfoKnown => !_fullInfoLoading && !_fullInfoFailed;
   Map<String, dynamic> _availableReactions = const {
     '@type': 'chatAvailableReactionsAll',
     'max_reaction_count': 11,
@@ -115,11 +134,17 @@ class _GroupAdvancedAdministrationViewState
   }
 
   Future<void> _loadFullInfo() async {
+    final epoch = ++_fullInfoEpoch;
+    setState(() {
+      _fullInfoLoading = true;
+      _fullInfoFailed = false;
+    });
     try {
-      final full = await _service
-          .getSupergroupFullInfo(widget.supergroupId)
-          .timeout(const Duration(seconds: 15));
-      if (!mounted) return;
+      final full =
+          await (widget.fullInfoQuery ?? _service.getSupergroupFullInfo)(
+            widget.supergroupId,
+          ).timeout(const Duration(seconds: 15));
+      if (!mounted || epoch != _fullInfoEpoch) return;
       setState(() {
         _slowMode = full.integer('slow_mode_delay') ?? 0;
         _linkedChatId = full.int64('linked_chat_id') ?? 0;
@@ -132,12 +157,17 @@ class _GroupAdvancedAdministrationViewState
             full.boolean('is_all_history_available') ?? false;
         _description = full.str('description') ?? '';
         _hasPhoto = full.obj('photo') != null;
+        _fullInfoLoading = false;
       });
     } catch (_) {
-      // Rows gated on full-info capability flags stay hidden until a later
-      // visit succeeds; everything else on the page keeps working.
+      if (!mounted || epoch != _fullInfoEpoch) return;
+      // The full-info-backed editors stay disabled and a retry card is
+      // offered; everything else on the page keeps working.
+      setState(() => _fullInfoFailed = true);
     }
   }
+
+  Future<void> _retryFullInfo() => _loadFullInfo();
 
   Future<void> _setProtected(bool value) async {
     final previous = _protectedContent;
@@ -503,7 +533,10 @@ class _GroupAdvancedAdministrationViewState
                       size: 21,
                       color: context.colors.textSecondary,
                     ),
-                    onTap: _editDescription,
+                    // The current description is only known from full
+                    // info; editing before it arrives would save a blank
+                    // value over the real one.
+                    onTap: _fullInfoKnown ? _editDescription : null,
                   ),
                   _AdminNavRow(
                     title: _hasPhoto
@@ -514,7 +547,9 @@ class _GroupAdvancedAdministrationViewState
                       size: 21,
                       color: context.colors.textSecondary,
                     ),
-                    onTap: _changePhoto,
+                    // Whether a photo exists at all comes from full info;
+                    // the remove action would misfire without it.
+                    onTap: _fullInfoKnown ? _changePhoto : null,
                   ),
                   if (_hasPhoto)
                     _AdminNavRow(
@@ -536,7 +571,8 @@ class _GroupAdvancedAdministrationViewState
                     _AdminNavRow(
                       title: AppStringKeys.groupAdminSlowMode.l10n(context),
                       value: _slowModeLabel(context, _slowMode),
-                      onTap: _pickSlowMode,
+                      // The current delay is only known from full info.
+                      onTap: _fullInfoKnown ? _pickSlowMode : null,
                     ),
                   _AdminSwitchRow(
                     title: AppStringKeys.groupAdminProtectContent.l10n(context),
@@ -578,7 +614,9 @@ class _GroupAdvancedAdministrationViewState
                       value: _linkedChatId == 0
                           ? AppStringKeys.groupAdminNotLinked.l10n(context)
                           : AppStringKeys.groupAdminLinked.l10n(context),
-                      onTap: _openDiscussion,
+                      // Which group is linked is only known from full
+                      // info.
+                      onTap: _fullInfoKnown ? _openDiscussion : null,
                     ),
                   if (_canHideMembers)
                     _AdminSwitchRow(
@@ -608,7 +646,10 @@ class _GroupAdvancedAdministrationViewState
                         context,
                       ),
                       value: _allHistoryAvailable,
-                      onChanged: _setHistory,
+                      // The current availability is only known from full
+                      // info; flipping it blind would rewrite the group's
+                      // history setting.
+                      onChanged: _fullInfoKnown ? _setHistory : null,
                     ),
                   if (_forumToggleApplies)
                     _AdminSwitchRow(
@@ -621,6 +662,41 @@ class _GroupAdvancedAdministrationViewState
                       title: AppStringKeys.groupAdminTopicTabs.l10n(context),
                       value: _hasForumTabs,
                       onChanged: _setForumTabs,
+                    ),
+                  if (_fullInfoFailed)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              AppStrings.t(
+                                AppStringKeys.groupManagementLoadFailed,
+                              ),
+                              style: AppTextStyle.footnote(
+                                context.colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            key: const ValueKey('group-admin-full-info-retry'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _retryFullInfo,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              child: Text(
+                                AppStrings.t(
+                                  AppStringKeys.groupManagementRetry,
+                                ),
+                                style: AppTextStyle.footnote(AppTheme.brand),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                 ],
               ),
@@ -2752,7 +2828,10 @@ class _AdminSwitchRow extends StatelessWidget {
 
   final String title;
   final bool value;
-  final ValueChanged<bool> onChanged;
+
+  /// Passing null disables the row: the value shown is not known yet, so
+  /// flipping it could overwrite real configuration.
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -2764,7 +2843,11 @@ class _AdminSwitchRow extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: AppTextStyle.bodyLarge(context.colors.textPrimary),
+              style: AppTextStyle.bodyLarge(
+                onChanged == null
+                    ? context.colors.textTertiary
+                    : context.colors.textPrimary,
+              ),
             ),
           ),
           _AdminToggle(value: value, onChanged: onChanged),
@@ -2775,15 +2858,18 @@ class _AdminSwitchRow extends StatelessWidget {
 }
 
 class _AdminToggle extends StatelessWidget {
-  const _AdminToggle({required this.value, required this.onChanged});
+  const _AdminToggle({required this.value, this.onChanged});
 
   final bool value;
-  final ValueChanged<bool> onChanged;
+
+  /// Passing null disables the toggle: the value shown is not known yet,
+  /// so tapping it must not dispatch a change.
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
     behavior: HitTestBehavior.opaque,
-    onTap: () => onChanged(!value),
+    onTap: onChanged == null ? null : () => onChanged!(!value),
     child: AnimatedContainer(
       duration: const Duration(milliseconds: 160),
       curve: Curves.easeOut,

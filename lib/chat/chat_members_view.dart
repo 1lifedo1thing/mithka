@@ -486,9 +486,10 @@ class _ChatMembersViewState extends State<ChatMembersView> {
         '@type': 'setChatMemberStatus',
         'chat_id': widget.chatId,
         'member_id': {'@type': 'messageSenderUser', 'user_id': m.id},
-        // A member status lifts the ban without re-adding the user; they
-        // return to "left" and can rejoin on their own.
-        'status': {'@type': 'chatMemberStatusMember'},
+        // Left lifts the ban without requesting membership: a Member
+        // status would re-add the user to the group. TDLib's own clients
+        // unban with Left; the user rejoins on their own when they want.
+        'status': {'@type': 'chatMemberStatusLeft'},
       });
       if (!mounted) return;
       setState(() {
