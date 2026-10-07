@@ -85,7 +85,7 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: GroupManagementView(chatId: 42, title: 'Group'),
+          home: const GroupManagementView(chatId: 42, title: 'Group'),
         ),
       ),
     );
