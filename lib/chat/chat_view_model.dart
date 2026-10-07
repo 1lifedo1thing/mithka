@@ -575,12 +575,6 @@ class ChatViewModel extends ChangeNotifier {
     return (request: request, revision: revision);
   }
 
-  bool _consumeReplyAnchor() {
-    if (replyTo == null) return false;
-    replyTo = null;
-    return true;
-  }
-
   /// Consumes the pending reply only if it is still the one [revision]
   /// stamped. A newer selection survives; a consumed anchor reports false.
   bool _consumeReplyAnchorIfCurrent(int revision) {
