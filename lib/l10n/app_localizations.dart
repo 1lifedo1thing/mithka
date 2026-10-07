@@ -1823,6 +1823,13 @@ abstract final class AppStringKeys {
   static const groupManagementPublicUsername = 'groupManagementPublicUsername';
   static const groupManagementReadOnly = 'groupManagementReadOnly';
   static const groupManagementSetFailed = 'groupManagementSetFailed';
+  static const groupManagementUpgradeConfirmMessage =
+      'groupManagementUpgradeConfirmMessage';
+  static const groupManagementUpgradeConfirmTitle =
+      'groupManagementUpgradeConfirmTitle';
+  static const groupManagementUpgradeFailed = 'groupManagementUpgradeFailed';
+  static const groupManagementUpgradeToSupergroup =
+      'groupManagementUpgradeToSupergroup';
   static const groupManagementUsernameUnavailableOrForbidden =
       'groupManagementUsernameUnavailableOrForbidden';
   static const imageEditAdd = 'imageEditAdd';

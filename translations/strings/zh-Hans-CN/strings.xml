@@ -1736,6 +1736,10 @@
     <string name="groupManagementRetry">重试</string>
     <string name="groupManagementSetFailed">设置失败</string>
     <string name="groupManagementStatistics">统计</string>
+    <string name="groupManagementUpgradeConfirmMessage">群组将升级为超级群，原基本群会被停用，聊天会迁移到新的超级群。此操作无法撤销。</string>
+    <string name="groupManagementUpgradeConfirmTitle">转换为超级群？</string>
+    <string name="groupManagementUpgradeFailed">无法转换群组。</string>
+    <string name="groupManagementUpgradeToSupergroup">转换为超级群</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">用户名不可用或没有权限</string>
     <string name="hiddenSendersEmpty">没有隐藏任何人。在群组中，可从消息菜单选择“隐藏此人”。</string>
     <string name="hiddenSendersEverywhere">所有聊天</string>

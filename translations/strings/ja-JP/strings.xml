@@ -1736,6 +1736,10 @@
     <string name="groupManagementRetry">再試行</string>
     <string name="groupManagementSetFailed">設定に失敗しました</string>
     <string name="groupManagementStatistics">統計</string>
+    <string name="groupManagementUpgradeConfirmMessage">グループはスーパーグループにアップグレードされます。元の基本グループは無効化され、チャットは新しいスーパーグループに移行します。この操作は取り消せません。</string>
+    <string name="groupManagementUpgradeConfirmTitle">スーパーグループに変換しますか？</string>
+    <string name="groupManagementUpgradeFailed">グループを変換できませんでした。</string>
+    <string name="groupManagementUpgradeToSupergroup">スーパーグループに変換</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">ユーザー名は使用できないか、権限がありません</string>
     <string name="hiddenSendersEmpty">非表示のメンバーはいません。グループでメッセージのメニューから「この人を非表示」を選べます。</string>
     <string name="hiddenSendersEverywhere">すべてのチャット</string>
