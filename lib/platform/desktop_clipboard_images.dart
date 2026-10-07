@@ -38,9 +38,15 @@ class DesktopClipboardImageService {
 
   static const _channel = MethodChannel('mithka/clipboard');
 
-  /// Places bitmap data on the macOS pasteboard so other apps can paste the
-  /// photo itself instead of receiving a local TDLib file URL.
+  /// Whether this platform can place raw image bytes on the system clipboard.
+  /// macOS has its own handler; iOS and Android answer the same channel.
+  static bool get canWriteImage =>
+      Platform.isMacOS || Platform.isIOS || Platform.isAndroid;
+
+  /// Places bitmap data on the pasteboard so other apps can paste the photo
+  /// itself instead of receiving a local TDLib file URL.
   static Future<bool> copyImageFile(File file) async {
+    if (!canWriteImage) return false;
     if (!await file.exists()) return false;
     try {
       final data = await file.readAsBytes();

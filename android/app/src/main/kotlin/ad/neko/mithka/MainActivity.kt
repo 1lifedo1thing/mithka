@@ -1,9 +1,10 @@
 package ad.neko.mithka
 
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
-import android.content.ClipDescription
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -376,6 +377,36 @@ class MainActivity : FlutterFragmentActivity() {
             .setMethodCallHandler { call, result ->
                 var clipboardDescription: ClipDescription? = null
                 val requestedMimeType: String?
+                if (call.method == "writeImage") {
+                    val bytes = call.arguments as? ByteArray
+                    if (bytes == null || bytes.isEmpty()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    val mimeType = when {
+                        bytes.size >= 4 && bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() &&
+                            bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte() -> "image/png"
+                        bytes.size >= 4 && bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte() &&
+                            bytes[2] == 0x46.toByte() && bytes[3] == 0x38.toByte() -> "image/gif"
+                        bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() &&
+                            bytes[2] == 0xFF.toByte() -> "image/jpeg"
+                        bytes.size >= 12 && bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() &&
+                            bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte() &&
+                            bytes[8] == 0x57.toByte() && bytes[9] == 0x45.toByte() &&
+                            bytes[10] == 0x42.toByte() && bytes[11] == 0x50.toByte() -> "image/webp"
+                        else -> {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                    }
+                    val clipboard =
+                        getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(
+                        ClipData.newRawMimeType(mimeType, bytes)
+                    )
+                    result.success(true)
+                    return@setMethodCallHandler
+                }
                 val uri = when (call.method) {
                     "readImage" -> {
                         val clipboard =

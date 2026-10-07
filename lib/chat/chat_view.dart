@@ -4750,6 +4750,29 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  ImageViewerMessageActions? _imageMessageActions(List<ChatMessage> pairs) {
+    if (widget.chatId <= 0) return null;
+    return ImageViewerMessageActions(
+      messageIds: [for (final m in pairs) m.id],
+      onViewInChat: (messageId) async => _jumpToMessage(messageId),
+      onReply: (messageId) async => _jumpToMessage(messageId, reply: true),
+    );
+  }
+
+  Future<void> _jumpToMessage(int messageId, {bool reply = false}) async {
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).popUntil((route) {
+        final name = route.settings.name;
+        return route is PageRoute && (name == null || name != '/');
+      });
+    }
+    if (!mounted) return;
+    setState(() => _setScrollTarget(messageId, forceNavigation: true));
+    if (!reply) return;
+    final target = _vm.messages.where((m) => m.id == messageId).firstOrNull;
+    if (target != null) _vm.setReply(target);
+  }
+
   void _openImage(ChatMessage message) {
     final pairs = _vm.messages
         .where(
@@ -4766,6 +4789,7 @@ class _ChatViewState extends State<ChatView> {
         context,
         items: items,
         startIndex: start < 0 ? 0 : start,
+        messageActions: _imageMessageActions(pairs),
       ),
     );
   }
@@ -4774,6 +4798,9 @@ class _ChatViewState extends State<ChatView> {
     required List<TdFileRef> items,
     required int startIndex,
   }) {
+    // The bubble gallery hands over a collage/slideshow's photo list without
+    // message ids; those items came from a single message, so anchoring the
+    // jump on any of them is meaningless. View in Chat stays hidden.
     unawaited(openImagePreview(context, items: items, startIndex: startIndex));
   }
 
