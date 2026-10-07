@@ -880,6 +880,8 @@
     <string name="chatForwardProtected">Diese Nachricht ist geschützt und kann nicht weitergeleitet werden</string>
     <string name="chatForwardRemoveCaption">Beschriftung entfernen</string>
     <string name="chatForwardRemoveSender">Absender ausblenden</string>
+    <string name="chatForwardRenderMarkdown">Markdown beim Weiterleiten darstellen</string>
+    <string name="chatForwardRenderMarkdownPremium">Markdown beim Weiterleiten erfordert Telegram Premium</string>
     <string name="chatForwardToTitle">Weiterleiten an</string>
     <string name="chatForwardedToName">Weitergeleitet an {value1}</string>
     <string name="chatInfoAlbum">Album</string>
@@ -1458,6 +1460,8 @@
     <string name="generalNetworkUsage">Netzwerknutzung</string>
     <string name="generalOpenChatAtLatestMessage">Chat mit neuester Nachricht öffnen</string>
     <string name="generalRepeatPreserveSender">Absender bei +1 beibehalten</string>
+    <string name="generalForwardRichMarkdown">Markdown beim Weiterleiten darstellen</string>
+    <string name="generalForwardRichMarkdownHint">Bei Markdown-Texten (z. B. KI-Antworten) Weiterleitung als Rich Text anbieten</string>
     <string name="generalSaveCapturedPhotos">Aufgenommene Fotos im System-Album speichern</string>
     <string name="generalSaveCapturedPhotosHint">Aus: Fotos werden mit der App-Kamera aufgenommen und gelangen nie ins Album.</string>
     <string name="generalSendMessageWithEnter">Nachricht mit Eingabetaste senden</string>

@@ -1151,6 +1151,8 @@ class ThemeController extends ChangeNotifier {
         _prefs.getBool(_showSavedMessagesIdentityKey) ?? false;
     _preserveSenderWhenRepeating =
         _prefs.getBool(_preserveSenderWhenRepeatingKey) ?? true;
+    // Markdown detection is heuristic, so rich-text forwarding stays opt-in.
+    _forwardRichMarkdown = _prefs.getBool(_forwardRichMarkdownKey) ?? false;
     _quickRepliesEnabled = _prefs.getBool(_quickRepliesEnabledKey) ?? true;
     final storedQuickReactions = _prefs.getStringList(_quickReactionsKey);
     _quickReactions = storedQuickReactions == null
@@ -1263,6 +1265,7 @@ class ThemeController extends ChangeNotifier {
   static const _linkOpenModeKey = 'linkOpenMode.v1';
   static const _showSavedMessagesIdentityKey = 'showSavedMessagesIdentity';
   static const _preserveSenderWhenRepeatingKey = 'preserveSenderWhenRepeating';
+  static const _forwardRichMarkdownKey = 'forwardRichMarkdown';
   static const _quickRepliesEnabledKey = 'quickRepliesEnabled';
   static const _quickReactionsKey = 'quickReactions';
   static const _groupImageMessagesKey = 'groupImageMessages';
@@ -1348,6 +1351,7 @@ class ThemeController extends ChangeNotifier {
   late LinkOpenMode _linkOpenMode;
   bool _showSavedMessagesIdentity = false;
   bool _preserveSenderWhenRepeating = true;
+  bool _forwardRichMarkdown = false;
   bool _quickRepliesEnabled = true;
   late List<QuickReactionChoice> _quickReactions;
   bool _groupImageMessages = true;
@@ -1807,6 +1811,7 @@ class ThemeController extends ChangeNotifier {
   LinkOpenMode get linkOpenMode => _linkOpenMode;
   bool get showSavedMessagesIdentity => _showSavedMessagesIdentity;
   bool get preserveSenderWhenRepeating => _preserveSenderWhenRepeating;
+  bool get forwardRichMarkdown => _forwardRichMarkdown;
   bool get quickRepliesEnabled => _quickRepliesEnabled;
   List<QuickReactionChoice> get quickReactions =>
       List.unmodifiable(_quickReactions);
@@ -2681,6 +2686,13 @@ class ThemeController extends ChangeNotifier {
     if (_preserveSenderWhenRepeating == value) return;
     _preserveSenderWhenRepeating = value;
     _prefs.setBool(_preserveSenderWhenRepeatingKey, value);
+    notifyListeners();
+  }
+
+  set forwardRichMarkdown(bool value) {
+    if (_forwardRichMarkdown == value) return;
+    _forwardRichMarkdown = value;
+    _prefs.setBool(_forwardRichMarkdownKey, value);
     notifyListeners();
   }
 

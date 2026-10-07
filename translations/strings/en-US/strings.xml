@@ -880,6 +880,8 @@
     <string name="chatForwardProtected">This message is protected and can’t be forwarded</string>
     <string name="chatForwardRemoveCaption">Remove caption</string>
     <string name="chatForwardRemoveSender">Remove sender</string>
+    <string name="chatForwardRenderMarkdown">Render Markdown when forwarding</string>
+    <string name="chatForwardRenderMarkdownPremium">Rendering Markdown when forwarding needs Telegram Premium</string>
     <string name="chatForwardToTitle">Forward to</string>
     <string name="chatForwardedToName">Forwarded to {value1}</string>
     <string name="chatInfoAlbum">Album</string>
@@ -1458,6 +1460,8 @@
     <string name="generalNetworkUsage">Network usage</string>
     <string name="generalOpenChatAtLatestMessage">Open chats at latest message</string>
     <string name="generalRepeatPreserveSender">Preserve sender when using +1</string>
+    <string name="generalForwardRichMarkdown">Render Markdown when forwarding</string>
+    <string name="generalForwardRichMarkdownHint">Offer to send Markdown-formatted text (like AI replies) as rich text</string>
     <string name="generalSaveCapturedPhotos">Save captured photos to the system album</string>
     <string name="generalSaveCapturedPhotosHint">When off, photos are taken with the in-app camera and never reach the album.</string>
     <string name="generalSendMessageWithEnter">Send messages with Enter</string>

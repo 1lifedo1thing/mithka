@@ -880,6 +880,8 @@
     <string name="chatForwardProtected">このメッセージは保護されているため転送できません</string>
     <string name="chatForwardRemoveCaption">キャプションを削除</string>
     <string name="chatForwardRemoveSender">送信者を非表示</string>
+    <string name="chatForwardRenderMarkdown">転送時にMarkdownを反映</string>
+    <string name="chatForwardRenderMarkdownPremium">転送時のMarkdown反映にはTelegram Premiumが必要です</string>
     <string name="chatForwardToTitle">転送先</string>
     <string name="chatForwardedToName">{value1}に転送しました</string>
     <string name="chatInfoAlbum">アルバム</string>
@@ -1451,6 +1453,8 @@
     <string name="generalNetworkUsage">ネットワーク使用量</string>
     <string name="generalOpenChatAtLatestMessage">チャットを最新メッセージで開く</string>
     <string name="generalRepeatPreserveSender">+1 で送信者を保持</string>
+    <string name="generalForwardRichMarkdown">転送時にMarkdownを反映</string>
+    <string name="generalForwardRichMarkdownHint">Markdown形式のテキスト（AIの返信など）をリッチテキストとして転送するか選べます</string>
     <string name="generalSaveCapturedPhotos">撮影した写真をシステムのアルバムに保存</string>
     <string name="generalSaveCapturedPhotosHint">オフにするとアプリ内カメラで撮影し、写真はアルバムに保存されません。</string>
     <string name="generalSendMessageWithEnter">Enterキーでメッセージを送信</string>

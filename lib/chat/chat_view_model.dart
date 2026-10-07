@@ -34,6 +34,7 @@ import 'chat_unread_progress.dart';
 import 'checklist_composer_view.dart';
 import 'checklist_service.dart';
 import 'forum_topic_transcript.dart';
+import 'forward_markdown.dart';
 import 'forward_options.dart';
 import 'gif_item.dart';
 import 'message_reaction_availability.dart';
@@ -2826,14 +2827,76 @@ class ChatViewModel extends ChangeNotifier {
     ForwardOptions options = const ForwardOptions(),
   }) async {
     if (hasProtectedContent) throw const ForwardBlockedException();
-    await forwardMessagesWithOptions(
-      client: _client,
-      targetChatId: targetChatId,
-      fromChatId: chatId,
-      messageIds: messageIds,
-      topicId: targetChatId == chatId ? _forumTopicRef : null,
-      options: options,
+    final forwardQuery = forwardQueryForOwner(
+      _client,
+      accountSlot: _accountSlot,
+      clientId: _accountClientId,
     );
+    var richText = options.richText;
+    // Second gate: entry points already hide the option for non-Premium, but
+    // forwardMany is callable without them (bot relay, shortcuts), so the
+    // entitlement is re-checked here against the live TDLib state.
+    if (richText) {
+      final user = await forwardQuery({'@type': 'getMe'});
+      richText = user.boolean('is_premium') ?? false;
+    }
+    if (!richText) {
+      await forwardMessagesWithOptions(
+        client: _client,
+        targetChatId: targetChatId,
+        fromChatId: chatId,
+        messageIds: messageIds,
+        topicId: targetChatId == chatId ? _forumTopicRef : null,
+        options: options,
+        query: forwardQuery,
+      );
+      return;
+    }
+    // Process the selection in order so a mix of converted and ordinary
+    // messages still arrives in the order the user picked them: ordinary
+    // messages are flushed as contiguous forwardMessages batches before the
+    // next converted re-send.
+    final byId = {for (final message in _allMessages) message.id: message};
+    final pendingIds = <int>[];
+    Future<void> flush() async {
+      if (pendingIds.isEmpty) return;
+      final ids = List<int>.of(pendingIds);
+      pendingIds.clear();
+      await forwardMessagesWithOptions(
+        client: _client,
+        targetChatId: targetChatId,
+        fromChatId: chatId,
+        messageIds: ids,
+        topicId: targetChatId == chatId ? _forumTopicRef : null,
+        options: options,
+        query: forwardQuery,
+      );
+    }
+
+    for (final id in messageIds) {
+      final message = byId[id];
+      // Markdown detection is best-effort: any message that fails detection
+      // or conversion simply falls back to the regular forward batch.
+      if (message == null ||
+          !forwardMarkdownOfferForMessage(message).available) {
+        pendingIds.add(id);
+        continue;
+      }
+      // Flush the ordinary messages selected before this one so the re-send
+      // lands after them; if the conversion fails the message rejoins the
+      // pending batch and order is still preserved.
+      await flush();
+      final sent = await sendMarkdownRichTextForward(
+        query: forwardQuery,
+        fromChatId: chatId,
+        messageId: id,
+        targetChatId: targetChatId,
+        text: message.text,
+        topicId: targetChatId == chatId ? _forumTopicRef : null,
+      );
+      if (!sent) pendingIds.add(id);
+    }
+    await flush();
   }
 
   Future<void> saveToFavorites(int messageId) async {

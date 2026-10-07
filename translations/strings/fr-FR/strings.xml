@@ -880,6 +880,8 @@
     <string name="chatForwardProtected">Ce message est protégé et ne peut pas être transféré</string>
     <string name="chatForwardRemoveCaption">Supprimer la légende</string>
     <string name="chatForwardRemoveSender">Masquer l’expéditeur</string>
+    <string name="chatForwardRenderMarkdown">Rendre le Markdown lors du transfert</string>
+    <string name="chatForwardRenderMarkdownPremium">Rendre le Markdown lors du transfert nécessite Telegram Premium</string>
     <string name="chatForwardToTitle">Transférer vers</string>
     <string name="chatForwardedToName">Transféré à {value1}</string>
     <string name="chatInfoAlbum">Album</string>
@@ -1458,6 +1460,8 @@
     <string name="generalNetworkUsage">Utilisation du réseau</string>
     <string name="generalOpenChatAtLatestMessage">Ouvrir les discussions au dernier message</string>
     <string name="generalRepeatPreserveSender">Conserver l’expéditeur avec +1</string>
+    <string name="generalForwardRichMarkdown">Rendre le Markdown lors du transfert</string>
+    <string name="generalForwardRichMarkdownHint">Proposer d’envoyer le texte Markdown (réponses IA) en texte enrichi</string>
     <string name="generalSaveCapturedPhotos">Enregistrer les photos prises dans l’album système</string>
     <string name="generalSaveCapturedPhotosHint">Désactivé, les photos sont prises avec l’appareil photo intégré et n’arrivent jamais dans l’album.</string>
     <string name="generalSendMessageWithEnter">Envoyer avec Entrée</string>

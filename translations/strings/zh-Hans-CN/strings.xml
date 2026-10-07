@@ -880,6 +880,8 @@
     <string name="chatForwardProtected">该消息受保护，无法转发</string>
     <string name="chatForwardRemoveCaption">移除说明</string>
     <string name="chatForwardRemoveSender">隐藏发送者</string>
+    <string name="chatForwardRenderMarkdown">转发时渲染 Markdown</string>
+    <string name="chatForwardRenderMarkdownPremium">转发时渲染 Markdown 需要 Telegram Premium</string>
     <string name="chatForwardToTitle">转发到</string>
     <string name="chatForwardedToName">已转发到 {value1}</string>
     <string name="chatInfoAlbum">相册</string>
@@ -1451,6 +1453,8 @@
     <string name="generalNetworkUsage">网络使用情况</string>
     <string name="generalOpenChatAtLatestMessage">打开聊天显示最新消息</string>
     <string name="generalRepeatPreserveSender">+1 时保留发送者</string>
+    <string name="generalForwardRichMarkdown">转发时渲染 Markdown</string>
+    <string name="generalForwardRichMarkdownHint">识别 Markdown 排版的文本（如 AI 回复），转发时可渲染为富文本</string>
     <string name="generalSaveCapturedPhotos">拍摄的照片保存到系统相册</string>
     <string name="generalSaveCapturedPhotosHint">关闭后改用应用内相机拍摄，照片不会进入系统相册。</string>
     <string name="generalSendMessageWithEnter">回车键发送消息</string>
