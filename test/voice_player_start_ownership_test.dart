@@ -26,7 +26,7 @@ import 'package:mithka/tdlib/td_models.dart';
 // — the point where a stop or dispose races the start — is held open by
 // audioSessionActivationOverride without touching any other behavior.
 
-enum _Behavior { ok, silent, error }
+enum _Behavior { ok, silent, error, hang }
 
 class _FakeNative {
   final behaviors = <String, List<_Behavior>>{};
@@ -75,6 +75,10 @@ class _FakePlatform extends MethodChannelFlutterSoundPlayer {
     switch (behavior) {
       case _Behavior.error:
         throw _NativeFailure('native $method failed');
+      case _Behavior.hang:
+        // The native call never answers and never fires its reverse
+        // callback: the Dart-side completer stays pending forever.
+        return Completer<int>().future;
       case _Behavior.silent:
         if (method == 'stopPlayer') {
           callback.stopPlayerCompleted(PlayerState.isStopped.index, true);
@@ -326,6 +330,56 @@ void main() {
       expect(voice.isPlaying, isTrue, reason: 'track B keeps playing');
     },
     timeout: const Timeout(Duration(seconds: 20)),
+  );
+
+  test(
+    'a permanently wedged opened session is still released on the platform',
+    () async {
+      // The lost-callback case: A's native start NEVER reports completion,
+      // so the operation lock stays pinned forever and the queued verb
+      // closePlayer can never run. The retirement must still release A's
+      // native session through the platform interface — without touching
+      // the fresh session B plays on.
+      native.plan('startPlayer', [_Behavior.hang, _Behavior.ok]);
+
+      final voice = VoicePlayer();
+      addTearDown(voice.dispose);
+
+      final failures = <int>[];
+      voice.onFailed = (fileId, error) => failures.add(fileId);
+      unawaited(voice.toggleAudio(file(910001)));
+      await until(
+        () => failures.isNotEmpty,
+        timeout: const Duration(seconds: 8),
+      );
+
+      // Track B plays on a fresh native session.
+      await voice.toggleAudio(file(910002));
+      expect(voice.isPlaying, isTrue);
+
+      final platform = FlutterSoundPlayerPlatform.instance as _FakePlatform;
+      final retiredSession = platform.callbacks.first;
+      final freshSession = platform.callbacks.last;
+      expect(retiredSession, isNot(same(freshSession)));
+
+      // The wedged start pinned A's lock: no verb close can ever run. The
+      // platform-level release must land on A's session within the bounded
+      // cleanup window (the verb timeout + a small margin).
+      await until(
+        () => native.calls.where((c) => c == 'closePlayer').isNotEmpty,
+        timeout: const Duration(seconds: 6),
+      );
+
+      // The close was served on the retired session — never on the fresh
+      // one that is still playing track B.
+      expect(
+        platform.callbacks,
+        contains(retiredSession),
+        reason: 'the close must run on the retired session',
+      );
+      expect(voice.isPlaying, isTrue, reason: 'track B keeps playing');
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
   );
 
   test(

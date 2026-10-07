@@ -183,15 +183,20 @@ class VoicePlayer extends ChangeNotifier {
   /// Releases a native player instance for good.
   ///
   /// [wasOpened] tells whether the instance's openPlayer ever completed in
-  /// our bookkeeping. An opened instance is released through the regular
-  /// verb: flutter_sound serializes every verb behind one non-reentrant
-  /// lock, and a start whose completion never arrives pins that lock, so
-  /// the queued closePlayer runs when the lock releases (the late
-  /// completion) and is a no-op until then. An instance whose openPlayer
-  /// never completed can never be released by the verb — closePlayer
-  /// returns early on the uninitialized flag without touching the
-  /// platform — so its native session is closed directly on the platform
-  /// interface. Both paths are bound to this exact instance and can never
+  /// our bookkeeping. An opened instance is first released through the
+  /// regular verb: flutter_sound serializes every verb behind one
+  /// non-reentrant lock, and a start whose completion never arrives pins
+  /// that lock, so the queued closePlayer runs when the lock releases (the
+  /// late completion). Timing that verb out does NOT release the native
+  /// session — the lock is still pinned forever — so after the bounded wait
+  /// the session is also closed directly on the platform interface. That
+  /// covers the lost-callback case (the completion never comes at all);
+  /// when the late completion does arrive, the verb's own close runs as a
+  /// harmless duplicate on the already-closed session. An instance whose
+  /// openPlayer never completed can never be released by the verb at all —
+  /// closePlayer returns early on the uninitialized flag without touching
+  /// the platform — so its native session goes straight to the platform
+  /// interface. Every path is bound to this exact instance and can never
   /// close a fresh player a later load opened.
   void _releaseNative(FlutterSoundPlayer player, {required bool wasOpened}) {
     if (wasOpened) {
@@ -200,6 +205,23 @@ class VoicePlayer extends ChangeNotifier {
             .closePlayer()
             .timeout(const Duration(seconds: 3))
             .catchError((Object _) {}),
+      );
+      // Belt and braces: the verb close above queues behind the instance's
+      // operation lock. If that lock is permanently wedged (the lost-
+      // callback case the timeout cannot fix), the native session still
+      // needs releasing — close it on the platform interface directly.
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 3)).then((_) {
+          try {
+            unawaited(
+              FlutterSoundPlayerPlatform.instance
+                  .closePlayer(player)
+                  .timeout(const Duration(seconds: 3))
+                  .catchError((Object _) => 0),
+            );
+            FlutterSoundPlayerPlatform.instance.closeSession(player);
+          } catch (_) {}
+        }),
       );
       return;
     }

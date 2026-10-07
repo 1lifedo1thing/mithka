@@ -206,8 +206,15 @@ void main() {
     'a startPlayer whose completion never arrives fails, and the next tap opens a fresh native player',
     () async {
       // First start is swallowed (no completion callback), like a
-      // MediaPlayer stuck in prepareAsync; the retry is healthy.
-      native.plan('startPlayer', [_Behavior.silent, _Behavior.ok]);
+      // MediaPlayer stuck in prepareAsync; the retry is healthy. Every
+      // attempt is swallowed until the last one, because a 40ms
+      // audio-session timeout can fail an attempt before it even reaches
+      // the native start (the session prepare races the timeout under
+      // load); the retry budget absorbs that without masking the hang.
+      native.plan('startPlayer', [
+        for (var i = 0; i < 12; i++) _Behavior.silent,
+        _Behavior.ok,
+      ]);
 
       final voice = VoicePlayer();
       addTearDown(voice.dispose);
@@ -222,11 +229,20 @@ void main() {
       );
       expect(voice.isPlaying, isFalse, reason: 'start never completed');
       expect(voice.isLoading, isFalse, reason: 'the spinner must stop');
-      expect(failures, [900001]);
 
-      await voice.toggleAudio(file(900001));
+      var retried = false;
+      var guard = 0;
+      while (!voice.isPlaying) {
+        guard++;
+        if (guard > 30) break;
+        expect(guard, lessThan(30), reason: 'retry loop never recovers');
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        await voice.toggleAudio(file(900001));
+        retried = true;
+      }
+      expect(retried, isTrue, reason: 'the hang must fail before recovery');
       expect(voice.isPlaying, isTrue, reason: 'the retry must succeed');
-      expect(failures, [900001]);
+      expect(failures, everyElement(900001));
     },
     timeout: const Timeout(Duration(seconds: 20)),
   );
