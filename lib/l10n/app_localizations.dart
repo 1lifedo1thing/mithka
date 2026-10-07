@@ -935,9 +935,14 @@ abstract final class AppStringKeys {
   static const chatMembersRemoveMemberConfirmation =
       'chatMembersRemoveMemberConfirmation';
   static const chatMembersRemoveMemberTitle = 'chatMembersRemoveMemberTitle';
+  static const chatMembersRemovedTitle = 'chatMembersRemovedTitle';
   static const chatMembersSearchHint = 'chatMembersSearchHint';
   static const chatMembersSetTitle = 'chatMembersSetTitle';
+  static const chatMembersSubscribersTitleWithCount =
+      'chatMembersSubscribersTitleWithCount';
   static const chatMembersTitleWithCount = 'chatMembersTitleWithCount';
+  static const chatMembersUnban = 'chatMembersUnban';
+  static const chatMembersUnbanConfirmation = 'chatMembersUnbanConfirmation';
   static const chatMembersUpdateFailed = 'chatMembersUpdateFailed';
   static const chatMenu = 'chatMenu';
   static const chatMessageInputPlaceholder = 'chatMessageInputPlaceholder';
@@ -1692,6 +1697,9 @@ abstract final class AppStringKeys {
   static const groupManagementAdminApprovalRequired =
       'groupManagementAdminApprovalRequired';
   static const groupManagementBasicSection = 'groupManagementBasicSection';
+  static const groupManagementChannelName = 'groupManagementChannelName';
+  static const groupManagementChannelSubscribers =
+      'groupManagementChannelSubscribers';
   static const groupManagementDeleteChannel = 'groupManagementDeleteChannel';
   static const groupManagementDeleteGroup = 'groupManagementDeleteGroup';
   static const groupManagementEditable = 'groupManagementEditable';
@@ -1768,6 +1776,8 @@ abstract final class AppStringKeys {
   static const groupManagementNoEditInfoPermission =
       'groupManagementNoEditInfoPermission';
   static const groupManagementNotSet = 'groupManagementNotSet';
+  static const groupManagementRemovedUsers = 'groupManagementRemovedUsers';
+  static const groupManagementRetry = 'groupManagementRetry';
   static const groupManagementPermissionCreateTopics =
       'groupManagementPermissionCreateTopics';
   static const groupManagementPermissionEditGroupInfo =

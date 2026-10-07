@@ -1015,8 +1015,12 @@
     <string name="chatMembersRemoveMemberConfirmation">Remove {value1} from the group?</string>
     <string name="chatMembersRemoveMemberTitle">Remove Member</string>
     <string name="chatMembersSearchHint">Search members</string>
+    <string name="chatMembersRemovedTitle">Removed Users</string>
     <string name="chatMembersSetTitle">Set Name Tag</string>
+    <string name="chatMembersSubscribersTitleWithCount">Subscribers ({value1})</string>
     <string name="chatMembersTitleWithCount">Group Members ({value1})</string>
+    <string name="chatMembersUnban">Unban</string>
+    <string name="chatMembersUnbanConfirmation">Remove {value1} from the removed users?</string>
     <string name="chatMembersUpdateFailed">Could not update this member.</string>
     <string name="chatMenu">Menu</string>
     <string name="chatMessageInputPlaceholder">Message…</string>
@@ -1443,7 +1447,7 @@
     <string name="fileDetailApkInstallMessage">Android requires your approval before Mithka can install APK files. Allow it in system settings, then the installer will open.</string>
     <string name="fileDetailApkInstallOpenSettings">Open Settings</string>
     <string name="fileDetailApkInstallTitle">Allow app installs?</string>
-<string name="fileDetailDownloadProgress">Downloading file… ({value1}/{value2})</string>
+    <string name="fileDetailDownloadProgress">Downloading file… ({value1}/{value2})</string>
     <string name="fileDetailNoAppCanOpenFile">No app can open this file</string>
     <string name="fileDetailOpen">Open</string>
     <string name="gallerySendLiveAsVideo">Send as video</string>
@@ -1656,6 +1660,8 @@
     <string name="groupManagementAdvancedControls">Advanced controls</string>
     <string name="groupManagementBasicSection">Basic management</string>
     <string name="groupManagementBoostsAndGiveaways">Boosts and giveaways</string>
+    <string name="groupManagementChannelName">Channel Name</string>
+    <string name="groupManagementChannelSubscribers">Subscribers</string>
     <string name="groupManagementDeleteChannel">Delete channel</string>
     <string name="groupManagementDeleteGroup">Delete group</string>
     <string name="groupManagementEditFailed">Failed to update</string>
@@ -1725,6 +1731,8 @@
     <string name="groupManagementPostingPermissions">Posting Permissions</string>
     <string name="groupManagementPublicUsername">Public Username</string>
     <string name="groupManagementReadOnly">Read-only</string>
+    <string name="groupManagementRemovedUsers">Removed Users</string>
+    <string name="groupManagementRetry">Retry</string>
     <string name="groupManagementSetFailed">Setup failed</string>
     <string name="groupManagementStatistics">Statistics</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">Username is unavailable or not allowed</string>

@@ -1015,8 +1015,12 @@
     <string name="chatMembersRemoveMemberConfirmation">{value1} aus der Gruppe entfernen?</string>
     <string name="chatMembersRemoveMemberTitle">Mitglied entfernen</string>
     <string name="chatMembersSearchHint">Mitglieder suchen</string>
+    <string name="chatMembersRemovedTitle">Entfernte Benutzer</string>
     <string name="chatMembersSetTitle">Titel festlegen</string>
+    <string name="chatMembersSubscribersTitleWithCount">Abonnenten ({value1})</string>
     <string name="chatMembersTitleWithCount">Gruppenmitglieder ({value1})</string>
+    <string name="chatMembersUnban">Entbannen</string>
+    <string name="chatMembersUnbanConfirmation">{value1} aus der Liste der entfernten Benutzer entfernen?</string>
     <string name="chatMembersUpdateFailed">Mitglied konnte nicht aktualisiert werden.</string>
     <string name="chatMenu">Menü</string>
     <string name="chatMessageInputPlaceholder">Nachricht senden…</string>
@@ -1443,7 +1447,7 @@
     <string name="fileDetailApkInstallMessage">Android verlangt deine Zustimmung, bevor Mithka APK-Dateien installieren darf. Erlaube es in den Systemeinstellungen; das Installationsprogramm öffnet sich danach.</string>
     <string name="fileDetailApkInstallOpenSettings">Einstellungen öffnen</string>
     <string name="fileDetailApkInstallTitle">App-Installationen erlauben?</string>
-<string name="fileDetailDownloadProgress">Datei wird heruntergeladen… ({value1}/{value2})</string>
+    <string name="fileDetailDownloadProgress">Datei wird heruntergeladen… ({value1}/{value2})</string>
     <string name="fileDetailNoAppCanOpenFile">Keine App kann diese Datei öffnen</string>
     <string name="fileDetailOpen">Öffnen</string>
     <string name="gallerySendLiveAsVideo">Als Video senden</string>
@@ -1656,6 +1660,8 @@
     <string name="groupManagementAdvancedControls">Erweiterte Einstellungen</string>
     <string name="groupManagementBasicSection">Grundverwaltung</string>
     <string name="groupManagementBoostsAndGiveaways">Boosts und Verlosungen</string>
+    <string name="groupManagementChannelName">Kanalname</string>
+    <string name="groupManagementChannelSubscribers">Abonnenten</string>
     <string name="groupManagementDeleteChannel">Kanal löschen</string>
     <string name="groupManagementDeleteGroup">Gruppe löschen</string>
     <string name="groupManagementEditFailed">Änderung fehlgeschlagen</string>
@@ -1725,6 +1731,8 @@
     <string name="groupManagementPostingPermissions">Schreibberechtigungen</string>
     <string name="groupManagementPublicUsername">Öffentlicher Benutzername</string>
     <string name="groupManagementReadOnly">Schreibgeschützt</string>
+    <string name="groupManagementRemovedUsers">Entfernte Benutzer</string>
+    <string name="groupManagementRetry">Erneut versuchen</string>
     <string name="groupManagementSetFailed">Festlegen fehlgeschlagen</string>
     <string name="groupManagementStatistics">Statistiken</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">Benutzername nicht verfügbar oder keine Berechtigung</string>
