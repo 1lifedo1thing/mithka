@@ -13,7 +13,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final requests = <Map<String, dynamic>>[];
-  Map<String, int> memberCounts = {};
+  final Map<String, int> memberCounts = {};
   List<Map<String, dynamic>> membersPayload = [];
 
   List<Map<String, dynamic>> member(int id, String name) => [
