@@ -197,14 +197,9 @@ void main() {
   });
 
   test('failed panel send retains the reply for retry', () async {
+    const sticker = StickerItem(id: 5, width: 512, height: 512, emoji: '🙂');
     final vm = model();
     failSend = true;
-    final sticker = const StickerItem(
-      id: 5,
-      width: 512,
-      height: 512,
-      emoji: '🙂',
-    );
     expect(await vm.sendSticker(sticker), isFalse);
     expect(vm.replyTo, same(target));
     expect(vm.replyToInput, replyAnchor);
