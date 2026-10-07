@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">删除消息</string>
     <string name="chatAdminManageChat">管理群聊</string>
     <string name="chatAdminManageVideoChats">管理视频聊天</string>
+    <string name="chatAdminPermissionPostMessages">发布消息</string>
+    <string name="chatAdminPermissionEditMessages">编辑消息</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">编辑他人消息</string>
+    <string name="chatAdminPermissionPostStories">发布快拍</string>
+    <string name="chatAdminPermissionEditStories">编辑快拍</string>
+    <string name="chatAdminPermissionDeleteStories">删除快拍</string>
+    <string name="chatAdminPermissionManageDirectMessages">管理直接消息</string>
+    <string name="chatAdminPermissionManageTags">管理成员标签</string>
+    <string name="chatAdminPermissionChangeInfoGroup">修改群资料</string>
+    <string name="chatAdminPermissionChangeInfoChannel">修改频道资料</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">删除他人消息</string>
     <string name="chatAdminPromoteMembers">添加新管理员</string>
     <string name="chatAdminRestrictMembers">限制成员</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">无法转移所有权。检查密码。</string>
@@ -907,6 +918,7 @@
     <string name="chatInfoGroupVideos">群视频</string>
     <string name="chatInfoLeaveGroup">退出群聊</string>
     <string name="chatInfoLoadFoldersFailed">无法加载聊天分组</string>
+    <string name="chatInfoManageChannel">管理频道</string>
     <string name="chatInfoManageGroup">管理群</string>
     <string name="chatInfoMoveToGroupAssistant">归档</string>
     <string name="chatInfoNewFolder">新建分组</string>
@@ -1682,6 +1694,7 @@
     <string name="groupManagementNotSet">未设置</string>
     <string name="groupManagementPermissionCreateTopics">创建话题</string>
     <string name="groupManagementPermissionEditGroupInfo">修改群资料</string>
+    <string name="groupManagementPermissionEditOwnTag">修改自己的标签</string>
     <string name="groupManagementPermissionLinkPreviews">链接预览</string>
     <string name="groupManagementPermissionPinMessages">置顶消息</string>
     <string name="groupManagementPermissionSendFiles">发送文件</string>
@@ -1689,6 +1702,7 @@
     <string name="groupManagementPermissionSendMusic">发送音乐</string>
     <string name="groupManagementPermissionSendPhotos">发送图片</string>
     <string name="groupManagementPermissionSendPolls">发送投票</string>
+    <string name="groupManagementPermissionSendReactions">发送表情反应</string>
     <string name="groupManagementPermissionSendStickersAndGifs">发送贴纸和 GIF</string>
     <string name="groupManagementPermissionSendVideoMessages">发送视频消息</string>
     <string name="groupManagementPermissionSendVideos">发送视频</string>

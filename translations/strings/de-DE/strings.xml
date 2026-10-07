@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">Nachrichten löschen</string>
     <string name="chatAdminManageChat">Chat verwalten</string>
     <string name="chatAdminManageVideoChats">Videochats verwalten</string>
+    <string name="chatAdminPermissionPostMessages">Nachrichten posten</string>
+    <string name="chatAdminPermissionEditMessages">Nachrichten bearbeiten</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">Nachrichten anderer bearbeiten</string>
+    <string name="chatAdminPermissionPostStories">Stories posten</string>
+    <string name="chatAdminPermissionEditStories">Stories bearbeiten</string>
+    <string name="chatAdminPermissionDeleteStories">Stories löschen</string>
+    <string name="chatAdminPermissionManageDirectMessages">Direktnachrichten verwalten</string>
+    <string name="chatAdminPermissionManageTags">Mitglieder-Tags verwalten</string>
+    <string name="chatAdminPermissionChangeInfoGroup">Gruppeninfo ändern</string>
+    <string name="chatAdminPermissionChangeInfoChannel">Kanalinfo ändern</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">Nachrichten anderer löschen</string>
     <string name="chatAdminPromoteMembers">Neue Admins hinzufügen</string>
     <string name="chatAdminRestrictMembers">Mitglieder einschränken</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">Das Eigentum konnte nicht übertragen werden. Überprüfen Sie das Passwort.</string>
@@ -907,6 +918,7 @@
     <string name="chatInfoGroupVideos">Gruppenvideos</string>
     <string name="chatInfoLeaveGroup">Gruppe verlassen</string>
     <string name="chatInfoLoadFoldersFailed">Chat-Ordner konnten nicht geladen werden</string>
+    <string name="chatInfoManageChannel">Kanal verwalten</string>
     <string name="chatInfoManageGroup">Gruppe verwalten</string>
     <string name="chatInfoMoveToGroupAssistant">Archivieren</string>
     <string name="chatInfoNewFolder">Neuer Ordner</string>
@@ -1689,6 +1701,7 @@
     <string name="groupManagementNotSet">Nicht festgelegt</string>
     <string name="groupManagementPermissionCreateTopics">Themen erstellen</string>
     <string name="groupManagementPermissionEditGroupInfo">Gruppeninfos ändern</string>
+    <string name="groupManagementPermissionEditOwnTag">Eigenen Tag bearbeiten</string>
     <string name="groupManagementPermissionLinkPreviews">Linkvorschauen</string>
     <string name="groupManagementPermissionPinMessages">Nachrichten anheften</string>
     <string name="groupManagementPermissionSendFiles">Dateien senden</string>
@@ -1696,6 +1709,7 @@
     <string name="groupManagementPermissionSendMusic">Musik senden</string>
     <string name="groupManagementPermissionSendPhotos">Bilder senden</string>
     <string name="groupManagementPermissionSendPolls">Umfragen senden</string>
+    <string name="groupManagementPermissionSendReactions">Reaktionen senden</string>
     <string name="groupManagementPermissionSendStickersAndGifs">Sticker und GIFs senden</string>
     <string name="groupManagementPermissionSendVideoMessages">Videonachrichten senden</string>
     <string name="groupManagementPermissionSendVideos">Videos senden</string>
