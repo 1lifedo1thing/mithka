@@ -126,6 +126,14 @@ class VoicePlayer extends ChangeNotifier {
   FlutterSoundPlayer Function() nativePlayerFactory = () =>
       FlutterSoundPlayer(logLevel: Level.warning);
 
+  /// Test seam: replaces the audio-session activation inside output
+  /// preparation. A test can hold a start at exactly that await and
+  /// release it after a stop or a dispose, exercising the ownership
+  /// re-check that must cancel the start before it touches the native
+  /// player. The native open still runs for real.
+  @visibleForTesting
+  Future<AudioSession?> Function()? audioSessionActivationOverride;
+
   FlutterSoundPlayer? _player;
   bool isPlaying = false;
   bool isLoading = false;
@@ -144,6 +152,12 @@ class VoicePlayer extends ChangeNotifier {
   bool _opened = false;
   int _startAttempts = 0;
   bool _disposed = false;
+
+  /// Monotonic token of the current playback. Bumped by stop, dispose and
+  /// every native-player retirement, so an in-flight start or a native
+  /// callback can tell whether the playback it was issued for is still the
+  /// one bound to the player.
+  int _playbackGeneration = 0;
   StreamSubscription<PlaybackDisposition>? _progress;
   StreamSubscription<AudioInterruptionEvent>? _interruption;
   StreamSubscription<void>? _becomingNoisy;
@@ -168,6 +182,9 @@ class VoicePlayer extends ChangeNotifier {
     _player = null;
     _opened = false;
     _opening = null;
+    // Callbacks still registered on the retired instance may fire at any
+    // time; invalidating the generation makes them no-ops.
+    _playbackGeneration++;
   }
 
   Future<({Duration position, Duration duration})?> _readProgress() async {
@@ -239,7 +256,12 @@ class VoicePlayer extends ChangeNotifier {
           },
         );
         await player.setSubscriptionDuration(const Duration(milliseconds: 60));
-        _opened = true;
+        // The open may have outlived its own retirement (a stop timed out
+        // on this instance's lock and dropped it while the open was still
+        // pending). A late success must not mark a fresh instance open.
+        if (_player == player) {
+          _opened = true;
+        }
       } finally {
         _opening = null;
       }
@@ -254,6 +276,9 @@ class VoicePlayer extends ChangeNotifier {
 
   Future<void> stop() async {
     _interruptionPolicy.clear();
+    // Cancels any start still awaiting its audio session: it must not
+    // reach the native player for a track the user just stopped.
+    _playbackGeneration++;
     final player = _player;
     if (player != null && (player.isPlaying || player.isPaused)) {
       try {
@@ -396,10 +421,23 @@ class VoicePlayer extends ChangeNotifier {
       onFailed?.call(file.id, TimeoutException('openPlayer'));
       return;
     }
-    await _start(0, codec: codec, audioReady: audioReady);
+    await _start(
+      0,
+      codec: codec,
+      audioReady: audioReady,
+      generation: _playbackGeneration,
+      path: path,
+    );
   }
 
   Future<AudioSession?> _prepareOutput() async {
+    final activation = audioSessionActivationOverride;
+    if (activation != null) {
+      // Keep the native open real (retirement bookkeeping depends on it);
+      // only the session activation is held by the test.
+      await _ensureOpen();
+      return activation();
+    }
     try {
       try {
         await _ensureOpen();
@@ -431,58 +469,97 @@ class VoicePlayer extends ChangeNotifier {
   Future<void> _start(
     int fromMs, {
     required Codec codec,
+    required int generation,
+    required String path,
     Future<AudioSession?>? audioReady,
   }) async {
     isPlaying = true;
     position = Duration(milliseconds: fromMs);
     _syncPolling();
     notifyListeners();
-    final player = _sound;
     unawaited(_progress?.cancel());
-    _progress = player.onProgress?.listen((e) {
-      _applyProgress(e.position, e.duration);
-    });
+    _progress = null;
     final fileId = _fileId;
     _starting = true;
     _startAttempts++;
+    FlutterSoundPlayer? startOn;
     try {
       final ready = await audioReady?.timeout(nativeCallTimeout);
       if (ready == null) {
         debugPrint('VoicePlayer: audio session inactive, starting anyway');
       }
+      // The await above straddles user actions and native recovery. A stop,
+      // a dispose, another load or a retirement during it must cancel this
+      // start before it touches the native player: the captured path may
+      // already be cleared and the player replaced.
+      if (_disposed || _fileId != fileId) {
+        return;
+      }
+      if (generation != _playbackGeneration) {
+        // Our own preparation retired the native player (a wedged
+        // openPlayer): the load must fail, not silently vanish. Any other
+        // cancellation already returned above — a stop clears the file, a
+        // newer load replaces it.
+        if (_nativeOpenFailed) {
+          debugPrint('VoicePlayer: open timed out for $fileId');
+          isPlaying = false;
+          isLoading = false;
+          _syncPolling();
+          notifyListeners();
+          onFailed?.call(fileId!, TimeoutException('openPlayer'));
+        }
+        return;
+      }
       // _prepareOutput may have retired and replaced the native player
       // (a wedged openPlayer); always start on the current one.
-      final startOn = _sound;
+      startOn = _sound;
+      _progress = startOn.onProgress?.listen((e) {
+        _applyProgress(e.position, e.duration);
+      });
       await startOn
           .startPlayer(
-            fromURI: _path,
+            fromURI: path,
             codec: codec,
             whenFinished: () {
-              // The platform can deliver this after dispose(); notifying a
-              // disposed ChangeNotifier throws.
-              if (_disposed) return;
-              final finishedFileId = _fileId;
+              // The platform can deliver this after dispose(), or from an
+              // instance whose start timed out and was retired while a new
+              // track already plays. Only the playback that registered the
+              // callback may act on it; notifying a disposed
+              // ChangeNotifier throws.
+              if (_disposed ||
+                  generation != _playbackGeneration ||
+                  fileId == null ||
+                  fileId != _fileId) {
+                return;
+              }
               isPlaying = false;
               position = Duration.zero;
               _syncPolling();
               notifyListeners();
-              if (finishedFileId != null) onFinished?.call(finishedFileId);
+              onFinished?.call(fileId);
             },
           )
           .timeout(nativeCallTimeout);
       _startAttempts = 0; // A clean start resets the retry budget.
+      if (_disposed || generation != _playbackGeneration) return;
       await startOn.setSpeed(speed);
       if (fromMs > 0) {
         await startOn.seekToPlayer(Duration(milliseconds: fromMs));
       }
     } catch (error) {
-      if (_disposed) return;
-      debugPrint('VoicePlayer: failed to start ${fileId ?? -1}: $error');
+      final stale = _disposed || generation != _playbackGeneration;
+      if (!stale) {
+        debugPrint('VoicePlayer: failed to start ${fileId ?? -1}: $error');
+      }
       // The failed instance may hold the flutter_sound operation lock
       // forever (a start whose completer never completed never releases
       // it). stopPlayer on the same instance would queue behind the dead
       // start; drop the instance instead so the next tap opens a new one.
-      _retireNativePlayer();
+      // A stale start must not retire a player a newer playback owns.
+      if (startOn != null && startOn == _player) {
+        _retireNativePlayer();
+      }
+      if (stale) return;
       isPlaying = false;
       isLoading = false;
       _syncPolling();
@@ -627,6 +704,9 @@ class VoicePlayer extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // Any start still awaiting its audio session must not reach the native
+    // player afterwards.
+    _playbackGeneration++;
     _poller.stop();
     _interruptionPolicy.clear();
     _progress?.cancel();
