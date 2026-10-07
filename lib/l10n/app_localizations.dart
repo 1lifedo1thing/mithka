@@ -2177,6 +2177,7 @@ abstract final class AppStringKeys {
       'musicPlayerRemovedFromPlaylist';
   static const musicPlayerRemoveFromPlaylist = 'musicPlayerRemoveFromPlaylist';
   static const musicPlayerShowPlaylist = 'musicPlayerShowPlaylist';
+  static const musicPlayerStartFailed = 'musicPlayerStartFailed';
   static const musicPlayerTrackCount = 'musicPlayerTrackCount';
   static const myAlbumNoPhotos = 'myAlbumNoPhotos';
   static const netemoMusicLabel = 'netemoMusicLabel';

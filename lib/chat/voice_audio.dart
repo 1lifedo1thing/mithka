@@ -100,6 +100,13 @@ class PlaybackProgressPoller {
 }
 
 class VoicePlayer extends ChangeNotifier {
+  /// How long a native startPlayer/stopPlayer call may hang before the load
+  /// is treated as failed. flutter_sound can leave its start completer
+  /// pending forever when the platform player never reports prepared
+  /// (broken container, missing file, session errors), which used to leave
+  /// the UI spinner stuck with no way to retry.
+  static const nativeCallTimeout = Duration(seconds: 15);
+
   FlutterSoundPlayer? _player;
   bool isPlaying = false;
   bool isLoading = false;
@@ -107,6 +114,11 @@ class VoicePlayer extends ChangeNotifier {
   Duration total = Duration.zero;
   double speed = 1;
   void Function(int fileId)? onFinished;
+
+  /// Notified with the file id whose playback failed to start. Unlike
+  /// [onFinished] the player keeps the file bound so the UI can show the
+  /// failure and the next tap retries cleanly.
+  void Function(int fileId, Object error)? onFailed;
 
   int? _fileId;
   String? _path;
@@ -201,17 +213,19 @@ class VoicePlayer extends ChangeNotifier {
     final player = _player;
     if (player != null && (player.isPlaying || player.isPaused)) {
       try {
-        await player.stopPlayer();
+        await player.stopPlayer().timeout(nativeCallTimeout);
       } catch (_) {}
       // Give the shared audio session back (calls, other media apps).
       try {
-        final session = await _prepareAudioSession();
+        final session = await _prepareAudioSession().timeout(nativeCallTimeout);
         if (!_disposed) {
-          await session.setActive(
-            false,
-            avAudioSessionSetActiveOptions:
-                AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
-          );
+          await session
+              .setActive(
+                false,
+                avAudioSessionSetActiveOptions:
+                    AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+              )
+              .timeout(const Duration(seconds: 8));
         }
       } catch (_) {}
     }
@@ -275,71 +289,107 @@ class VoicePlayer extends ChangeNotifier {
     // depend on the file. Run them while the path resolves instead of after
     // it, so a cached track starts as soon as its path is known.
     final audioReady = _prepareOutput();
-    final path =
-        TdFileCenter.shared.cachedPath(file) ??
-        await TdFileCenter.shared.pathFor(file, priority: 32);
-    final ready = await audioReady;
+    String? path;
+    Object? pathError;
+    try {
+      path =
+          TdFileCenter.shared.cachedPath(file) ??
+          await TdFileCenter.shared.pathFor(file, priority: 32);
+    } catch (error) {
+      pathError = error;
+    }
     if (_disposed) return;
     // The user may have tapped another note while this file resolved —
     // don't clobber the newer load's state or start the stale file.
     if (_fileId != file.id) return;
     isLoading = false;
-    if (path == null || ready == null) {
+    // A session that will not activate is logged but not fatal: iOS can
+    // refuse or stall activation while another audio app holds the session,
+    // yet the player can still start and the interruption listener recovers
+    // later. Blocking on it here used to leave the spinner stuck forever.
+    if (path == null) {
+      debugPrint(
+        'VoicePlayer: failed to resolve ${file.id}'
+        '${pathError == null ? '' : ': $pathError'}',
+      );
       _fileId = null;
       notifyListeners();
+      onFailed?.call(file.id, pathError ?? StateError('path unavailable'));
       return;
     }
     _path = path;
-    await _start(0, codec: codec);
+    await _start(0, codec: codec, audioReady: audioReady);
   }
 
   Future<AudioSession?> _prepareOutput() async {
     try {
-      await _ensureOpen();
-      final session = await _prepareAudioSession();
-      await session.setActive(true);
+      await _ensureOpen().timeout(nativeCallTimeout);
+      final session = await _prepareAudioSession().timeout(nativeCallTimeout);
+      try {
+        await session.setActive(true).timeout(const Duration(seconds: 8));
+      } catch (_) {
+        // Activation refused or stalled; playback still attempts to start.
+      }
       return session;
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> _start(int fromMs, {required Codec codec}) async {
+  Future<void> _start(
+    int fromMs, {
+    required Codec codec,
+    Future<AudioSession?>? audioReady,
+  }) async {
+    isPlaying = true;
+    position = Duration(milliseconds: fromMs);
+    _syncPolling();
+    notifyListeners();
+    final player = _sound;
+    unawaited(_progress?.cancel());
+    _progress = player.onProgress?.listen((e) {
+      _applyProgress(e.position, e.duration);
+    });
+    final fileId = _fileId;
     try {
-      if (_disposed) return;
-      final player = _sound;
-      unawaited(_progress?.cancel());
-      _progress = player.onProgress?.listen((e) {
-        _applyProgress(e.position, e.duration);
-      });
-      isPlaying = true;
-      position = Duration(milliseconds: fromMs);
-      _syncPolling();
-      notifyListeners();
-      await player.startPlayer(
-        fromURI: _path,
-        codec: codec,
-        whenFinished: () {
-          // The platform can deliver this after dispose(); notifying a
-          // disposed ChangeNotifier throws.
-          if (_disposed) return;
-          final finishedFileId = _fileId;
-          isPlaying = false;
-          position = Duration.zero;
-          _syncPolling();
-          notifyListeners();
-          if (finishedFileId != null) onFinished?.call(finishedFileId);
-        },
-      );
+      final ready = await audioReady?.timeout(nativeCallTimeout);
+      if (ready == null) {
+        debugPrint('VoicePlayer: audio session inactive, starting anyway');
+      }
+      await player
+          .startPlayer(
+            fromURI: _path,
+            codec: codec,
+            whenFinished: () {
+              // The platform can deliver this after dispose(); notifying a
+              // disposed ChangeNotifier throws.
+              if (_disposed) return;
+              final finishedFileId = _fileId;
+              isPlaying = false;
+              position = Duration.zero;
+              _syncPolling();
+              notifyListeners();
+              if (finishedFileId != null) onFinished?.call(finishedFileId);
+            },
+          )
+          .timeout(nativeCallTimeout);
       await player.setSpeed(speed);
       if (fromMs > 0) {
         await player.seekToPlayer(Duration(milliseconds: fromMs));
       }
-    } catch (_) {
+    } catch (error) {
+      if (_disposed) return;
+      debugPrint('VoicePlayer: failed to start ${fileId ?? -1}: $error');
+      // A start that never completed can also leave the native player in a
+      // half-open state; stop it so the next tap starts from clean ground.
+      try {
+        await player.stopPlayer().timeout(nativeCallTimeout);
+      } catch (_) {}
       if (_disposed) return;
       isPlaying = false;
       _syncPolling();
       notifyListeners();
+      if (fileId != null) onFailed?.call(fileId, error);
     }
   }
 
