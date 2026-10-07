@@ -762,6 +762,7 @@
     <string name="chatAdminManageVideoChats">管理视频聊天</string>
     <string name="chatAdminPromoteMembers">添加新管理员</string>
     <string name="chatAdminRestrictMembers">限制成员</string>
+    <string name="chatAdminSendWelcomeMessages">发送欢迎消息</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">无法转移所有权。检查密码。</string>
     <string name="chatAdministratorEditPasswordTooFresh">你的两步验证密码设置得太新了。</string>
     <string name="chatAdministratorEditSessionTooFresh">此会话建立得太新了。</string>

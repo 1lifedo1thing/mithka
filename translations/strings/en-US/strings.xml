@@ -762,6 +762,7 @@
     <string name="chatAdminManageVideoChats">Manage Video Chats</string>
     <string name="chatAdminPromoteMembers">Add New Admins</string>
     <string name="chatAdminRestrictMembers">Restrict Members</string>
+    <string name="chatAdminSendWelcomeMessages">Send Welcome Messages</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">Couldn’t transfer ownership. Check the password.</string>
     <string name="chatAdministratorEditPasswordTooFresh">Your two-step verification password is too new.</string>
     <string name="chatAdministratorEditSessionTooFresh">This session is too new.</string>

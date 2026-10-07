@@ -762,6 +762,7 @@
     <string name="chatAdminManageVideoChats">ビデオチャットを管理</string>
     <string name="chatAdminPromoteMembers">管理者を追加</string>
     <string name="chatAdminRestrictMembers">メンバーを制限</string>
+    <string name="chatAdminSendWelcomeMessages">ウェルカムメッセージを送信</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">所有権を譲渡できませんでした。パスワードを確認してください。</string>
     <string name="chatAdministratorEditPasswordTooFresh">2段階認証のパスワードを設定してから日が浅すぎます。</string>
     <string name="chatAdministratorEditSessionTooFresh">このセッションは新しすぎます。</string>

@@ -755,6 +755,7 @@ abstract final class AppStringKeys {
   static const chatAdminManageVideoChats = 'chatAdminManageVideoChats';
   static const chatAdminPromoteMembers = 'chatAdminPromoteMembers';
   static const chatAdminRestrictMembers = 'chatAdminRestrictMembers';
+  static const chatAdminSendWelcomeMessages = 'chatAdminSendWelcomeMessages';
   static const chatAdminsOnlyPosting = 'chatAdminsOnlyPosting';
   static const chatAllMembersMuted = 'chatAllMembersMuted';
   static const chatAndOthersCount = 'chatAndOthersCount';

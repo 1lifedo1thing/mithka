@@ -762,6 +762,7 @@
     <string name="chatAdminManageVideoChats">Gérer les discussions vidéo</string>
     <string name="chatAdminPromoteMembers">Ajouter des administrateurs</string>
     <string name="chatAdminRestrictMembers">Restreindre les membres</string>
+    <string name="chatAdminSendWelcomeMessages">Envoyer des messages de bienvenue</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">Impossible de transférer la propriété. Vérifiez le mot de passe.</string>
     <string name="chatAdministratorEditPasswordTooFresh">Votre mot de passe à deux étapes est trop récent.</string>
     <string name="chatAdministratorEditSessionTooFresh">Cette session est trop récente.</string>

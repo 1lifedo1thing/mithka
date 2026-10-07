@@ -50,6 +50,7 @@ class _ChatAdministratorEditViewState extends State<ChatAdministratorEditView> {
     'can_delete_stories',
     'can_manage_direct_messages',
     'can_manage_tags',
+    'can_send_welcome_messages',
     'is_anonymous',
   ];
   static const _labels = <String, String>{
@@ -69,6 +70,7 @@ class _ChatAdministratorEditViewState extends State<ChatAdministratorEditView> {
     'can_delete_stories': 'Delete stories',
     'can_manage_direct_messages': 'Manage direct messages',
     'can_manage_tags': 'Manage member tags',
+    'can_send_welcome_messages': AppStringKeys.chatAdminSendWelcomeMessages,
     'is_anonymous': AppStringKeys.chatAdminAnonymous,
   };
 
