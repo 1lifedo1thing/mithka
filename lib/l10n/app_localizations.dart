@@ -934,10 +934,17 @@ abstract final class AppStringKeys {
       'chatMembersRemoveFailedPermission';
   static const chatMembersRemoveMemberConfirmation =
       'chatMembersRemoveMemberConfirmation';
-  static const chatMembersRemoveMemberTitle = 'chatMembersRemoveMemberTitle';
-  static const chatMembersSearchHint = 'chatMembersSearchHint';
+    static const chatMembersRemoveMemberTitle = 'chatMembersRemoveMemberTitle';
+    static const chatMembersRestrict = 'chatMembersRestrict';
+    static const chatMembersRestrictApply = 'chatMembersRestrictApply';
+    static const chatMembersRestrictDuration = 'chatMembersRestrictDuration';
+    static const chatMembersRestrictFailed = 'chatMembersRestrictFailed';
+    static const chatMembersRestrictForever = 'chatMembersRestrictForever';
+    static const chatMembersRestrictTitle = 'chatMembersRestrictTitle';
+    static const chatMembersSearchHint = 'chatMembersSearchHint';
   static const chatMembersSetTitle = 'chatMembersSetTitle';
   static const chatMembersTitleWithCount = 'chatMembersTitleWithCount';
+  static const chatMembersUnrestrict = 'chatMembersUnrestrict';
   static const chatMembersUpdateFailed = 'chatMembersUpdateFailed';
   static const chatMenu = 'chatMenu';
   static const chatMessageInputPlaceholder = 'chatMessageInputPlaceholder';

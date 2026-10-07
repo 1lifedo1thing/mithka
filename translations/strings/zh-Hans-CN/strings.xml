@@ -1013,8 +1013,15 @@
     <string name="chatMembersRemoveMemberConfirmation">将 {value1} 移出群聊？</string>
     <string name="chatMembersRemoveMemberTitle">移除成员</string>
     <string name="chatMembersSearchHint">搜索成员</string>
+    <string name="chatMembersRestrict">限制</string>
+    <string name="chatMembersRestrictApply">应用</string>
+    <string name="chatMembersRestrictDuration">时长</string>
+    <string name="chatMembersRestrictFailed">无法更新限制。</string>
+    <string name="chatMembersRestrictForever">永久</string>
+    <string name="chatMembersRestrictTitle">限制成员</string>
     <string name="chatMembersSetTitle">设置名牌</string>
     <string name="chatMembersTitleWithCount">群成员 ({value1})</string>
+    <string name="chatMembersUnrestrict">取消限制</string>
     <string name="chatMembersUpdateFailed">无法修改该成员。</string>
     <string name="chatMenu">菜单</string>
     <string name="chatMessageInputPlaceholder">发送消息…</string>

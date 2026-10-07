@@ -1015,8 +1015,15 @@
     <string name="chatMembersRemoveMemberConfirmation">{value1} aus der Gruppe entfernen?</string>
     <string name="chatMembersRemoveMemberTitle">Mitglied entfernen</string>
     <string name="chatMembersSearchHint">Mitglieder suchen</string>
+    <string name="chatMembersRestrict">Einschränken</string>
+    <string name="chatMembersRestrictApply">Anwenden</string>
+    <string name="chatMembersRestrictDuration">Dauer</string>
+    <string name="chatMembersRestrictFailed">Einschränkungen konnten nicht aktualisiert werden.</string>
+    <string name="chatMembersRestrictForever">Dauerhaft</string>
+    <string name="chatMembersRestrictTitle">Mitglied einschränken</string>
     <string name="chatMembersSetTitle">Titel festlegen</string>
     <string name="chatMembersTitleWithCount">Gruppenmitglieder ({value1})</string>
+    <string name="chatMembersUnrestrict">Einschränkungen aufheben</string>
     <string name="chatMembersUpdateFailed">Mitglied konnte nicht aktualisiert werden.</string>
     <string name="chatMenu">Menü</string>
     <string name="chatMessageInputPlaceholder">Nachricht senden…</string>
