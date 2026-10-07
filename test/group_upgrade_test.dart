@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mithka/chat/chat_info_view.dart';
+import 'package:mithka/chat/chat_view.dart';
 import 'package:mithka/chat/group_management_view.dart';
 import 'package:mithka/l10n/app_localizations.dart';
+import 'package:mithka/settings/translation_controller.dart';
 import 'package:mithka/tdlib/td_client.dart';
 import 'package:mithka/theme/app_theme.dart';
 import 'package:mithka/theme/theme_controller.dart';
@@ -59,6 +62,10 @@ void main() {
   });
 
   tearDownAll(TdClient.shared.closeProxy);
+
+  setUp(() {
+    basicUpgraded = false;
+  });
 
   Future<void> pumpView(WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -128,4 +135,83 @@ void main() {
     await pumpView(tester);
     expect(find.text('Convert to supergroup'), findsNothing);
   });
+
+  testWidgets(
+    'an upgrade hands the new supergroup chat to the navigation owner',
+    (tester) async {
+      // ChatInfoView pushes GroupManagementView and consumes its result:
+      // after the upgrade pops the new chat id, the shell must open the
+      // new supergroup conversation instead of sitting on the deactivated
+      // basic group.
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final theme = ThemeController(prefs);
+      addTearDown(theme.dispose);
+      final translation = TranslationController(prefs);
+      addTearDown(translation.dispose);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeController>.value(value: theme),
+            ChangeNotifierProvider<TranslationController>.value(
+              value: translation,
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('en'),
+            theme: ThemeData(extensions: [AppColors.light]),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const ChatInfoView(chatId: 42, title: 'Group'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // ChatInfoView can be longer than the viewport; walk to the
+      // management entry.
+      final infoScroll = find.byType(Scrollable).first;
+      for (var i = 0; i < 30; i++) {
+        if (find.text('Manage group').evaluate().isNotEmpty) break;
+        await tester.drag(infoScroll, const Offset(0, -300));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('Manage group'), findsOneWidget);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Manage group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Manage group'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GroupManagementView), findsOneWidget);
+
+      final mgmtScroll = find.byType(Scrollable).first;
+      for (var i = 0; i < 30; i++) {
+        if (find.text('Convert to supergroup').evaluate().isNotEmpty) break;
+        await tester.drag(mgmtScroll, const Offset(0, -300));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      requests.clear();
+      await tester.tap(find.text('Convert to supergroup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The management view popped with the upgraded chat id and the
+      // shell replaced itself with the new supergroup conversation.
+      expect(find.byType(GroupManagementView), findsNothing);
+      final chatView = find.byType(ChatView);
+      expect(chatView, findsOneWidget);
+      expect(
+        (tester.widget(chatView) as ChatView).chatId,
+        99,
+        reason: 'the new supergroup chat must be the open conversation',
+      );
+    },
+  );
 }
