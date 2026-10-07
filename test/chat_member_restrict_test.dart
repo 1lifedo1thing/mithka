@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -321,8 +323,10 @@ void main() {
       final applyCenter = tester.getCenter(find.text('Apply').hitTestable());
       final element = find.byType(ChatMembersView).evaluate().single;
       final navigator = element.findAncestorStateOfType<NavigatorState>()!;
-      navigator.pushReplacement(
-        MaterialPageRoute(builder: (_) => const Scaffold(body: SizedBox())),
+      unawaited(
+        navigator.pushReplacement(
+          MaterialPageRoute(builder: (_) => const Scaffold(body: SizedBox())),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.byType(ChatMembersView), findsNothing);
