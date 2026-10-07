@@ -686,6 +686,8 @@ class _GroupManagementViewState extends State<GroupManagementView> {
         ),
       ),
     );
+    // An empty value is valid: TDLib documents it as "remove the username".
+    // An empty value is valid: TDLib documents it as "remove the username".
     if (!mounted || value == null || value == _username) return;
     try {
       await _client.query({
