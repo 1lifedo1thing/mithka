@@ -927,6 +927,7 @@ abstract final class AppStringKeys {
   static const chatMembersAdminSave = 'chatMembersAdminSave';
   static const chatMembersDemote = 'chatMembersDemote';
   static const chatMembersDemoteConfirmation = 'chatMembersDemoteConfirmation';
+  static const chatMembersNoResults = 'chatMembersNoResults';
   static const chatMembersPromote = 'chatMembersPromote';
   static const chatMembersPromoteFirst = 'chatMembersPromoteFirst';
   static const chatMembersRemoveFailedPermission =
@@ -934,6 +935,7 @@ abstract final class AppStringKeys {
   static const chatMembersRemoveMemberConfirmation =
       'chatMembersRemoveMemberConfirmation';
   static const chatMembersRemoveMemberTitle = 'chatMembersRemoveMemberTitle';
+  static const chatMembersSearchHint = 'chatMembersSearchHint';
   static const chatMembersSetTitle = 'chatMembersSetTitle';
   static const chatMembersTitleWithCount = 'chatMembersTitleWithCount';
   static const chatMembersUpdateFailed = 'chatMembersUpdateFailed';

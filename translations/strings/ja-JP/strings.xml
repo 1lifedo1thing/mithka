@@ -1006,11 +1006,13 @@
     <string name="chatMembersDemote">管理者を解除</string>
     <string name="chatMembersDemoteConfirmation">{value1} の管理者権限を解除しますか？</string>
     <string name="chatMembersMemberTag">参加者タグ</string>
+    <string name="chatMembersNoResults">メンバーが見つかりません</string>
     <string name="chatMembersPromote">管理者にする</string>
     <string name="chatMembersPromoteFirst">管理者に昇格してから肩書きを設定してください。</string>
     <string name="chatMembersRemoveFailedPermission">削除に失敗しました。権限がない可能性があります</string>
     <string name="chatMembersRemoveMemberConfirmation">{value1}をグループから削除しますか？</string>
     <string name="chatMembersRemoveMemberTitle">メンバーを削除</string>
+    <string name="chatMembersSearchHint">メンバーを検索</string>
     <string name="chatMembersSetTitle">肩書きを設定</string>
     <string name="chatMembersTitleWithCount">グループメンバー（{value1}）</string>
     <string name="chatMembersUpdateFailed">このメンバーを更新できませんでした。</string>

@@ -1008,11 +1008,13 @@
     <string name="chatMembersDemote">Remove Admin</string>
     <string name="chatMembersDemoteConfirmation">Remove administrator rights from {value1}?</string>
     <string name="chatMembersMemberTag">Member tag</string>
+    <string name="chatMembersNoResults">No members found</string>
     <string name="chatMembersPromote">Promote</string>
     <string name="chatMembersPromoteFirst">Promote this member before setting an administrator title.</string>
     <string name="chatMembersRemoveFailedPermission">Remove failed. You may not have permission.</string>
     <string name="chatMembersRemoveMemberConfirmation">Remove {value1} from the group?</string>
     <string name="chatMembersRemoveMemberTitle">Remove Member</string>
+    <string name="chatMembersSearchHint">Search members</string>
     <string name="chatMembersSetTitle">Set Name Tag</string>
     <string name="chatMembersTitleWithCount">Group Members ({value1})</string>
     <string name="chatMembersUpdateFailed">Could not update this member.</string>
