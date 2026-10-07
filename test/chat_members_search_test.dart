@@ -15,6 +15,11 @@ void main() {
   final requests = <Map<String, dynamic>>[];
   final Map<String, int> memberCounts = {};
   List<Map<String, dynamic>> membersPayload = [];
+  var basicGroup = false;
+
+  setUp(() {
+    basicGroup = false;
+  });
 
   List<Map<String, dynamic>> member(int id, String name) => [
     {
@@ -35,7 +40,9 @@ void main() {
               return {
                 '@type': 'chat',
                 'id': 10,
-                'type': {'@type': 'chatTypeSupergroup', 'supergroup_id': 20},
+                'type': basicGroup
+                    ? {'@type': 'chatTypeBasicGroup', 'basic_group_id': 30}
+                    : {'@type': 'chatTypeSupergroup', 'supergroup_id': 20},
               };
             case 'getMe':
               return {'@type': 'user', 'id': 1, 'first_name': 'Me'};
@@ -55,6 +62,8 @@ void main() {
                 'member_count': membersPayload.length,
                 'members': membersPayload,
               };
+            case 'getBasicGroupFullInfo':
+              return {'@type': 'basicGroupFullInfo', 'members': membersPayload};
             case 'searchChatMembers':
               return {
                 '@type': 'chatMembers',
@@ -191,5 +200,93 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No members found'), findsOneWidget);
+  });
+
+  testWidgets('a progressive second page appends each member once', (
+    tester,
+  ) async {
+    // 200 on the first page -> hasMore; the second page returns 13
+    // users, which crosses the every-12th progressive repaint. The old
+    // code appended the whole batch again at the end (225 rows); the
+    // final count must be exactly 213.
+    membersPayload = [
+      for (var i = 0; i < 200; i++)
+        {
+          '@type': 'chatMember',
+          'member_id': {'@type': 'messageSenderUser', 'user_id': 1000 + i},
+          'status': {'@type': 'chatMemberStatusMember'},
+        },
+    ];
+    await pumpView(tester);
+
+    requests.clear();
+    membersPayload = [
+      for (var i = 0; i < 13; i++)
+        {
+          '@type': 'chatMember',
+          'member_id': {'@type': 'messageSenderUser', 'user_id': 2000 + i},
+          'status': {'@type': 'chatMemberStatusMember'},
+        },
+    ];
+    final list = find.byType(ListView).first;
+    for (var i = 0; i < 60; i++) {
+      await tester.timedDrag(
+        list,
+        const Offset(0, -400),
+        const Duration(milliseconds: 200),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    final paged = requests
+        .where((r) => r['@type'] == 'getSupergroupMembers')
+        .toList();
+    expect(paged.last['offset'], 200);
+    // 200 first-page rows + exactly 13 second-page rows. The old double
+    // append produced 225. Rows are sorted by name after resolution, so
+    // the visible row for User200x sits between the first-page users
+    // alphabetically — the list's own child count is the source of truth.
+    final listWidget = tester.widget<ListView>(list);
+    expect(listWidget.semanticChildCount, 213);
+  });
+
+  testWidgets('typing filters the basic-group list locally', (tester) async {
+    basicGroup = true;
+    membersPayload = [
+      {
+        '@type': 'chatMember',
+        'member_id': {'@type': 'messageSenderUser', 'user_id': 42},
+        'status': {'@type': 'chatMemberStatusMember'},
+      },
+      {
+        '@type': 'chatMember',
+        'member_id': {'@type': 'messageSenderUser', 'user_id': 43},
+        'status': {'@type': 'chatMemberStatusMember'},
+      },
+    ];
+    await pumpView(tester);
+    expect(find.text('User42'), findsOneWidget);
+    expect(find.text('User43'), findsOneWidget);
+
+    requests.clear();
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-search-field')),
+      '43',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    // The nonmatching member is filtered out locally — no refetch, no
+    // searchChatMembers round trip for a list already in memory.
+    expect(find.text('User43'), findsOneWidget);
+    expect(find.text('User42'), findsNothing);
+    expect(requests.where((r) => r['@type'] == 'searchChatMembers'), isEmpty);
+    expect(
+      requests.where((r) => r['@type'] == 'getBasicGroupFullInfo'),
+      isEmpty,
+    );
   });
 }

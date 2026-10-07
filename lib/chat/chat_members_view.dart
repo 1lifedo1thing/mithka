@@ -94,12 +94,29 @@ class _ChatMembersViewState extends State<ChatMembersView> {
   final _search = TextEditingController();
   String _searchQuery = '';
   int _searchRunId = 0;
+
+  /// Guards list mutations across async gaps: every load, search or page
+  /// fetch bumps it, and a result only applies while its epoch is still
+  /// current — a slower earlier request (or its progressive repaints) can
+  /// never append to or replace a list a newer request owns.
+  int _listEpoch = 0;
   bool _canRemove = false;
   bool _canPromote = false;
   bool _canManageTags = false;
   bool _isCreator = false;
   bool _isChannel = false;
   int? _openRowId;
+
+  /// What the list renders: the full supergroup list, or the basic-group
+  /// list filtered by the current search locally.
+  List<GroupMember> get _visibleMembers =>
+      _searchQuery.isEmpty || !_isBasicGroup
+      ? _members
+      : _members
+            .where(
+              (m) => m.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+            )
+            .toList(growable: false);
 
   @override
   void initState() {
@@ -131,14 +148,19 @@ class _ChatMembersViewState extends State<ChatMembersView> {
   }
 
   Future<void> _runSearch(String query) async {
+    final epoch = ++_listEpoch;
     setState(() {
       _loading = true;
       _members = [];
     });
-    await _load();
+    await _load(epoch: epoch);
   }
 
-  Future<void> _load() async {
+  Future<void> _load({int? epoch}) async {
+    // A result only applies while its epoch is current: a slower earlier
+    // search or page load must never repopulate a list a newer request
+    // already owns. Null (initial load) always applies.
+    final myEpoch = epoch ?? ++_listEpoch;
     try {
       final chat = await TdClient.shared.query({
         '@type': 'getChat',
@@ -158,12 +180,11 @@ class _ChatMembersViewState extends State<ChatMembersView> {
             '@type': 'getBasicGroupFullInfo',
             'basic_group_id': gid,
           });
+          // The full list is cached in memory; the search field filters
+          // it locally (see _visibleMembers) instead of refetching.
           raw = full.objects('members') ?? const <Map<String, dynamic>>[];
           if (widget.mode == ChatMembersMode.administrators) {
             raw = raw.where(_isAdministratorEntry).toList();
-          }
-          if (_searchQuery.isNotEmpty) {
-            raw = await _filterByNames(raw, _searchQuery);
           }
           _total = raw.length;
         }
@@ -217,40 +238,17 @@ class _ChatMembersViewState extends State<ChatMembersView> {
               : fullCount ?? res.integer('member_count') ?? raw.length;
         }
       }
-      await _resolve(raw);
+      await _resolve(raw, epoch: myEpoch);
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    if (mounted && myEpoch == _listEpoch) {
+      setState(() => _loading = false);
+    }
   }
 
   bool _isAdministratorEntry(Map<String, dynamic> entry) {
     final type = entry.obj('status')?.type;
     return type == 'chatMemberStatusCreator' ||
         type == 'chatMemberStatusAdministrator';
-  }
-
-  /// Basic groups have the full member list in memory, so a local name
-  /// filter is enough; supergroups go through searchChatMembers instead.
-  Future<List<Map<String, dynamic>>> _filterByNames(
-    List<Map<String, dynamic>> raw,
-    String query,
-  ) async {
-    final needle = query.toLowerCase();
-    final kept = <Map<String, dynamic>>[];
-    for (final entry in raw) {
-      final mid = entry.obj('member_id');
-      final uid = mid?.int64('user_id');
-      if (uid == null) continue;
-      try {
-        final user = await TdClient.shared.query({
-          '@type': 'getUser',
-          'user_id': uid,
-        });
-        if (TDParse.userName(user).toLowerCase().contains(needle)) {
-          kept.add(entry);
-        }
-      } catch (_) {}
-    }
-    return kept;
   }
 
   /// Loads the next supergroup page and appends it, skipping users already
@@ -264,6 +262,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
         _loading) {
       return;
     }
+    final epoch = ++_listEpoch;
     setState(() => _loadingMore = true);
     try {
       final res = await TdClient.shared.query({
@@ -278,10 +277,11 @@ class _ChatMembersViewState extends State<ChatMembersView> {
         'limit': _pageSize,
       });
       final raw = res.objects('members') ?? const <Map<String, dynamic>>[];
-      _hasMore = raw.length >= _pageSize;
-      _nextOffset += raw.length;
+      final hasMore = raw.length >= _pageSize;
+      final nextOffset = _nextOffset + raw.length;
       final existing = _members.map((m) => m.id).toSet();
       final fresh = <GroupMember>[];
+      var appended = 0; // how much of `fresh` is already on screen.
       for (final entry in raw) {
         final mid = entry.obj('member_id');
         if (mid?.type != 'messageSenderUser') continue;
@@ -308,19 +308,32 @@ class _ChatMembersViewState extends State<ChatMembersView> {
               rawStatus: status,
             ),
           );
+          // Progressive repaint appends only the not-yet-shown slice;
+          // the final assignment below repeats nothing. A slower earlier
+          // page (stale epoch) stops mid-loop: it must not append to a
+          // list a newer request owns.
           if (mounted && fresh.length % 12 == 0) {
-            setState(() => _members = [..._members, ...fresh]);
+            if (epoch != _listEpoch) return;
+            setState(() {
+              _members = [..._members, ...fresh.skip(appended)];
+              appended = fresh.length;
+            });
           }
         } catch (_) {}
       }
       if (!mounted) return;
+      if (epoch != _listEpoch) return;
       setState(() {
-        _members = [..._members, ...fresh];
+        _hasMore = hasMore;
+        _nextOffset = nextOffset;
+        _members = [..._members, ...fresh.skip(appended)];
         _loadingMore = false;
       });
       return;
     } catch (_) {}
-    if (mounted) setState(() => _loadingMore = false);
+    if (mounted && epoch == _listEpoch) {
+      setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _loadSelfPermissions() async {
@@ -348,7 +361,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     } catch (_) {}
   }
 
-  Future<void> _resolve(List<Map<String, dynamic>> raw) async {
+  Future<void> _resolve(List<Map<String, dynamic>> raw, {int? epoch}) async {
     final result = <GroupMember>[];
     for (final entry in raw) {
       final mid = entry.obj('member_id');
@@ -377,7 +390,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           ),
         );
       } catch (_) {}
-      // Stream partial results so the list fills in progressively.
+      // Stream partial results so the list fills in progressively. A
+      // stale epoch stops painting: a newer request owns the list now.
+      if (mounted && epoch != null && epoch != _listEpoch) return;
       if (mounted && result.length % 12 == 0) {
         setState(() => _members = List.of(result));
       }
@@ -394,7 +409,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           ? byRole
           : a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
-    if (mounted) setState(() => _members = result);
+    if (mounted && (epoch == null || epoch == _listEpoch)) {
+      setState(() => _members = result);
+    }
   }
 
   Future<void> _confirmRemove(GroupMember m) async {
@@ -585,9 +602,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
             ),
           ],
           Expanded(
-            child: _loading && _members.isEmpty
+            child: _loading && _visibleMembers.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : _members.isEmpty
+                : _visibleMembers.isEmpty
                 ? Center(
                     child: Text(
                       AppStrings.t(AppStringKeys.chatMembersNoResults),
@@ -603,9 +620,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
                     },
                     child: ListView.builder(
                       padding: EdgeInsets.zero,
-                      itemCount: _members.length + (_hasMore ? 1 : 0),
+                      itemCount: _visibleMembers.length + (_hasMore ? 1 : 0),
                       itemBuilder: (context, i) {
-                        if (i >= _members.length) {
+                        if (i >= _visibleMembers.length) {
                           return const SizedBox(
                             height: 52,
                             child: Center(
@@ -613,7 +630,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
                             ),
                           );
                         }
-                        final m = _members[i];
+                        final m = _visibleMembers[i];
                         final leadingActions = <MemberRowAction>[
                           if (_canPromote && m.role == MemberRole.member)
                             MemberRowAction(
