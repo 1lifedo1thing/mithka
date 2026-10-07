@@ -52,6 +52,7 @@ class _ChatAdministratorEditViewState extends State<ChatAdministratorEditView> {
     'can_delete_stories',
     'can_manage_direct_messages',
     'can_manage_tags',
+    'can_send_welcome_messages',
     'is_anonymous',
   ];
 
@@ -76,6 +77,7 @@ class _ChatAdministratorEditViewState extends State<ChatAdministratorEditView> {
     'can_manage_direct_messages':
         AppStringKeys.chatAdminPermissionManageDirectMessages,
     'can_manage_tags': AppStringKeys.chatAdminPermissionManageTags,
+    'can_send_welcome_messages': AppStringKeys.chatAdminSendWelcomeMessages,
     'is_anonymous': AppStringKeys.chatAdminAnonymous,
   };
 

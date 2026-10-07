@@ -773,6 +773,7 @@
     <string name="chatAdminPermissionDeleteMessagesOfOthers">다른 사람의 메시지 삭제</string>
     <string name="chatAdminPromoteMembers">새 관리자 추가</string>
     <string name="chatAdminRestrictMembers">멤버 제한</string>
+    <string name="chatAdminSendWelcomeMessages">환영 메시지 보내기</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">소유권을 이전할 수 없습니다. 비밀번호를 확인하세요.</string>
     <string name="chatAdministratorEditPasswordTooFresh">2단계 인증 비밀번호를 설정한 지 얼마 되지 않았습니다.</string>
     <string name="chatAdministratorEditSessionTooFresh">이 세션은 만든 지 얼마 되지 않았습니다.</string>

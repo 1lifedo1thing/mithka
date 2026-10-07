@@ -773,6 +773,7 @@
     <string name="chatAdminPermissionDeleteMessagesOfOthers">Nachrichten anderer löschen</string>
     <string name="chatAdminPromoteMembers">Neue Admins hinzufügen</string>
     <string name="chatAdminRestrictMembers">Mitglieder einschränken</string>
+    <string name="chatAdminSendWelcomeMessages">Willkommensnachrichten senden</string>
     <string name="chatAdministratorEditCouldnTTransferOwnershipCheckThePassword">Das Eigentum konnte nicht übertragen werden. Überprüfen Sie das Passwort.</string>
     <string name="chatAdministratorEditPasswordTooFresh">Dein Zwei-Schritt-Passwort ist zu neu.</string>
     <string name="chatAdministratorEditSessionTooFresh">Diese Sitzung ist zu neu.</string>

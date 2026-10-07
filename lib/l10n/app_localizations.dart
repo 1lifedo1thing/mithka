@@ -776,6 +776,7 @@ abstract final class AppStringKeys {
       'chatAdminPermissionPostStories';
   static const chatAdminPromoteMembers = 'chatAdminPromoteMembers';
   static const chatAdminRestrictMembers = 'chatAdminRestrictMembers';
+  static const chatAdminSendWelcomeMessages = 'chatAdminSendWelcomeMessages';
   static const chatAdminsOnlyPosting = 'chatAdminsOnlyPosting';
   static const chatAllMembersMuted = 'chatAllMembersMuted';
   static const chatAndOthersCount = 'chatAndOthersCount';
