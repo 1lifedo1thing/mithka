@@ -157,6 +157,62 @@ void main() {
     expect(loudOnly.hasUnmutedUnread, isTrue);
   });
 
+  testWidgets(
+    'an exclude_muted folder still counts a muted chat it pins or includes',
+    (tester) async {
+      final model = ChatListViewModel();
+      addTearDown(model.dispose);
+      // Real chatFilter shape: excluded muted chats are cut, but
+      // pinned_chat_ids/included_chat_ids are unconditional members —
+      // TDLib keeps their folder position and the projection shows them.
+      model.applyUpdateForTesting({
+        '@type': 'updateChatFolders',
+        'chat_folders': [
+          {
+            '@type': 'chatFolderInfo',
+            'id': 11,
+            'name': 'Pinned work',
+            'folder': {
+              '@type': 'chatFilter',
+              'title': 'Pinned work',
+              'exclude_muted': true,
+              'pinned_chat_ids': [21],
+              'included_chat_ids': [22],
+            },
+          },
+        ],
+      });
+      model.seedChatForTesting(chat(21, unread: 4, muted: true));
+      model.seedChatForTesting(chat(22, unread: 2, muted: true));
+      model.seedChatForTesting(chat(23, unread: 9, muted: true));
+      for (final entry in [21, 22, 23]) {
+        model.applyUpdateForTesting({
+          '@type': 'updateChatPosition',
+          'chat_id': entry,
+          'position': {
+            '@type': 'chatPosition',
+            'order': 30 - entry,
+            'is_pinned': entry == 21,
+            'list': {'@type': 'chatListFolder', 'chat_folder_id': 11},
+          },
+        });
+      }
+      await tester.pump(const Duration(milliseconds: 60));
+
+      final folder = model.filters.firstWhere((f) => f.folderId == 11);
+      // The projection still shows all three chats.
+      expect(
+        model.chatsForFolder(11).map((c) => c.id),
+        containsAll([21, 22, 23]),
+      );
+      // 21 (pinned) and 22 (included) survive the exclude_muted cut; 23 is
+      // a plain muted member and stays excluded. Both counted chats are
+      // muted, so the badge keeps its count but loses the accent.
+      expect(folder.unreadChatCount, 2);
+      expect(folder.hasUnmutedUnread, isFalse);
+    },
+  );
+
   testWidgets('folder tab strips and rails draw the badge next to the glyph', (
     tester,
   ) async {

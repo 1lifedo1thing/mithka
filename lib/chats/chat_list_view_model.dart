@@ -1578,8 +1578,11 @@ class ChatListViewModel extends ChangeNotifier {
   /// Telegram's folder badge is a count of unread *chats*, not messages: a
   /// chat with 50 unread messages still contributes 1. A muted chat counts
   /// towards the number but not towards [ChatFilterOption.hasUnmutedUnread],
-  /// which is what decides the badge's colour — unless the folder itself
-  /// excludes muted chats, in which case the chat never counts at all.
+  /// which is what decides the badge's colour. A folder that excludes muted
+  /// chats skips them — except chats the filter pins or includes outright:
+  /// TDLib guarantees those are always members, they keep a folder position
+  /// and show in the projection, so the badge must count them too or it
+  /// disagrees with the list it summarizes.
   /// Membership follows `_folderOrders`, the same store `_projectChats`
   /// filters on, so a badge can never disagree with the list it summarizes.
   void _refreshFolderUnreadCounts() {
@@ -1594,6 +1597,15 @@ class ChatListViewModel extends ChangeNotifier {
         continue;
       }
       final excludeMuted = rule.boolean('exclude_muted') ?? false;
+      // Chats pinned or included by the filter itself are unconditional
+      // members (pinned chatFilter schema): skip the exclude_muted cut for
+      // them so the badge matches the projection that still shows them.
+      final alwaysIncluded = excludeMuted
+          ? <int>{
+              ...?rule.int64Array('pinned_chat_ids'),
+              ...?rule.int64Array('included_chat_ids'),
+            }
+          : const <int>{};
       var count = 0;
       var unmuted = false;
       final orders = _folderOrders[folderId];
@@ -1602,7 +1614,11 @@ class ChatListViewModel extends ChangeNotifier {
           final chat = _map[chatId];
           if (chat == null) continue;
           if (!(chat.unreadCount > 0 || chat.isMarkedUnread)) continue;
-          if (excludeMuted && chat.isMuted) continue;
+          if (excludeMuted &&
+              chat.isMuted &&
+              !alwaysIncluded.contains(chatId)) {
+            continue;
+          }
           count++;
           if (!chat.isMuted) unmuted = true;
         }
