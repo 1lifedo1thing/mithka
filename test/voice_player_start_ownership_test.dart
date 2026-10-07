@@ -273,6 +273,97 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 20)),
   );
+
+  test(
+    'a retired session releases its native player when the late completion unblocks the lock',
+    () async {
+      final voice = VoicePlayer();
+      addTearDown(voice.dispose);
+
+      // Track A: the native start never completes; the timeout retires the
+      // session while its startPlayer still holds the operation lock.
+      native.plan('startPlayer', [_Behavior.silent, _Behavior.ok]);
+
+      final failures = <int>[];
+      voice.onFailed = (fileId, error) => failures.add(fileId);
+      unawaited(voice.toggleAudio(file(910001)));
+      await until(
+        () => failures.isNotEmpty,
+        timeout: const Duration(seconds: 8),
+      );
+
+      // Track B plays on a fresh native session.
+      await voice.toggleAudio(file(910002));
+      expect(voice.isPlaying, isTrue);
+
+      final platform = FlutterSoundPlayerPlatform.instance as _FakePlatform;
+      final retiredSession = platform.callbacks.first;
+
+      // The retired session never queued a close yet: its startPlayer
+      // still pins the operation lock.
+      final closesBefore = count('closePlayer');
+
+      // The platform finally delivers the late start completion. The lock
+      // releases, and the retirement's queued closePlayer runs: the
+      // retired native session is released instead of leaking.
+      retiredSession.startPlayerCompleted(
+        PlayerState.isPlaying.index,
+        true,
+        60000,
+      );
+      await until(
+        () => count('closePlayer') > closesBefore,
+        timeout: const Duration(seconds: 8),
+      );
+
+      // The close was served on the retired session — never on the fresh
+      // one that is still playing track B.
+      expect(
+        platform.callbacks.toSet(),
+        contains(retiredSession),
+        reason: 'the close must run on the retired session',
+      );
+      expect(voice.isPlaying, isTrue, reason: 'track B keeps playing');
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
+
+  test(
+    'dispose queues a close that releases a still-opening native player',
+    () async {
+      // openPlayer is answered but its completion callback never arrives,
+      // so the Dart open future never completes and the instance stays
+      // "opening" forever. dispose must still queue a closePlayer: it
+      // waits for the open (like every verb does) and releases the
+      // native session when the late open completion unblocks the lock.
+      native.plan('openPlayer', [_Behavior.silent]);
+
+      final voice = VoicePlayer();
+      unawaited(voice.toggleAudio(file(910003)));
+      final platform = FlutterSoundPlayerPlatform.instance as _FakePlatform;
+      await until(() => count('openPlayer') == 1);
+
+      voice.dispose();
+      // The wedged open pinned the instance's Dart-side open future but
+      // not the platform: retirement releases the native session right
+      // away through the platform interface.
+      expect(count('closePlayer'), 1, reason: 'the session is released');
+
+      platform.callbacks.first.openPlayerCompleted(
+        PlayerState.isStopped.index,
+        true,
+      );
+      await until(
+        () =>
+            native.calls
+                .where((c) => c.startsWith('openPlayer') || c == 'closePlayer')
+                .length >=
+            2,
+        timeout: const Duration(seconds: 8),
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
 }
 
 Map<String, dynamic> fileJson(int fileId) => <String, dynamic>{

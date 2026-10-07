@@ -12,6 +12,8 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+// ignore: depend_on_referenced_packages
+import 'package:flutter_sound_platform_interface/flutter_sound_player_platform_interface.dart';
 import 'package:logger/logger.dart' show Level;
 
 import '../tdlib/td_image_loader.dart';
@@ -178,13 +180,61 @@ class VoicePlayer extends ChangeNotifier {
   /// the same instance queues behind the dead start and never runs. The only
   /// recovery is to abandon the instance — a fresh openPlayer gets a fresh
   /// lock and a fresh native session.
+  /// Releases a native player instance for good.
+  ///
+  /// [wasOpened] tells whether the instance's openPlayer ever completed in
+  /// our bookkeeping. An opened instance is released through the regular
+  /// verb: flutter_sound serializes every verb behind one non-reentrant
+  /// lock, and a start whose completion never arrives pins that lock, so
+  /// the queued closePlayer runs when the lock releases (the late
+  /// completion) and is a no-op until then. An instance whose openPlayer
+  /// never completed can never be released by the verb — closePlayer
+  /// returns early on the uninitialized flag without touching the
+  /// platform — so its native session is closed directly on the platform
+  /// interface. Both paths are bound to this exact instance and can never
+  /// close a fresh player a later load opened.
+  void _releaseNative(FlutterSoundPlayer player, {required bool wasOpened}) {
+    if (wasOpened) {
+      unawaited(
+        player
+            .closePlayer()
+            .timeout(const Duration(seconds: 3))
+            .catchError((Object _) {}),
+      );
+      return;
+    }
+    try {
+      unawaited(
+        FlutterSoundPlayerPlatform.instance
+            .closePlayer(player)
+            .timeout(const Duration(seconds: 3))
+            .catchError((Object _) => 0),
+      );
+      FlutterSoundPlayerPlatform.instance.closeSession(player);
+    } catch (_) {}
+  }
+
+  /// Retires the current native player and resets the open bookkeeping.
+  ///
+  /// flutter_sound serializes every verb (open, start, stop, close) behind
+  /// one non-reentrant lock. A startPlayer whose completer never completes
+  /// (Android MediaPlayer prepare that never reports prepared, a lost native
+  /// reply) holds that lock forever: every later stopPlayer/closePlayer on
+  /// the same instance queues behind the dead start and never runs. The only
+  /// recovery is to abandon the instance — a fresh openPlayer gets a fresh
+  /// lock and a fresh native session. The abandoned instance still owns a
+  /// native session, so its release is queued rather than forgotten.
   void _retireNativePlayer() {
+    final retired = _player;
+    final wasOpened = _opened;
     _player = null;
     _opened = false;
     _opening = null;
     // Callbacks still registered on the retired instance may fire at any
     // time; invalidating the generation makes them no-ops.
     _playbackGeneration++;
+    if (retired == null) return;
+    _releaseNative(retired, wasOpened: wasOpened);
   }
 
   Future<({Duration position, Duration duration})?> _readProgress() async {
@@ -712,13 +762,17 @@ class VoicePlayer extends ChangeNotifier {
     _progress?.cancel();
     _interruption?.cancel();
     _becomingNoisy?.cancel();
-    if (_opened) {
-      // closePlayer shares the operation lock with a possibly wedged
-      // start; a 3s bound keeps dispose from hanging with it.
-      _player
-          ?.closePlayer()
-          .timeout(const Duration(seconds: 3))
-          .catchError((_) {});
+    final player = _player;
+    final wasOpened = _opened;
+    _player = null;
+    if (player != null) {
+      // Release whatever native session the current instance owns — a
+      // close on an opened instance, a direct platform close when the
+      // openPlayer never completed (the verb would early-return and leak
+      // it). Disposal means no later load can exist, so releasing the
+      // current instance is always safe. Both paths are bounded so a
+      // wedged operation lock cannot hang dispose.
+      _releaseNative(player, wasOpened: wasOpened);
     }
     super.dispose();
   }
