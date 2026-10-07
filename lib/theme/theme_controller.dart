@@ -1193,6 +1193,8 @@ class ThemeController extends ChangeNotifier {
       (m) => m.name == _prefs.getString(_unreadBadgeOverflowModeKey),
       orElse: () => UnreadBadgeOverflowMode.capped,
     );
+    _showFolderUnreadBadges =
+        _prefs.getBool(_showFolderUnreadBadgesKey) ?? true;
     AppTheme.applyBrand(_brandColor); // before the first MaterialApp build
   }
 
@@ -1280,6 +1282,7 @@ class ThemeController extends ChangeNotifier {
   static const _archivedChatsDisplayModeKey = 'archivedChatsDisplayMode';
   static const _unreadBadgeModeKey = 'unreadBadgeMode';
   static const _unreadBadgeOverflowModeKey = 'unreadBadgeOverflowMode';
+  static const _showFolderUnreadBadgesKey = 'showFolderUnreadBadges';
 
   static const double minFontScale = 0.8;
   // Text reflows inside bubbles and rows that grow with it, so a generous
@@ -1366,6 +1369,7 @@ class ThemeController extends ChangeNotifier {
   late ArchivedChatsDisplayMode _archivedChatsDisplayMode;
   late UnreadBadgeMode _unreadBadgeMode;
   late UnreadBadgeOverflowMode _unreadBadgeOverflowMode;
+  late bool _showFolderUnreadBadges;
 
   AppearanceMode get mode => _mode;
   bool get themingEnabled => _themingEnabled;
@@ -1833,6 +1837,7 @@ class ThemeController extends ChangeNotifier {
       _unreadBadgeOverflowMode;
   bool get capUnreadBadgeAt99 =>
       _unreadBadgeOverflowMode == UnreadBadgeOverflowMode.capped;
+  bool get showFolderUnreadBadges => _showFolderUnreadBadges;
 
   NameColorAudience _storedNameColorAudience(
     String key, {
@@ -2812,5 +2817,12 @@ class ThemeController extends ChangeNotifier {
     unreadBadgeOverflowMode = value
         ? UnreadBadgeOverflowMode.capped
         : UnreadBadgeOverflowMode.exact;
+  }
+
+  set showFolderUnreadBadges(bool value) {
+    if (_showFolderUnreadBadges == value) return;
+    _showFolderUnreadBadges = value;
+    _prefs.setBool(_showFolderUnreadBadgesKey, value);
+    notifyListeners();
   }
 }

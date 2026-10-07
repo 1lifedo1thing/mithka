@@ -32,13 +32,33 @@ class ChatFilterOption {
     required this.title,
     this.folderId,
     this.iconName = 'Custom',
+    this.unreadChatCount = 0,
+    this.hasUnmutedUnread = false,
   });
 
   final String title;
   final int? folderId;
   final String iconName;
 
+  /// Unread chats inside the folder (a chat counts once, not per message).
+  /// Telegram's own folder badges report chat counts, and muted chats still
+  /// count — muting only decides the badge's colour.
+  final int unreadChatCount;
+
+  /// Whether at least one of those unread chats is unmuted, which is what
+  /// makes Telegram draw the badge in the accent colour instead of grey.
+  final bool hasUnmutedUnread;
+
   bool get isAll => folderId == null;
+
+  ChatFilterOption withUnread({required int count, required bool unmuted}) =>
+      ChatFilterOption(
+        title: title,
+        folderId: folderId,
+        iconName: iconName,
+        unreadChatCount: count,
+        hasUnmutedUnread: unmuted,
+      );
 }
 
 class _CommunityLookup {
@@ -157,6 +177,11 @@ class ChatListViewModel extends ChangeNotifier {
   ChatFilterOption get selectedFilter => _selectedFilter;
   bool get isAllFilter => _selectedFilter.isAll;
   bool get isInitialLoading => _initialLoading && _chats.isEmpty;
+
+  /// Folder rules as TDLib reported them, keyed by folder id. The unread
+  /// badges need `exclude_muted`/`exclude_read`/explicit inclusions, which
+  /// [ChatFilterOption] deliberately does not carry.
+  final Map<int, Map<String, dynamic>> _folderRules = {};
 
   /// Authoritative store keyed by chat id; `chats` is a sorted projection.
   final Map<int, ChatSummary> _map = {};
@@ -315,17 +340,29 @@ class ChatListViewModel extends ChangeNotifier {
     final folders = <ChatFilterOption>[
       const ChatFilterOption(title: AppStringKeys.topicChatAllFilter),
     ];
+    _folderRules.clear();
     for (final folder in raw) {
       final id = folder.integer('id') ?? folder.integer('chat_folder_id');
       if (id == null) continue;
       final title = _folderTitle(folder, id);
+      ChatFilterOption? previous;
+      for (final candidate in _filters) {
+        if (candidate.folderId == id) {
+          previous = candidate;
+          break;
+        }
+      }
       folders.add(
         ChatFilterOption(
           title: title,
           folderId: id,
           iconName: folder.obj('icon')?.str('name') ?? 'Custom',
+          unreadChatCount: previous?.unreadChatCount ?? 0,
+          hasUnmutedUnread: previous?.hasUnmutedUnread ?? false,
         ),
       );
+      final rule = folder.obj('folder');
+      _folderRules[id] = rule ?? folder;
     }
     _filters = folders;
     if (_selectedFilter.folderId != null &&
@@ -366,6 +403,7 @@ class ChatListViewModel extends ChangeNotifier {
         .then((folder) {
           if (_disposed) return;
           _resolvingFolders.remove(id);
+          _folderRules[id] = folder;
           final option = ChatFilterOption(
             title: _folderTitle(folder, id),
             folderId: id,
@@ -1520,6 +1558,7 @@ class ChatListViewModel extends ChangeNotifier {
             : b.date.compareTo(a.date),
       );
     _chats = _projectChats(_selectedFilter.folderId, visible);
+    _refreshFolderUnreadCounts();
     _invalidateEntriesCaches();
     stopwatch.stop();
     AppPerformanceMetrics.chatListResorted(
@@ -1533,6 +1572,61 @@ class ChatListViewModel extends ChangeNotifier {
 
   List<ChatSummary> _visibleChats() =>
       _map.values.where((c) => _joinedChatCache[c.id] ?? true).toList();
+
+  /// Recomputes each folder's unread-chat badge from the chat store.
+  ///
+  /// Telegram's folder badge is a count of unread *chats*, not messages: a
+  /// chat with 50 unread messages still contributes 1. A muted chat counts
+  /// towards the number but not towards [ChatFilterOption.hasUnmutedUnread],
+  /// which is what decides the badge's colour — unless the folder itself
+  /// excludes muted chats, in which case the chat never counts at all.
+  /// Membership follows `_folderOrders`, the same store `_projectChats`
+  /// filters on, so a badge can never disagree with the list it summarizes.
+  void _refreshFolderUnreadCounts() {
+    if (_folderRules.isEmpty) return;
+    var changed = false;
+    final updated = <ChatFilterOption>[];
+    for (final filter in _filters) {
+      final folderId = filter.folderId;
+      final rule = folderId == null ? null : _folderRules[folderId];
+      if (rule == null) {
+        updated.add(filter);
+        continue;
+      }
+      final excludeMuted = rule.boolean('exclude_muted') ?? false;
+      var count = 0;
+      var unmuted = false;
+      final orders = _folderOrders[folderId];
+      if (orders != null) {
+        for (final chatId in orders.keys) {
+          final chat = _map[chatId];
+          if (chat == null) continue;
+          if (!(chat.unreadCount > 0 || chat.isMarkedUnread)) continue;
+          if (excludeMuted && chat.isMuted) continue;
+          count++;
+          if (!chat.isMuted) unmuted = true;
+        }
+      }
+      if (count != filter.unreadChatCount ||
+          unmuted != filter.hasUnmutedUnread) {
+        changed = true;
+        updated.add(filter.withUnread(count: count, unmuted: unmuted));
+      } else {
+        updated.add(filter);
+      }
+    }
+    if (!changed) return;
+    _filters = updated;
+    final selectedId = _selectedFilter.folderId;
+    if (selectedId != null) {
+      for (final filter in _filters) {
+        if (filter.folderId == selectedId) {
+          _selectedFilter = filter;
+          break;
+        }
+      }
+    }
+  }
 
   List<ChatSummary> _projectChats(int? folderId, List<ChatSummary> visible) {
     if (folderId == null) {

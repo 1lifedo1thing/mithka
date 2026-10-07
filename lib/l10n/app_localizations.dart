@@ -437,6 +437,7 @@ abstract final class AppStringKeys {
       'appearanceChatListFolderSwipeSwitching';
   static const appearanceChatView = 'appearanceChatView';
   static const appearanceMessageBubbles = 'appearanceMessageBubbles';
+  static const appearanceShowFolderBadges = 'appearanceShowFolderBadges';
   static const appearanceShowMessageBubbles = 'appearanceShowMessageBubbles';
   static const appearanceShowMessageBubblesDescription =
       'appearanceShowMessageBubblesDescription';
