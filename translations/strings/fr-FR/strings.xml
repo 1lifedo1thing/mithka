@@ -1008,11 +1008,13 @@
     <string name="chatMembersDemote">Retirer l’admin</string>
     <string name="chatMembersDemoteConfirmation">Retirer les droits d’administrateur de {value1} ?</string>
     <string name="chatMembersMemberTag">Titre de membre</string>
+    <string name="chatMembersNoResults">Aucun membre trouvé</string>
     <string name="chatMembersPromote">Nommer admin</string>
     <string name="chatMembersPromoteFirst">Nommez d’abord ce membre administrateur.</string>
     <string name="chatMembersRemoveFailedPermission">Échec du retrait, permissions peut-être insuffisantes</string>
     <string name="chatMembersRemoveMemberConfirmation">Retirer {value1} du groupe ?</string>
     <string name="chatMembersRemoveMemberTitle">Retirer le membre</string>
+    <string name="chatMembersSearchHint">Rechercher des membres</string>
     <string name="chatMembersSetTitle">Définir le titre</string>
     <string name="chatMembersTitleWithCount">Membres du groupe ({value1})</string>
     <string name="chatMembersUpdateFailed">Impossible de modifier ce membre.</string>

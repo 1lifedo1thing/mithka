@@ -1006,11 +1006,13 @@
     <string name="chatMembersDemote">取消管理員</string>
     <string name="chatMembersDemoteConfirmation">取消 {value1} 的管理員權限？</string>
     <string name="chatMembersMemberTag">成員標籤</string>
+    <string name="chatMembersNoResults">找不到成員</string>
     <string name="chatMembersPromote">設為管理員</string>
     <string name="chatMembersPromoteFirst">請先將此成員設為管理員，再設定管理員頭銜。</string>
     <string name="chatMembersRemoveFailedPermission">移除失敗，可能沒有權限</string>
     <string name="chatMembersRemoveMemberConfirmation">要將 {value1} 移出群組嗎？</string>
     <string name="chatMembersRemoveMemberTitle">移除成員</string>
+    <string name="chatMembersSearchHint">搜尋成員</string>
     <string name="chatMembersSetTitle">設定名牌</string>
     <string name="chatMembersTitleWithCount">群組成員 ({value1})</string>
     <string name="chatMembersUpdateFailed">無法修改此成員。</string>

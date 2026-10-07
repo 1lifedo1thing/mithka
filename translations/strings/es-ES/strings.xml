@@ -1008,11 +1008,13 @@
     <string name="chatMembersDemote">Quitar admin</string>
     <string name="chatMembersDemoteConfirmation">¿Quitar los permisos de administrador de {value1}?</string>
     <string name="chatMembersMemberTag">Etiqueta de miembro</string>
+    <string name="chatMembersNoResults">No se encontraron miembros</string>
     <string name="chatMembersPromote">Hacer admin</string>
     <string name="chatMembersPromoteFirst">Primero haz administrador a este miembro.</string>
     <string name="chatMembersRemoveFailedPermission">No se pudo quitar; puede que no tengas permiso</string>
     <string name="chatMembersRemoveMemberConfirmation">¿Quitar a {value1} del grupo?</string>
     <string name="chatMembersRemoveMemberTitle">Quitar miembro</string>
+    <string name="chatMembersSearchHint">Buscar miembros</string>
     <string name="chatMembersSetTitle">Definir cargo</string>
     <string name="chatMembersTitleWithCount">Miembros del grupo ({value1})</string>
     <string name="chatMembersUpdateFailed">No se pudo actualizar este miembro.</string>

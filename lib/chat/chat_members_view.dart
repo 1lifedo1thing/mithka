@@ -81,9 +81,25 @@ class ChatMembersView extends StatefulWidget {
 }
 
 class _ChatMembersViewState extends State<ChatMembersView> {
+  static const _pageSize = 200;
+
   List<GroupMember> _members = [];
   int _total = 0;
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _nextOffset = 0;
+  int? _supergroupId;
+  bool _isBasicGroup = false;
+  final _search = TextEditingController();
+  String _searchQuery = '';
+  int _searchRunId = 0;
+
+  /// Guards list mutations across async gaps: every load, search or page
+  /// fetch bumps it, and a result only applies while its epoch is still
+  /// current — a slower earlier request (or its progressive repaints) can
+  /// never append to or replace a list a newer request owns.
+  int _listEpoch = 0;
   bool _canRemove = false;
   bool _canPromote = false;
   bool _canManageTags = false;
@@ -91,13 +107,62 @@ class _ChatMembersViewState extends State<ChatMembersView> {
   bool _isChannel = false;
   int? _openRowId;
 
+  /// What the list renders: the full supergroup list, or the basic-group
+  /// list filtered by the current search locally.
+  List<GroupMember> get _visibleMembers =>
+      _searchQuery.isEmpty || !_isBasicGroup
+      ? _members
+      : _members
+            .where(
+              (m) => m.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+            )
+            .toList(growable: false);
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Runs a debounced member search on supergroups. Basic groups keep the
+  /// full list from getBasicGroupFullInfo, so they filter locally instead.
+  void _onSearchChanged(String value) {
+    final query = value.trim();
+    if (query == _searchQuery) return;
+    _searchQuery = query;
+    if (_isBasicGroup || _supergroupId == null) {
+      setState(() {});
+      return;
+    }
+    final runId = ++_searchRunId;
+    Future<void>.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted || runId != _searchRunId) return;
+      _runSearch(query);
+    });
+  }
+
+  Future<void> _runSearch(String query) async {
+    final epoch = ++_listEpoch;
+    setState(() {
+      _loading = true;
+      _loadingMore = false;
+      _hasMore = false;
+      _members = [];
+    });
+    await _load(epoch: epoch);
+  }
+
+  Future<void> _load({int? epoch}) async {
+    // A result only applies while its epoch is current: a slower earlier
+    // search or page load must never repopulate a list a newer request
+    // already owns. Null (initial load) always applies.
+    final myEpoch = epoch ?? ++_listEpoch;
     try {
       final chat = await TdClient.shared.query({
         '@type': 'getChat',
@@ -110,12 +175,16 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           (type?.boolean('is_channel') ?? false);
       List<Map<String, dynamic>> raw = [];
       if (type?.type == 'chatTypeBasicGroup') {
+        _isBasicGroup = true;
         final gid = type?.int64('basic_group_id');
         if (gid != null) {
           final full = await TdClient.shared.query({
             '@type': 'getBasicGroupFullInfo',
             'basic_group_id': gid,
           });
+          if (!mounted || myEpoch != _listEpoch) return;
+          // The full list is cached in memory; the search field filters
+          // it locally (see _visibleMembers) instead of refetching.
           raw = full.objects('members') ?? const <Map<String, dynamic>>[];
           if (widget.mode == ChatMembersMode.administrators) {
             raw = raw.where(_isAdministratorEntry).toList();
@@ -125,42 +194,150 @@ class _ChatMembersViewState extends State<ChatMembersView> {
       } else if (type?.type == 'chatTypeSupergroup') {
         final sgid = type?.int64('supergroup_id');
         if (sgid != null) {
+          _supergroupId = sgid;
+          final searching = _searchQuery.isNotEmpty;
           // getSupergroupFullInfo has the accurate member_count;
           // getSupergroupMembers only returns an approximate count.
           int? fullCount;
-          try {
-            final fullInfo = await TdClient.shared.query({
-              '@type': 'getSupergroupFullInfo',
-              'supergroup_id': sgid,
-            });
-            fullCount = fullInfo.integer('member_count');
-          } catch (_) {}
-          final res = await TdClient.shared.query({
-            '@type': 'getSupergroupMembers',
-            'supergroup_id': sgid,
-            'filter': {
-              '@type': widget.mode == ChatMembersMode.administrators
-                  ? 'supergroupMembersFilterAdministrators'
-                  : 'supergroupMembersFilterRecent',
-            },
-            'offset': 0,
-            'limit': 200,
-          });
+          if (!searching) {
+            try {
+              final fullInfo = await TdClient.shared.query({
+                '@type': 'getSupergroupFullInfo',
+                'supergroup_id': sgid,
+              });
+              fullCount = fullInfo.integer('member_count');
+            } catch (_) {}
+          }
+          final res = await TdClient.shared.query(
+            searching
+                ? {
+                    '@type': 'searchChatMembers',
+                    'chat_id': widget.chatId,
+                    'query': _searchQuery,
+                    'limit': _pageSize,
+                    'filter': {'@type': 'chatMembersFilterMembers'},
+                  }
+                : {
+                    '@type': 'getSupergroupMembers',
+                    'supergroup_id': sgid,
+                    'filter': {
+                      '@type': widget.mode == ChatMembersMode.administrators
+                          ? 'supergroupMembersFilterAdministrators'
+                          : 'supergroupMembersFilterRecent',
+                    },
+                    'offset': 0,
+                    'limit': _pageSize,
+                  },
+          );
           raw = res.objects('members') ?? const <Map<String, dynamic>>[];
-          _total = widget.mode == ChatMembersMode.administrators
+          if (!mounted || myEpoch != _listEpoch) return;
+          if (!searching) {
+            _hasMore = raw.length >= _pageSize;
+            _nextOffset = raw.length;
+          } else {
+            _hasMore = false;
+          }
+          _total = searching || widget.mode == ChatMembersMode.administrators
               ? raw.length
               : fullCount ?? res.integer('member_count') ?? raw.length;
         }
       }
-      await _resolve(raw);
+      await _resolve(raw, epoch: myEpoch);
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    if (mounted && myEpoch == _listEpoch) {
+      setState(() => _loading = false);
+    }
   }
 
   bool _isAdministratorEntry(Map<String, dynamic> entry) {
     final type = entry.obj('status')?.type;
     return type == 'chatMemberStatusCreator' ||
         type == 'chatMemberStatusAdministrator';
+  }
+
+  /// Loads the next supergroup page and appends it, skipping users already
+  /// on screen (page windows can overlap when members join/leave).
+  Future<void> _loadMore() async {
+    final sgid = _supergroupId;
+    if (sgid == null ||
+        _searchQuery.isNotEmpty ||
+        _loadingMore ||
+        !_hasMore ||
+        _loading) {
+      return;
+    }
+    final epoch = ++_listEpoch;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await TdClient.shared.query({
+        '@type': 'getSupergroupMembers',
+        'supergroup_id': sgid,
+        'filter': {
+          '@type': widget.mode == ChatMembersMode.administrators
+              ? 'supergroupMembersFilterAdministrators'
+              : 'supergroupMembersFilterRecent',
+        },
+        'offset': _nextOffset,
+        'limit': _pageSize,
+      });
+      final raw = res.objects('members') ?? const <Map<String, dynamic>>[];
+      final hasMore = raw.length >= _pageSize;
+      final nextOffset = _nextOffset + raw.length;
+      final existing = _members.map((m) => m.id).toSet();
+      final fresh = <GroupMember>[];
+      var appended = 0; // how much of `fresh` is already on screen.
+      for (final entry in raw) {
+        final mid = entry.obj('member_id');
+        if (mid?.type != 'messageSenderUser') continue;
+        final uid = mid?.int64('user_id');
+        if (uid == null || existing.contains(uid)) continue;
+        final status = entry.obj('status');
+        var role = _memberRole(status);
+        final title = _memberTitle(entry, status);
+        role ??= MemberRole.member;
+        try {
+          final user = await TdClient.shared.query({
+            '@type': 'getUser',
+            'user_id': uid,
+          });
+          fresh.add(
+            GroupMember(
+              id: uid,
+              name: TDParse.userName(user),
+              photo: TDParse.smallPhoto(user.obj('profile_photo')),
+              role: role,
+              title: title,
+              status: TDParse.userStatus(user),
+              isOnline: TDParse.isUserOnline(user),
+              rawStatus: status,
+            ),
+          );
+          // Progressive repaint appends only the not-yet-shown slice;
+          // the final assignment below repeats nothing. A slower earlier
+          // page (stale epoch) stops mid-loop: it must not append to a
+          // list a newer request owns.
+          if (mounted && fresh.length % 12 == 0) {
+            if (epoch != _listEpoch) return;
+            setState(() {
+              _members = [..._members, ...fresh.skip(appended)];
+              appended = fresh.length;
+            });
+          }
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      if (epoch != _listEpoch) return;
+      setState(() {
+        _hasMore = hasMore;
+        _nextOffset = nextOffset;
+        _members = [..._members, ...fresh.skip(appended)];
+        _loadingMore = false;
+      });
+      return;
+    } catch (_) {}
+    if (mounted && epoch == _listEpoch) {
+      setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _loadSelfPermissions() async {
@@ -188,7 +365,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     } catch (_) {}
   }
 
-  Future<void> _resolve(List<Map<String, dynamic>> raw) async {
+  Future<void> _resolve(List<Map<String, dynamic>> raw, {int? epoch}) async {
     final result = <GroupMember>[];
     for (final entry in raw) {
       final mid = entry.obj('member_id');
@@ -217,7 +394,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           ),
         );
       } catch (_) {}
-      // Stream partial results so the list fills in progressively.
+      // Stream partial results so the list fills in progressively. A
+      // stale epoch stops painting: a newer request owns the list now.
+      if (mounted && epoch != null && epoch != _listEpoch) return;
       if (mounted && result.length % 12 == 0) {
         setState(() => _members = List.of(result));
       }
@@ -234,7 +413,9 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           ? byRole
           : a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
-    if (mounted) setState(() => _members = result);
+    if (mounted && (epoch == null || epoch == _listEpoch)) {
+      setState(() => _members = result);
+    }
   }
 
   Future<void> _confirmRemove(GroupMember m) async {
@@ -412,74 +593,110 @@ class _ChatMembersViewState extends State<ChatMembersView> {
                 : AppStrings.t(AppStringKeys.chatInfoGroupMembers),
             onBack: () => Navigator.of(context).pop(),
           ),
+          if (widget.mode == ChatMembersMode.members) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: SettingsSearchField(
+                key: const ValueKey('chat-members-search'),
+                hintText: AppStringKeys.chatMembersSearchHint,
+                controller: _search,
+                compact: true,
+                onChanged: _onSearchChanged,
+              ),
+            ),
+          ],
           Expanded(
-            child: _loading && _members.isEmpty
+            child: _loading && _visibleMembers.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: _members.length,
-                    itemBuilder: (context, i) {
-                      final m = _members[i];
-                      final leadingActions = <MemberRowAction>[
-                        if (_canPromote && m.role == MemberRole.member)
-                          MemberRowAction(
-                            title: AppStringKeys.chatMembersPromote,
-                            icon: HeroAppIcons.userPlus,
-                            color: AppTheme.brand,
-                            onTap: () => _openAdministratorEditor(m),
-                          ),
-                        if (_canManageTags && m.role == MemberRole.admin)
-                          MemberRowAction(
-                            title: AppStringKeys.chatMembersSetTitle,
-                            icon: HeroAppIcons.idBadge,
-                            color: const Color(0xFF16A085),
-                            onTap: () => _editTitle(m),
-                          ),
-                        if (_canManageTags && m.role == MemberRole.member)
-                          MemberRowAction(
-                            title: AppStringKeys.chatMembersMemberTag,
-                            icon: HeroAppIcons.idBadge,
-                            color: const Color(0xFF16A085),
-                            onTap: () => _editMemberTag(m),
-                          ),
-                      ];
-                      final trailingActions = <MemberRowAction>[
-                        if (widget.mode == ChatMembersMode.administrators &&
-                            _canPromote &&
-                            m.role == MemberRole.admin)
-                          MemberRowAction(
-                            title: AppStringKeys.chatMembersDemote,
-                            icon: HeroAppIcons.circleMinus,
-                            color: AppTheme.tagRed,
-                            onTap: () => _confirmDemote(m),
-                          )
-                        else if (_canRemove && m.role != MemberRole.owner)
-                          MemberRowAction(
-                            title: AppStringKeys.chatInfoRemove,
-                            icon: HeroAppIcons.trash,
-                            color: AppTheme.tagRed,
-                            onTap: () => _confirmRemove(m),
-                          ),
-                      ];
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          MemberActionRow(
-                            rowId: m.id,
-                            openRowId: _openRowId,
-                            onOpenChanged: (id) =>
-                                setState(() => _openRowId = id),
-                            leadingActions: leadingActions,
-                            trailingActions: trailingActions,
-                            onTap: widget.mode == ChatMembersMode.administrators
-                                ? () => _openAdministratorEditor(m)
-                                : () => _openMemberProfile(m),
-                            child: _memberRow(m),
-                          ),
-                          const InsetDivider(leadingInset: 70),
-                        ],
-                      );
+                : _visibleMembers.isEmpty
+                ? Center(
+                    child: Text(
+                      AppStrings.t(AppStringKeys.chatMembersNoResults),
+                      style: TextStyle(fontSize: 14, color: c.textTertiary),
+                    ),
+                  )
+                : NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification.metrics.extentAfter < 600) {
+                        _loadMore();
+                      }
+                      return false;
                     },
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: _visibleMembers.length + (_hasMore ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (i >= _visibleMembers.length) {
+                          return const SizedBox(
+                            height: 52,
+                            child: Center(
+                              child: AppActivityIndicator(size: 18),
+                            ),
+                          );
+                        }
+                        final m = _visibleMembers[i];
+                        final leadingActions = <MemberRowAction>[
+                          if (_canPromote && m.role == MemberRole.member)
+                            MemberRowAction(
+                              title: AppStringKeys.chatMembersPromote,
+                              icon: HeroAppIcons.userPlus,
+                              color: AppTheme.brand,
+                              onTap: () => _openAdministratorEditor(m),
+                            ),
+                          if (_canManageTags && m.role == MemberRole.admin)
+                            MemberRowAction(
+                              title: AppStringKeys.chatMembersSetTitle,
+                              icon: HeroAppIcons.idBadge,
+                              color: const Color(0xFF16A085),
+                              onTap: () => _editTitle(m),
+                            ),
+                          if (_canManageTags && m.role == MemberRole.member)
+                            MemberRowAction(
+                              title: AppStringKeys.chatMembersMemberTag,
+                              icon: HeroAppIcons.idBadge,
+                              color: const Color(0xFF16A085),
+                              onTap: () => _editMemberTag(m),
+                            ),
+                        ];
+                        final trailingActions = <MemberRowAction>[
+                          if (widget.mode == ChatMembersMode.administrators &&
+                              _canPromote &&
+                              m.role == MemberRole.admin)
+                            MemberRowAction(
+                              title: AppStringKeys.chatMembersDemote,
+                              icon: HeroAppIcons.circleMinus,
+                              color: AppTheme.tagRed,
+                              onTap: () => _confirmDemote(m),
+                            )
+                          else if (_canRemove && m.role != MemberRole.owner)
+                            MemberRowAction(
+                              title: AppStringKeys.chatInfoRemove,
+                              icon: HeroAppIcons.trash,
+                              color: AppTheme.tagRed,
+                              onTap: () => _confirmRemove(m),
+                            ),
+                        ];
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            MemberActionRow(
+                              rowId: m.id,
+                              openRowId: _openRowId,
+                              onOpenChanged: (id) =>
+                                  setState(() => _openRowId = id),
+                              leadingActions: leadingActions,
+                              trailingActions: trailingActions,
+                              onTap:
+                                  widget.mode == ChatMembersMode.administrators
+                                  ? () => _openAdministratorEditor(m)
+                                  : () => _openMemberProfile(m),
+                              child: _memberRow(m),
+                            ),
+                            const InsetDivider(leadingInset: 70),
+                          ],
+                        );
+                      },
+                    ),
                   ),
           ),
         ],

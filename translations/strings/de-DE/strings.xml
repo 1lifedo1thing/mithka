@@ -1008,11 +1008,13 @@
     <string name="chatMembersDemote">Admin entfernen</string>
     <string name="chatMembersDemoteConfirmation">Administratorrechte von {value1} entfernen?</string>
     <string name="chatMembersMemberTag">Mitglieds-Tag</string>
+    <string name="chatMembersNoResults">Keine Mitglieder gefunden</string>
     <string name="chatMembersPromote">Zum Admin machen</string>
     <string name="chatMembersPromoteFirst">Dieses Mitglied zuerst zum Administrator machen.</string>
     <string name="chatMembersRemoveFailedPermission">Entfernen fehlgeschlagen, möglicherweise fehlen Berechtigungen</string>
     <string name="chatMembersRemoveMemberConfirmation">{value1} aus der Gruppe entfernen?</string>
     <string name="chatMembersRemoveMemberTitle">Mitglied entfernen</string>
+    <string name="chatMembersSearchHint">Mitglieder suchen</string>
     <string name="chatMembersSetTitle">Titel festlegen</string>
     <string name="chatMembersTitleWithCount">Gruppenmitglieder ({value1})</string>
     <string name="chatMembersUpdateFailed">Mitglied konnte nicht aktualisiert werden.</string>
