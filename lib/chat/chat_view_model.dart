@@ -530,10 +530,17 @@ class ChatViewModel extends ChangeNotifier {
   final List<_DraftMention> _draftMentions = [];
   ChatMessage? _replyTo;
   MessageTextQuote? _replyQuote;
+
+  /// Bumped every time the pending reply changes. A send stamps the
+  /// revision it captured; when it completes, it only consumes the reply
+  /// if the user hasn't picked a different one in the meantime.
+  int _replyRevision = 0;
+
   ChatMessage? get replyTo => _replyTo;
   set replyTo(ChatMessage? message) {
     _replyTo = message;
     _replyQuote = null;
+    _replyRevision++;
   }
 
   MessageTextQuote? get replyQuote => _replyQuote;
@@ -553,18 +560,32 @@ class ChatViewModel extends ChangeNotifier {
 
   /// Panel sends (sticker, GIF, voice note, poll, …) can't attach the reply
   /// anchor inside their content payloads, so they route through this helper:
-  /// it stamps the pending reply onto the request and consumes the reply
-  /// state exactly like the text send paths do. Failed sends keep the reply
-  /// for retry, mirroring the text path's contract.
-  Map<String, dynamic> _withReplyAnchor(Map<String, dynamic> request) {
+  /// it stamps the pending reply onto the request and returns the revision
+  /// the stamp was taken at. The send later consumes the reply only when
+  /// that revision is still current, so completing an older send never
+  /// clears a reply the user selected meanwhile. Failed sends keep the
+  /// reply for retry, mirroring the text path's contract.
+  ({Map<String, dynamic> request, int revision}) _withReplyAnchor(
+    Map<String, dynamic> request,
+  ) {
+    final revision = _replyRevision;
     if (replyTo != null) {
       request['reply_to'] = replyToInput;
     }
-    return request;
+    return (request: request, revision: revision);
   }
 
   bool _consumeReplyAnchor() {
     if (replyTo == null) return false;
+    replyTo = null;
+    return true;
+  }
+
+  /// Consumes the pending reply only if it is still the one [revision]
+  /// stamped. A newer selection survives; a consumed anchor reports false.
+  bool _consumeReplyAnchorIfCurrent(int revision) {
+    if (replyTo == null) return false;
+    if (revision != _replyRevision) return false;
     replyTo = null;
     return true;
   }
@@ -974,6 +995,19 @@ class ChatViewModel extends ChangeNotifier {
       );
       return false;
     }
+  }
+
+  /// Panel fire-and-forget sends: stamps the reply anchor, submits the
+  /// request and consumes the reply only after the send actually
+  /// succeeded — and only if the user hasn't selected a newer reply in
+  /// the meantime. A failed send keeps the reply for retry.
+  void _submitPanelMessage(Map<String, dynamic> request) {
+    final stamped = _withReplyAnchor(request);
+    unawaited(
+      _submitMessageRequest(stamped.request).then((sent) {
+        if (sent) _consumeReplyAnchorIfCurrent(stamped.revision);
+      }),
+    );
   }
 
   void _submitMessageRequestWithoutWaiting(Map<String, dynamic> request) {
@@ -1621,12 +1655,13 @@ class ChatViewModel extends ChangeNotifier {
         'text': {'@type': 'formattedText', 'text': trimmed},
       },
     };
+    final replyRevision = _replyRevision;
     if (replyTo != null) {
       request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
-    replyTo = null;
+    _consumeReplyAnchorIfCurrent(replyRevision);
     _clearDraft();
     notifyListeners();
     return true;
@@ -1707,17 +1742,14 @@ class ChatViewModel extends ChangeNotifier {
     if (!canSendMessages) return;
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageText',
-          'text': {'@type': 'formattedText', 'text': trimmed},
-        },
-      }),
-    );
-    _consumeReplyAnchor();
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageText',
+        'text': {'@type': 'formattedText', 'text': trimmed},
+      },
+    });
   }
 
   /// Sends text that may contain inline custom emoji — [entities] is the list of
@@ -1745,12 +1777,13 @@ class ChatViewModel extends ChangeNotifier {
         },
       },
     };
+    final replyRevision = _replyRevision;
     if (replyTo != null) {
       request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
-    replyTo = null;
+    _consumeReplyAnchorIfCurrent(replyRevision);
     _clearDraft();
     notifyListeners();
     return true;
@@ -1780,13 +1813,14 @@ class ChatViewModel extends ChangeNotifier {
           ? botApiDirectRichMessageInputContent(html, files, blocks: blocks)
           : richMessageInputContent(blocks),
     };
+    final replyRevision = _replyRevision;
     if (replyTo != null) {
       request['reply_to'] = replyToInput;
     }
-    replyTo = null;
     final pendingMessage = await _client.query(
       _withPaidMessageOptions(request),
     );
+    _consumeReplyAnchorIfCurrent(replyRevision);
     final pendingMessageId = pendingMessage.int64('id');
     if (pendingMessageId != null &&
         pendingMessage.obj('sending_state') != null) {
@@ -1900,12 +1934,13 @@ class ChatViewModel extends ChangeNotifier {
       'chat_id': chatId,
       'input_message_content': {'@type': 'inputMessageDice', 'emoji': emoji},
     };
+    final replyRevision = _replyRevision;
     if (replyTo != null) {
       request['reply_to'] = replyToInput;
     }
     final sent = await _submitMessageRequest(request);
     if (!sent) return false;
-    replyTo = null;
+    _consumeReplyAnchorIfCurrent(replyRevision);
     _clearDraft();
     notifyListeners();
     return true;
@@ -1989,6 +2024,7 @@ class ChatViewModel extends ChangeNotifier {
       ...captionEntities,
       ..._mentionEntitiesFor(caption, captionEntities),
     ];
+    final replyRevision = _replyRevision;
     final requests = buildAttachmentSendRequests(
       chatId: chatId,
       topicId: _forumTopicRef,
@@ -1998,7 +2034,6 @@ class ChatViewModel extends ChangeNotifier {
       replyTo: replyToInput,
       sendConfiguration: sendConfiguration,
     );
-    replyTo = null;
     _clearDraft();
     notifyListeners();
     try {
@@ -2011,6 +2046,7 @@ class ChatViewModel extends ChangeNotifier {
           ),
         );
       }
+      _consumeReplyAnchorIfCurrent(replyRevision);
     } catch (error) {
       _publishSendFailure(
         ChatSendFailure.fromError(
@@ -2028,26 +2064,23 @@ class ChatViewModel extends ChangeNotifier {
     List<Map<String, dynamic>> captionEntities = const [],
   }) {
     final captionText = captionEntities.isEmpty ? caption.trim() : caption;
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessagePhoto',
-          'photo': {
-            '@type': 'inputPhoto',
-            'photo': {'@type': 'inputFileLocal', 'path': path},
-          },
-          if (captionText.trim().isNotEmpty)
-            'caption': {
-              '@type': 'formattedText',
-              'text': captionText,
-              if (captionEntities.isNotEmpty) 'entities': captionEntities,
-            },
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessagePhoto',
+        'photo': {
+          '@type': 'inputPhoto',
+          'photo': {'@type': 'inputFileLocal', 'path': path},
         },
-      }),
-    );
-    _consumeReplyAnchor();
+        if (captionText.trim().isNotEmpty)
+          'caption': {
+            '@type': 'formattedText',
+            'text': captionText,
+            if (captionEntities.isNotEmpty) 'entities': captionEntities,
+          },
+      },
+    });
   }
 
   void sendVideo(
@@ -2056,27 +2089,24 @@ class ChatViewModel extends ChangeNotifier {
     List<Map<String, dynamic>> captionEntities = const [],
   }) {
     final captionText = captionEntities.isEmpty ? caption.trim() : caption;
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageVideo',
-          'video': {
-            '@type': 'inputVideo',
-            'video': {'@type': 'inputFileLocal', 'path': path},
-            'supports_streaming': true,
-          },
-          if (captionText.trim().isNotEmpty)
-            'caption': {
-              '@type': 'formattedText',
-              'text': captionText,
-              if (captionEntities.isNotEmpty) 'entities': captionEntities,
-            },
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageVideo',
+        'video': {
+          '@type': 'inputVideo',
+          'video': {'@type': 'inputFileLocal', 'path': path},
+          'supports_streaming': true,
         },
-      }),
-    );
-    _consumeReplyAnchor();
+        if (captionText.trim().isNotEmpty)
+          'caption': {
+            '@type': 'formattedText',
+            'text': captionText,
+            if (captionEntities.isNotEmpty) 'entities': captionEntities,
+          },
+      },
+    });
   }
 
   void sendAnimation(
@@ -2085,46 +2115,43 @@ class ChatViewModel extends ChangeNotifier {
     List<Map<String, dynamic>> captionEntities = const [],
   }) {
     final captionText = captionEntities.isEmpty ? caption.trim() : caption;
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageAnimation',
-          'animation': {
-            '@type': 'inputAnimation',
-            'animation': {'@type': 'inputFileLocal', 'path': path},
-            'duration': 0,
-            'width': 0,
-            'height': 0,
-          },
-          if (captionText.trim().isNotEmpty)
-            'caption': {
-              '@type': 'formattedText',
-              'text': captionText,
-              if (captionEntities.isNotEmpty) 'entities': captionEntities,
-            },
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageAnimation',
+        'animation': {
+          '@type': 'inputAnimation',
+          'animation': {'@type': 'inputFileLocal', 'path': path},
+          'duration': 0,
+          'width': 0,
+          'height': 0,
         },
-      }),
-    );
-    _consumeReplyAnchor();
+        if (captionText.trim().isNotEmpty)
+          'caption': {
+            '@type': 'formattedText',
+            'text': captionText,
+            if (captionEntities.isNotEmpty) 'entities': captionEntities,
+          },
+      },
+    });
   }
 
   Future<bool> sendGif(GifItem gif) async {
     if (!canSendMessages) return false;
     try {
-      final request = _withReplyAnchor(
+      final stamped = _withReplyAnchor(
         gifSendRequest(chatId: chatId, gif: gif),
       );
       final pendingMessage = await _client.query(
-        _withPaidMessageOptions(request),
+        _withPaidMessageOptions(stamped.request),
       );
       final pendingMessageId = pendingMessage.int64('id');
       if (pendingMessageId != null &&
           pendingMessage.obj('sending_state') != null) {
         await _waitForMessageSend(pendingMessageId);
       }
-      _consumeReplyAnchor();
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       debugPrint('Failed to send GIF: $error');
@@ -2141,15 +2168,14 @@ class ChatViewModel extends ChangeNotifier {
   Future<bool> sendSticker(StickerItem sticker) async {
     if (!canSendMessages) return false;
     try {
-      final pendingMessage = await _client.query(
-        _withReplyAnchor(stickerMessageRequest(sticker)),
-      );
+      final stamped = _withReplyAnchor(stickerMessageRequest(sticker));
+      final pendingMessage = await _client.query(stamped.request);
       final pendingMessageId = pendingMessage.int64('id');
       if (pendingMessageId != null &&
           pendingMessage.obj('sending_state') != null) {
         await _waitForMessageSend(pendingMessageId);
       }
-      _consumeReplyAnchor();
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       debugPrint('Failed to send sticker: $error');
@@ -2188,41 +2214,35 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   void sendDocument(String path, {String caption = ''}) {
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageDocument',
-          'document': {
-            '@type': 'inputDocument',
-            'document': {'@type': 'inputFileLocal', 'path': path},
-          },
-          if (caption.trim().isNotEmpty)
-            'caption': {'@type': 'formattedText', 'text': caption.trim()},
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageDocument',
+        'document': {
+          '@type': 'inputDocument',
+          'document': {'@type': 'inputFileLocal', 'path': path},
         },
-      }),
-    );
-    _consumeReplyAnchor();
+        if (caption.trim().isNotEmpty)
+          'caption': {'@type': 'formattedText', 'text': caption.trim()},
+      },
+    });
   }
 
   void sendLocation(double latitude, double longitude) {
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageLocation',
-          'location': {
-            '@type': 'location',
-            'latitude': latitude,
-            'longitude': longitude,
-            'horizontal_accuracy': 0,
-          },
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageLocation',
+        'location': {
+          '@type': 'location',
+          'latitude': latitude,
+          'longitude': longitude,
+          'horizontal_accuracy': 0,
         },
-      }),
-    );
-    _consumeReplyAnchor();
+      },
+    });
   }
 
   Future<bool> sendVenue({
@@ -2234,32 +2254,31 @@ class ChatViewModel extends ChangeNotifier {
     final venueTitle = title.trim();
     if (venueTitle.isEmpty) return false;
     try {
-      await _client.query(
-        _withReplyAnchor(
-          _withPaidMessageOptions({
-            '@type': 'sendMessage',
-            'chat_id': chatId,
-            'input_message_content': {
-              '@type': 'inputMessageVenue',
-              'venue': {
-                '@type': 'venue',
-                'location': {
-                  '@type': 'location',
-                  'latitude': latitude,
-                  'longitude': longitude,
-                  'horizontal_accuracy': 0,
-                },
-                'title': venueTitle,
-                'address': address.trim(),
-                'provider': '',
-                'id': '',
-                'type': '',
+      final stamped = _withReplyAnchor(
+        _withPaidMessageOptions({
+          '@type': 'sendMessage',
+          'chat_id': chatId,
+          'input_message_content': {
+            '@type': 'inputMessageVenue',
+            'venue': {
+              '@type': 'venue',
+              'location': {
+                '@type': 'location',
+                'latitude': latitude,
+                'longitude': longitude,
+                'horizontal_accuracy': 0,
               },
+              'title': venueTitle,
+              'address': address.trim(),
+              'provider': '',
+              'id': '',
+              'type': '',
             },
-          }),
-        ),
+          },
+        }),
       );
-      _consumeReplyAnchor();
+      await _client.query(stamped.request);
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       _publishSendFailure(
@@ -2275,26 +2294,25 @@ class ChatViewModel extends ChangeNotifier {
   Future<bool> sendContact(MessageContactCard contact) async {
     if (contact.phoneNumber.trim().isEmpty) return false;
     try {
-      await _client.query(
-        _withReplyAnchor(
-          _withPaidMessageOptions({
-            '@type': 'sendMessage',
-            'chat_id': chatId,
-            'input_message_content': {
-              '@type': 'inputMessageContact',
-              'contact': {
-                '@type': 'contact',
-                'phone_number': contact.phoneNumber,
-                'first_name': contact.firstName,
-                'last_name': contact.lastName,
-                'vcard': contact.vcard,
-                'user_id': contact.userId,
-              },
+      final stamped = _withReplyAnchor(
+        _withPaidMessageOptions({
+          '@type': 'sendMessage',
+          'chat_id': chatId,
+          'input_message_content': {
+            '@type': 'inputMessageContact',
+            'contact': {
+              '@type': 'contact',
+              'phone_number': contact.phoneNumber,
+              'first_name': contact.firstName,
+              'last_name': contact.lastName,
+              'vcard': contact.vcard,
+              'user_id': contact.userId,
             },
-          }),
-        ),
+          },
+        }),
       );
-      _consumeReplyAnchor();
+      await _client.query(stamped.request);
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       _publishSendFailure(
@@ -2316,25 +2334,24 @@ class ChatViewModel extends ChangeNotifier {
   }) async {
     if (!canSendMessages || !canSendVoiceNotes) return false;
     try {
-      await _client.query(
-        _withReplyAnchor(
-          _withPaidMessageOptions({
-            '@type': 'sendMessage',
-            'chat_id': chatId,
-            'input_message_content': {
-              '@type': 'inputMessageVoiceNote',
-              'voice_note': {
-                '@type': 'inputVoiceNote',
-                'voice_note': {'@type': 'inputFileLocal', 'path': path},
-                'duration': duration,
-                'waveform': waveform,
-              },
-              'self_destruct_type': ?sendConfiguration.selfDestructType,
+      final stamped = _withReplyAnchor(
+        _withPaidMessageOptions({
+          '@type': 'sendMessage',
+          'chat_id': chatId,
+          'input_message_content': {
+            '@type': 'inputMessageVoiceNote',
+            'voice_note': {
+              '@type': 'inputVoiceNote',
+              'voice_note': {'@type': 'inputFileLocal', 'path': path},
+              'duration': duration,
+              'waveform': waveform,
             },
-          }, sendConfiguration: sendConfiguration),
-        ),
+            'self_destruct_type': ?sendConfiguration.selfDestructType,
+          },
+        }, sendConfiguration: sendConfiguration),
       );
-      _consumeReplyAnchor();
+      await _client.query(stamped.request);
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       if (_isVoiceMessageRestrictionError(error)) {
@@ -2359,25 +2376,24 @@ class ChatViewModel extends ChangeNotifier {
         const MessageSendConfiguration(),
   }) async {
     try {
-      await _client.query(
-        _withReplyAnchor(
-          _withPaidMessageOptions({
-            '@type': 'sendMessage',
-            'chat_id': chatId,
-            'input_message_content': {
-              '@type': 'inputMessageVideoNote',
-              'video_note': {
-                '@type': 'inputVideoNote',
-                'video_note': {'@type': 'inputFileLocal', 'path': path},
-                'duration': duration,
-                'length': 0,
-              },
-              'self_destruct_type': ?sendConfiguration.selfDestructType,
+      final stamped = _withReplyAnchor(
+        _withPaidMessageOptions({
+          '@type': 'sendMessage',
+          'chat_id': chatId,
+          'input_message_content': {
+            '@type': 'inputMessageVideoNote',
+            'video_note': {
+              '@type': 'inputVideoNote',
+              'video_note': {'@type': 'inputFileLocal', 'path': path},
+              'duration': duration,
+              'length': 0,
             },
-          }, sendConfiguration: sendConfiguration),
-        ),
+            'self_destruct_type': ?sendConfiguration.selfDestructType,
+          },
+        }, sendConfiguration: sendConfiguration),
       );
-      _consumeReplyAnchor();
+      await _client.query(stamped.request);
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       debugPrint('Failed to send video note: $error');
@@ -2393,23 +2409,20 @@ class ChatViewModel extends ChangeNotifier {
 
   /// 音频: send a picked audio file as a music message (TDLib computes metadata).
   void sendAudio(String path) {
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageAudio',
-          'audio': {
-            '@type': 'inputAudio',
-            'audio': {'@type': 'inputFileLocal', 'path': path},
-            'duration': 0,
-            'title': '',
-            'performer': '',
-          },
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageAudio',
+        'audio': {
+          '@type': 'inputAudio',
+          'audio': {'@type': 'inputFileLocal', 'path': path},
+          'duration': 0,
+          'title': '',
+          'performer': '',
         },
-      }),
-    );
-    _consumeReplyAnchor();
+      },
+    });
   }
 
   /// 音频搜索: send a clean copy of an existing Telegram audio message.
@@ -2462,17 +2475,14 @@ class ChatViewModel extends ChangeNotifier {
   /// 清单: send a checklist (to-do list). Creating checklists needs Premium.
   void sendChecklist(ChecklistComposerResult draft) {
     if (draft.title.trim().isEmpty || draft.tasks.isEmpty) return;
-    _submitMessageRequestWithoutWaiting(
-      _withReplyAnchor({
-        '@type': 'sendMessage',
-        'chat_id': chatId,
-        'input_message_content': {
-          '@type': 'inputMessageChecklist',
-          'checklist': ChecklistRequests.inputChecklist(draft),
-        },
-      }),
-    );
-    _consumeReplyAnchor();
+    _submitPanelMessage({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageChecklist',
+        'checklist': ChecklistRequests.inputChecklist(draft),
+      },
+    });
   }
 
   Future<void> editChecklist(
@@ -2512,58 +2522,57 @@ class ChatViewModel extends ChangeNotifier {
     if (question.isEmpty || options.length < 2) return false;
     if (draft.isQuiz && draft.correctOptionIndexes.isEmpty) return false;
     try {
-      await _client.query(
-        _withReplyAnchor(
-          _withPaidMessageOptions({
-            '@type': 'sendMessage',
-            'chat_id': chatId,
-            'input_message_content': {
-              '@type': 'inputMessagePoll',
-              'question': {'@type': 'formattedText', 'text': question},
-              'options': [
-                for (final option in options)
-                  {
-                    '@type': 'inputPollOption',
-                    'text': {
-                      '@type': 'formattedText',
-                      'text': option.text.trim(),
-                    },
-                    if (option.mediaPath case final path?)
-                      'media': _inputPollPhoto(path),
+      final stamped = _withReplyAnchor(
+        _withPaidMessageOptions({
+          '@type': 'sendMessage',
+          'chat_id': chatId,
+          'input_message_content': {
+            '@type': 'inputMessagePoll',
+            'question': {'@type': 'formattedText', 'text': question},
+            'options': [
+              for (final option in options)
+                {
+                  '@type': 'inputPollOption',
+                  'text': {
+                    '@type': 'formattedText',
+                    'text': option.text.trim(),
                   },
-              ],
-              if (draft.description.trim().isNotEmpty)
-                'description': {
-                  '@type': 'formattedText',
-                  'text': draft.description.trim(),
+                  if (option.mediaPath case final path?)
+                    'media': _inputPollPhoto(path),
                 },
-              if (draft.pollMediaPath case final path?)
-                'media': _inputPollPhoto(path),
-              'is_anonymous': draft.isAnonymous,
-              'allows_multiple_answers': draft.allowsMultipleAnswers,
-              'allows_revoting': draft.allowsRevoting,
-              'shuffle_options': draft.shuffleOptions,
-              'hide_results_until_closes': draft.hideResultsUntilCloses,
-              'type': draft.isQuiz
-                  ? {
-                      '@type': 'inputPollTypeQuiz',
-                      'correct_option_ids': draft.correctOptionIndexes.toList()
-                        ..sort(),
-                      'explanation': {
-                        '@type': 'formattedText',
-                        'text': draft.explanation.trim(),
-                      },
-                    }
-                  : {
-                      '@type': 'inputPollTypeRegular',
-                      'allow_adding_options': draft.allowAddingOptions,
+            ],
+            if (draft.description.trim().isNotEmpty)
+              'description': {
+                '@type': 'formattedText',
+                'text': draft.description.trim(),
+              },
+            if (draft.pollMediaPath case final path?)
+              'media': _inputPollPhoto(path),
+            'is_anonymous': draft.isAnonymous,
+            'allows_multiple_answers': draft.allowsMultipleAnswers,
+            'allows_revoting': draft.allowsRevoting,
+            'shuffle_options': draft.shuffleOptions,
+            'hide_results_until_closes': draft.hideResultsUntilCloses,
+            'type': draft.isQuiz
+                ? {
+                    '@type': 'inputPollTypeQuiz',
+                    'correct_option_ids': draft.correctOptionIndexes.toList()
+                      ..sort(),
+                    'explanation': {
+                      '@type': 'formattedText',
+                      'text': draft.explanation.trim(),
                     },
-              'open_period': draft.openPeriod,
-            },
-          }),
-        ),
+                  }
+                : {
+                    '@type': 'inputPollTypeRegular',
+                    'allow_adding_options': draft.allowAddingOptions,
+                  },
+            'open_period': draft.openPeriod,
+          },
+        }),
       );
-      _consumeReplyAnchor();
+      await _client.query(stamped.request);
+      _consumeReplyAnchorIfCurrent(stamped.revision);
       return true;
     } catch (error) {
       debugPrint('Failed to send poll: $error');
