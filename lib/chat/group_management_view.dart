@@ -66,6 +66,18 @@ class _GroupManagementViewState extends State<GroupManagementView> {
   bool _canDeleteForAllMembers = false;
   bool _deleting = false;
 
+  /// Lifecycle of the getSupergroup-backed values. The page renders from the
+  /// local database immediately, but the public username and the join
+  /// toggles are only known once getSupergroup lands; their controls stay
+  /// disabled until then so a save can never submit an unloaded blank
+  /// (which TDLib would treat as "clear the username") and a toggle can
+  /// never flip an unknown state.
+  int _metaEpoch = 0;
+  bool _metaLoading = true;
+  bool _metaFailed = false;
+
+  bool get _metaKnown => !_metaLoading && !_metaFailed;
+
   Map<String, bool> _permissions = _defaultPermissions;
 
   static const _permissionLabels = <String, String>{
@@ -192,12 +204,17 @@ class _GroupManagementViewState extends State<GroupManagementView> {
   Future<void> _loadSupergroupMeta() async {
     final supergroupId = _supergroupId;
     if (supergroupId == null) return;
+    final epoch = ++_metaEpoch;
+    setState(() {
+      _metaLoading = true;
+      _metaFailed = false;
+    });
     try {
       final sg = await _client.query({
         '@type': 'getSupergroup',
         'supergroup_id': supergroupId,
       });
-      if (!mounted) return;
+      if (!mounted || epoch != _metaEpoch) return;
       setState(() {
         _username =
             sg.obj('usernames')?.str('editable_username') ??
@@ -206,9 +223,17 @@ class _GroupManagementViewState extends State<GroupManagementView> {
         _joinToSend = sg.boolean('join_to_send_messages') ?? false;
         _joinByRequest = sg.boolean('join_by_request') ?? false;
         _isForum = sg.boolean('is_forum') ?? false;
+        _metaLoading = false;
       });
-    } catch (_) {}
+    } catch (_) {
+      if (!mounted || epoch != _metaEpoch) return;
+      // The metadata-backed controls stay disabled and a retry card is
+      // offered; everything else on the page keeps working.
+      setState(() => _metaFailed = true);
+    }
   }
+
+  Future<void> _retrySupergroupMeta() => _loadSupergroupMeta();
 
   Future<void> _loadFullInfo() async {
     final supergroupId = _supergroupId;
@@ -282,7 +307,13 @@ class _GroupManagementViewState extends State<GroupManagementView> {
                                       AppStringKeys.groupManagementNotSet,
                                     )
                                   : '@$_username',
-                              onTap: _canChangeInfo ? _editUsername : null,
+                              // Gated on metadata, not just rights: opening
+                              // the editor before getSupergroup lands would
+                              // pre-fill a blank, and saving that blank
+                              // clears the username server-side.
+                              onTap: (_canChangeInfo && _metaKnown)
+                                  ? _editUsername
+                                  : null,
                             ),
                           _navRow(
                             AppStrings.t(
@@ -327,7 +358,7 @@ class _GroupManagementViewState extends State<GroupManagementView> {
                                 AppStringKeys.groupManagementJoinBeforePosting,
                               ),
                               _joinToSend,
-                              _canChangeInfo,
+                              _canChangeInfo && _metaKnown,
                               _setJoinToSend,
                             ),
                             _divider(),
@@ -337,10 +368,51 @@ class _GroupManagementViewState extends State<GroupManagementView> {
                                     .groupManagementAdminApprovalRequired,
                               ),
                               _joinByRequest,
-                              _canChangeInfo,
+                              _canChangeInfo && _metaKnown,
                               _setJoinByRequest,
                             ),
                           ],
+                        ),
+                      ],
+                      if (_supergroupId != null && _metaFailed) ...[
+                        _gap(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  AppStrings.t(
+                                    AppStringKeys.groupManagementLoadFailed,
+                                  ),
+                                  style: AppTextStyle.footnote(
+                                    context.colors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                key: const ValueKey(
+                                  'group-management-meta-retry',
+                                ),
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _retrySupergroupMeta,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
+                                    AppStrings.t(
+                                      AppStringKeys.groupManagementRetry,
+                                    ),
+                                    style: AppTextStyle.footnote(
+                                      AppTheme.brand,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                       _gap(),

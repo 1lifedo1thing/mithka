@@ -34,6 +34,9 @@ void main() {
 
   var getChatFails = false;
   var fullInfoStalls = false;
+  var supergroupFails = false;
+  Completer<Map<String, dynamic>>? supergroupStall;
+  Map<String, dynamic> supergroupResult = _supergroup(username: 'existing');
 
   setUpAll(() {
     TdClient.shared.configureProxy(
@@ -51,11 +54,15 @@ void main() {
             case 'getChatMember':
               return _selfCreator();
             case 'getSupergroup':
-              return {
-                '@type': 'supergroup',
-                'id': request['supergroup_id'],
-                'is_channel': request['supergroup_id'] == 123,
-              };
+              if (supergroupStall != null) {
+                // Simulates getSupergroup held behind TDLib's queue: the
+                // response only arrives when the test completes it.
+                return supergroupStall!.future;
+              }
+              if (supergroupFails) {
+                return {'@type': 'error', 'code': 400, 'message': 'flood'};
+              }
+              return supergroupResult;
             case 'getSupergroupFullInfo':
               if (fullInfoStalls) {
                 // Simulates a query held behind TDLib's flood control: the
@@ -81,6 +88,9 @@ void main() {
   setUp(() {
     getChatFails = false;
     fullInfoStalls = false;
+    supergroupStall = null;
+    supergroupFails = false;
+    supergroupResult = _supergroup(username: 'existing');
   });
 
   Future<void> pumpView(WidgetTester tester, {required bool isChannel}) async {
@@ -178,6 +188,61 @@ void main() {
   });
 
   testWidgets(
+    'the username editor stays inert while supergroup metadata is pending',
+    (tester) async {
+      supergroupStall = Completer<Map<String, dynamic>>();
+      await pumpView(tester, isChannel: false);
+      // The page renders from the local database and the owner's rights
+      // resolve, but getSupergroup never lands.
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Public Username'), findsOneWidget);
+
+      // Tapping the row must not open a blank editor: saving it would
+      // submit username:'' and clear the real username.
+      await tester.tap(find.text('Public Username'), warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(EditFieldView), findsNothing);
+
+      // Late landing: the row unlocks and shows the real value.
+      supergroupStall!.complete(supergroupResult);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('@existing'), findsOneWidget);
+      await tester.tap(find.text('Public Username'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.byType(EditFieldView), findsOneWidget);
+      expect(find.text('existing'), findsAtLeastNWidgets(1));
+    },
+  );
+
+  testWidgets(
+    'a failed supergroup fetch offers a retry and unlocks the editor after it',
+    (tester) async {
+      supergroupFails = true;
+      await pumpView(tester, isChannel: false);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(
+        find.byKey(const ValueKey('group-management-meta-retry')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Public Username'), warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(EditFieldView), findsNothing);
+
+      supergroupFails = false;
+      await tester.tap(
+        find.byKey(const ValueKey('group-management-meta-retry')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('group-management-meta-retry')),
+        findsNothing,
+      );
+      expect(find.text('@existing'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'full-info-backed editors stay disabled until full info arrives',
     (tester) async {
       await pumpAdvanced(
@@ -251,6 +316,16 @@ void main() {
     },
   );
 }
+
+Map<String, dynamic> _supergroup({String username = ''}) => {
+  '@type': 'supergroup',
+  'id': 456,
+  'is_channel': false,
+  'usernames': {
+    '@type': 'usernames',
+    'editable_username': username.isEmpty ? null : username,
+  },
+};
 
 Map<String, dynamic> _supergroupFullInfo({
   String description = 'Existing description',
