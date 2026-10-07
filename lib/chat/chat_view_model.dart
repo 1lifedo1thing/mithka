@@ -624,6 +624,11 @@ class ChatViewModel extends ChangeNotifier {
   List<ForumTopicOption> forumTopics = const [];
   int messageAutoDeleteTime = 0;
   int paidMessageStarCount = 0;
+
+  /// Non-null once [loadForumTopics] registered the shared-index listener.
+  /// ChangeNotifier.addListener returns void, so this only records whether
+  /// the one-per-model registration happened (refreshes reuse it).
+  bool _forumTopicIndexListening = false;
   bool peerRequiresPremiumOrContact = false;
   bool peerIsUnavailable = false;
 
@@ -1240,7 +1245,10 @@ class ChatViewModel extends ChangeNotifier {
     _isDisposed = true;
     KeywordBlocker.shared.removeListener(_applyKeywordFilter);
     HiddenSenderStore.shared.removeListener(_applyKeywordFilter);
-    ForumTopicIndex.shared.removeListener(_onForumTopicIndexChanged);
+    if (_forumTopicIndexListening) {
+      ForumTopicIndex.shared.removeListener(_onForumTopicIndexChanged);
+      _forumTopicIndexListening = false;
+    }
     _sub?.cancel();
     _typingTimer?.cancel();
     _draftSaveTimer?.cancel();
@@ -4062,7 +4070,13 @@ class ChatViewModel extends ChangeNotifier {
     if (!supportsTopics || forumTopicsLoading) return;
     forumTopicsLoading = true;
     notifyListeners();
-    ForumTopicIndex.shared.addListener(_onForumTopicIndexChanged);
+    // One listener per view model, not per refresh: dispose removes only
+    // one copy, so a refresh-added duplicate would survive disposal and
+    // keep mutating this model's topics.
+    if (!_forumTopicIndexListening) {
+      ForumTopicIndex.shared.addListener(_onForumTopicIndexChanged);
+      _forumTopicIndexListening = true;
+    }
     try {
       final response = await _client.query({
         '@type': 'getForumTopics',

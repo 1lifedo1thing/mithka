@@ -82,6 +82,9 @@ class ForumTopicIndexEntry {
 
   /// Parses a `forumTopic` object from getForumTopics/getForumTopic. Topic ids
   /// are chat-scoped, so the chat context must be supplied by the caller.
+  ///
+  /// In the pinned TDLib schema `last_read_inbox_message_id` and
+  /// `unread_count` live on the outer topic, not on `info`.
   static ForumTopicIndexEntry? fromTopic(Map<String, dynamic> raw) {
     final info = raw.obj('info') ?? raw;
     final id =
@@ -106,10 +109,15 @@ class ForumTopicIndexEntry {
           info.integer('icon_color') ??
           raw.integer('icon_color') ??
           0,
-      unreadCount: _nonNegative(raw.integer('unread_count')),
+      unreadCount: _nonNegative(
+        raw.integer('unread_count') ?? info.integer('unread_count'),
+      ),
       isMuted: (raw.obj('notification_settings')?.integer('mute_for') ?? 0) > 0,
       lastMessageId: raw.obj('last_message')?.int64('id') ?? 0,
-      lastReadInboxMessageId: info.integer('last_read_inbox_message_id') ?? 0,
+      lastReadInboxMessageId:
+          raw.int64('last_read_inbox_message_id') ??
+          info.int64('last_read_inbox_message_id') ??
+          0,
     );
   }
 }
@@ -242,13 +250,22 @@ class ForumTopicIndex extends ChangeNotifier {
     if (topics == null || previous == null) return;
     final messageId = raw.integer('id') ?? 0;
     final outgoing = raw.boolean('is_outgoing') ?? false;
+    // Reconcile with the known read/page state instead of counting every
+    // arrival: a message at or below the inbox watermark is already read,
+    // and an id the fetched page already represented was counted there.
+    final unreadDelta = outgoing || messageId <= previous.lastReadInboxMessageId
+        ? 0
+        : (messageId > previous.lastMessageId ? 1 : 0);
     final next = previous.copyWith(
-      unreadCount: outgoing ? previous.unreadCount : previous.unreadCount + 1,
+      unreadCount: previous.unreadCount + unreadDelta,
       lastMessageId: messageId > previous.lastMessageId ? messageId : null,
     );
-    if (next == previous) return;
+    // Store the updated entry even when display equality holds: the newer
+    // bookkeeping ids must survive, or a partial read's watermark is lost
+    // and the next arrival over-counts.
+    final displayChanged = next != previous;
     topics[topicId] = next;
-    notifyListeners();
+    if (displayChanged) notifyListeners();
   }
 
   void _observeForumTopic(
@@ -278,30 +295,24 @@ class ForumTopicIndex extends ChangeNotifier {
           lastReadInboxMessageId >= previous.lastMessageId;
       if (readEverything) next = next.copyWith(unreadCount: 0);
     }
-    if (next == previous) return;
+    // Persist the new watermark even when nothing displayed moved;
+    // otherwise a partial read's progress is dropped and replayed traffic
+    // over-counts.
+    final displayChanged = next != previous;
     topics[topicId] = next;
-    notifyListeners();
+    if (displayChanged) notifyListeners();
   }
 
   void _observeForumTopicInfo(int slot, Map<String, dynamic>? info) {
     final topicId = info?.integer('forum_topic_id');
     if (info == null || topicId == null) return;
-    // updateForumTopicInfo carries no chat id, so resolve it through the
-    // index; a topic id claimed by several chats is ambiguous and skipped.
-    int? chatId;
-    var ambiguous = false;
-    for (final knownChatId in _topicChats[slot] ?? const <int>{}) {
-      if (_topics[(slot, knownChatId)]?.containsKey(topicId) ?? false) {
-        if (chatId != null) {
-          ambiguous = true;
-          break;
-        }
-        chatId = knownChatId;
-      }
-    }
-    if (ambiguous || chatId == null) return;
-    final topics = _topics[(slot, chatId)]!;
-    final previous = topics[topicId]!;
+    // forumTopicInfo carries its own chat_id (chat-scoped topic ids are
+    // not unique across forums); route by that identity instead of
+    // guessing from the currently indexed chats.
+    final chatId = info.int64('chat_id');
+    if (chatId == null) return;
+    final previous = _topics[(slot, chatId)]?[topicId];
+    if (previous == null) return;
     final icon = info.obj('icon');
     final name = info.str('name');
     if (name == null || name.isEmpty) return;
@@ -312,7 +323,7 @@ class ForumTopicIndex extends ChangeNotifier {
       iconColor: icon?.integer('color') ?? previous.iconColor,
     );
     if (next == previous) return;
-    topics[topicId] = next;
+    _topics[(slot, chatId)]![topicId] = next;
     notifyListeners();
   }
 
