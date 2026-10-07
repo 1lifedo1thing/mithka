@@ -44,9 +44,10 @@ class DesktopClipboardImageService {
       Platform.isMacOS || Platform.isIOS || Platform.isAndroid;
 
   /// Places bitmap data on the pasteboard so other apps can paste the photo
-  /// itself instead of receiving a local TDLib file URL.
+  /// itself instead of receiving a local TDLib file URL. Returns false on
+  /// platforms whose channel handler is absent instead of throwing, so
+  /// callers can treat it as a soft failure.
   static Future<bool> copyImageFile(File file) async {
-    if (!canWriteImage) return false;
     if (!await file.exists()) return false;
     try {
       final data = await file.readAsBytes();
