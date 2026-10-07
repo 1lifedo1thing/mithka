@@ -27,6 +27,7 @@ import '../app/desktop_video_window.dart';
 import '../app/ipad_window_chrome.dart';
 import '../app/primary_chat_launcher.dart';
 import '../app/video_split_controller.dart';
+import '../auth/account_store.dart';
 import '../auth/telegram_country_names.dart';
 import '../call/call_manager.dart';
 import '../channels/topic_chat_view.dart';
@@ -99,6 +100,7 @@ import 'chat_wallpaper.dart';
 import 'checklist_composer_view.dart';
 import 'custom_emoji.dart';
 import 'emoji_store.dart';
+import 'forward_markdown.dart';
 import 'forward_options.dart';
 import 'group_remark_controller.dart';
 import 'hide_sender_dialog.dart';
@@ -3989,6 +3991,33 @@ class _ChatViewState extends State<ChatView> {
     });
   }
 
+  /// Markdown detection over the messages about to be forwarded: the picker
+  /// offers the render option when any message carries convertible markers and
+  /// pre-checks it when at least one looks like authored Markdown.
+  ForwardMarkdownOffer _forwardMarkdownOffer(List<int> messageIds) {
+    // Both gates are client-side: the re-send is a normal sendMessage, the
+    // server never sees a "rich text forward" mode. The settings toggle keeps
+    // detection opt-in; Premium is required by product decision, and the
+    // cached AccountStore flag is authoritative enough for hiding a chip.
+    final theme = context.read<ThemeController>();
+    if (!theme.forwardRichMarkdown) return const ForwardMarkdownOffer.none();
+    if (!(context.read<AccountStore?>()?.activeIsPremium ?? false)) {
+      return const ForwardMarkdownOffer.none();
+    }
+    var available = false;
+    final byId = {for (final message in _vm.messages) message.id: message};
+    for (final id in messageIds) {
+      final message = byId[id];
+      if (message == null) continue;
+      // Detection is heuristic and must never break forwarding: any parse or
+      // match failure degrades to "no offer", leaving a regular forward.
+      final offer = forwardMarkdownOfferForMessage(message);
+      if (offer.suggested) return offer;
+      if (offer.available) available = true;
+    }
+    return ForwardMarkdownOffer(available: available, suggested: false);
+  }
+
   Future<void> _forwardSelected() async {
     final ids = _orderedSelectedIds();
     if (ids.isEmpty) return;
@@ -3998,9 +4027,10 @@ class _ChatViewState extends State<ChatView> {
     }
     final result = await Navigator.of(context).push<ChatPickerResult>(
       MaterialPageRoute(
-        builder: (_) => const ChatPickerView(
+        builder: (_) => ChatPickerView(
           title: AppStringKeys.chatForwardToTitle,
           showForwardOptions: true,
+          markdownOffer: _forwardMarkdownOffer(ids),
         ),
       ),
     );
@@ -6128,9 +6158,10 @@ class _ChatViewState extends State<ChatView> {
     }
     final result = await Navigator.of(context).push<ChatPickerResult>(
       MaterialPageRoute(
-        builder: (_) => const ChatPickerView(
+        builder: (_) => ChatPickerView(
           title: AppStringKeys.chatForwardToTitle,
           showForwardOptions: true,
+          markdownOffer: _forwardMarkdownOffer([message.id]),
         ),
       ),
     );

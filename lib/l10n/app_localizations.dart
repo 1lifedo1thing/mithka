@@ -753,6 +753,27 @@ abstract final class AppStringKeys {
   static const chatAdminDeleteMessages = 'chatAdminDeleteMessages';
   static const chatAdminManageChat = 'chatAdminManageChat';
   static const chatAdminManageVideoChats = 'chatAdminManageVideoChats';
+  static const chatAdminPermissionChangeInfoChannel =
+      'chatAdminPermissionChangeInfoChannel';
+  static const chatAdminPermissionChangeInfoGroup =
+      'chatAdminPermissionChangeInfoGroup';
+  static const chatAdminPermissionDeleteMessagesOfOthers =
+      'chatAdminPermissionDeleteMessagesOfOthers';
+  static const chatAdminPermissionDeleteStories =
+      'chatAdminPermissionDeleteStories';
+  static const chatAdminPermissionEditMessages =
+      'chatAdminPermissionEditMessages';
+  static const chatAdminPermissionEditMessagesOfOthers =
+      'chatAdminPermissionEditMessagesOfOthers';
+  static const chatAdminPermissionEditStories =
+      'chatAdminPermissionEditStories';
+  static const chatAdminPermissionManageDirectMessages =
+      'chatAdminPermissionManageDirectMessages';
+  static const chatAdminPermissionManageTags = 'chatAdminPermissionManageTags';
+  static const chatAdminPermissionPostMessages =
+      'chatAdminPermissionPostMessages';
+  static const chatAdminPermissionPostStories =
+      'chatAdminPermissionPostStories';
   static const chatAdminPromoteMembers = 'chatAdminPromoteMembers';
   static const chatAdminRestrictMembers = 'chatAdminRestrictMembers';
   static const chatAdminSendWelcomeMessages = 'chatAdminSendWelcomeMessages';
@@ -808,6 +829,9 @@ abstract final class AppStringKeys {
   static const chatForwardProtected = 'chatForwardProtected';
   static const chatForwardRemoveCaption = 'chatForwardRemoveCaption';
   static const chatForwardRemoveSender = 'chatForwardRemoveSender';
+  static const chatForwardRenderMarkdown = 'chatForwardRenderMarkdown';
+  static const chatForwardRenderMarkdownPremium =
+      'chatForwardRenderMarkdownPremium';
   static const chatForwardToTitle = 'chatForwardToTitle';
   static const chatInfoAlbum = 'chatInfoAlbum';
   static const chatInfoAutoDeleteMessages = 'chatInfoAutoDeleteMessages';
@@ -850,6 +874,7 @@ abstract final class AppStringKeys {
   static const chatInfoGroupVideos = 'chatInfoGroupVideos';
   static const chatInfoLeaveGroup = 'chatInfoLeaveGroup';
   static const chatInfoLoadFoldersFailed = 'chatInfoLoadFoldersFailed';
+  static const chatInfoManageChannel = 'chatInfoManageChannel';
   static const chatInfoManageGroup = 'chatInfoManageGroup';
   static const chatInfoMoveToGroupAssistant = 'chatInfoMoveToGroupAssistant';
   static const chatInfoNewFolder = 'chatInfoNewFolder';
@@ -1566,6 +1591,9 @@ abstract final class AppStringKeys {
   static const generalOpenChatAtLatestMessage =
       'generalOpenChatAtLatestMessage';
   static const generalRepeatPreserveSender = 'generalRepeatPreserveSender';
+  static const generalForwardRichMarkdown = 'generalForwardRichMarkdown';
+  static const generalForwardRichMarkdownHint =
+      'generalForwardRichMarkdownHint';
   static const generalSaveCapturedPhotos = 'generalSaveCapturedPhotos';
   static const generalSaveCapturedPhotosHint = 'generalSaveCapturedPhotosHint';
   static const generalSendMessageWithEnter = 'generalSendMessageWithEnter';
@@ -1742,6 +1770,8 @@ abstract final class AppStringKeys {
       'groupManagementPermissionCreateTopics';
   static const groupManagementPermissionEditGroupInfo =
       'groupManagementPermissionEditGroupInfo';
+  static const groupManagementPermissionEditOwnTag =
+      'groupManagementPermissionEditOwnTag';
   static const groupManagementPermissionLinkPreviews =
       'groupManagementPermissionLinkPreviews';
   static const groupManagementPermissionPinMessages =
@@ -1756,6 +1786,8 @@ abstract final class AppStringKeys {
       'groupManagementPermissionSendPhotos';
   static const groupManagementPermissionSendPolls =
       'groupManagementPermissionSendPolls';
+  static const groupManagementPermissionSendReactions =
+      'groupManagementPermissionSendReactions';
   static const groupManagementPermissionSendStickersAndGifs =
       'groupManagementPermissionSendStickersAndGifs';
   static const groupManagementPermissionSendVideoMessages =

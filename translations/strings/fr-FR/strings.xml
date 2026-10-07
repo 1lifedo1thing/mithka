@@ -760,6 +760,17 @@
     <string name="chatAdminDeleteMessages">Supprimer les messages</string>
     <string name="chatAdminManageChat">Gérer le groupe</string>
     <string name="chatAdminManageVideoChats">Gérer les discussions vidéo</string>
+    <string name="chatAdminPermissionPostMessages">Publier des messages</string>
+    <string name="chatAdminPermissionEditMessages">Modifier les messages</string>
+    <string name="chatAdminPermissionEditMessagesOfOthers">Modifier les messages des autres</string>
+    <string name="chatAdminPermissionPostStories">Publier des stories</string>
+    <string name="chatAdminPermissionEditStories">Modifier les stories</string>
+    <string name="chatAdminPermissionDeleteStories">Supprimer les stories</string>
+    <string name="chatAdminPermissionManageDirectMessages">Gérer les messages directs</string>
+    <string name="chatAdminPermissionManageTags">Gérer les tags des membres</string>
+    <string name="chatAdminPermissionChangeInfoGroup">Modifier les infos du groupe</string>
+    <string name="chatAdminPermissionChangeInfoChannel">Modifier les infos de la chaîne</string>
+    <string name="chatAdminPermissionDeleteMessagesOfOthers">Supprimer les messages des autres</string>
     <string name="chatAdminPromoteMembers">Ajouter des administrateurs</string>
     <string name="chatAdminRestrictMembers">Restreindre les membres</string>
     <string name="chatAdminSendWelcomeMessages">Envoyer des messages de bienvenue</string>
@@ -870,6 +881,8 @@
     <string name="chatForwardProtected">Ce message est protégé et ne peut pas être transféré</string>
     <string name="chatForwardRemoveCaption">Supprimer la légende</string>
     <string name="chatForwardRemoveSender">Masquer l’expéditeur</string>
+    <string name="chatForwardRenderMarkdown">Rendre le Markdown lors du transfert</string>
+    <string name="chatForwardRenderMarkdownPremium">Rendre le Markdown lors du transfert nécessite Telegram Premium</string>
     <string name="chatForwardToTitle">Transférer vers</string>
     <string name="chatForwardedToName">Transféré à {value1}</string>
     <string name="chatInfoAlbum">Album</string>
@@ -908,6 +921,7 @@
     <string name="chatInfoGroupVideos">Vidéos du groupe</string>
     <string name="chatInfoLeaveGroup">Quitter le groupe</string>
     <string name="chatInfoLoadFoldersFailed">Impossible de charger les dossiers de discussions</string>
+    <string name="chatInfoManageChannel">Gérer la chaîne</string>
     <string name="chatInfoManageGroup">Gérer le groupe</string>
     <string name="chatInfoMoveToGroupAssistant">Archiver</string>
     <string name="chatInfoNewFolder">Nouveau dossier</string>
@@ -1447,6 +1461,8 @@
     <string name="generalNetworkUsage">Utilisation du réseau</string>
     <string name="generalOpenChatAtLatestMessage">Ouvrir les discussions au dernier message</string>
     <string name="generalRepeatPreserveSender">Conserver l’expéditeur avec +1</string>
+    <string name="generalForwardRichMarkdown">Rendre le Markdown lors du transfert</string>
+    <string name="generalForwardRichMarkdownHint">Proposer d’envoyer le texte Markdown (réponses IA) en texte enrichi</string>
     <string name="generalSaveCapturedPhotos">Enregistrer les photos prises dans l’album système</string>
     <string name="generalSaveCapturedPhotosHint">Désactivé, les photos sont prises avec l’appareil photo intégré et n’arrivent jamais dans l’album.</string>
     <string name="generalSendMessageWithEnter">Envoyer avec Entrée</string>
@@ -1690,6 +1706,7 @@
     <string name="groupManagementNotSet">Non défini</string>
     <string name="groupManagementPermissionCreateTopics">Créer des sujets</string>
     <string name="groupManagementPermissionEditGroupInfo">Modifier les informations du groupe</string>
+    <string name="groupManagementPermissionEditOwnTag">Modifier son propre tag</string>
     <string name="groupManagementPermissionLinkPreviews">Aperçus des liens</string>
     <string name="groupManagementPermissionPinMessages">Épingler des messages</string>
     <string name="groupManagementPermissionSendFiles">Envoyer des fichiers</string>
@@ -1697,6 +1714,7 @@
     <string name="groupManagementPermissionSendMusic">Envoyer de la musique</string>
     <string name="groupManagementPermissionSendPhotos">Envoyer des images</string>
     <string name="groupManagementPermissionSendPolls">Envoyer des sondages</string>
+    <string name="groupManagementPermissionSendReactions">Envoyer des réactions</string>
     <string name="groupManagementPermissionSendStickersAndGifs">Envoyer des stickers et GIF</string>
     <string name="groupManagementPermissionSendVideoMessages">Envoyer des messages vidéo</string>
     <string name="groupManagementPermissionSendVideos">Envoyer des vidéos</string>
