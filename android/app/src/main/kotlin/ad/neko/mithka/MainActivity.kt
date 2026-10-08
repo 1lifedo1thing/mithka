@@ -23,6 +23,7 @@ import android.util.Log
 import android.view.DragEvent
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -401,10 +402,40 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                     val clipboard =
                         getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(
-                        ClipData.newRawMimeType(mimeType, bytes)
-                    )
-                    result.success(true)
+                    // Android's clipboard has no raw-bytes clip: an image
+                    // must be shared as a content URI other apps can resolve.
+                    // Write the bytes to this app's cache and hand the clip a
+                    // FileProvider URI from the open_filex provider already
+                    // merged into the manifest (it covers cache-path).
+                    val extension = when (mimeType) {
+                        "image/gif" -> "gif"
+                        "image/jpeg" -> "jpg"
+                        "image/webp" -> "webp"
+                        else -> "png"
+                    }
+                    try {
+                        val directory = File(cacheDir, "clipboard")
+                        if (!directory.exists()) directory.mkdirs()
+                        // One image per copy: drop the previous clip's file so
+                        // repeated copies cannot grow the cache without bound.
+                        directory.listFiles()?.forEach { it.delete() }
+                        val file = File(
+                            directory,
+                            "image-${System.currentTimeMillis()}.$extension"
+                        )
+                        file.writeBytes(bytes)
+                        val uri = FileProvider.getUriForFile(
+                            this,
+                            "$packageName.fileProvider.com.crazecoder.openfile",
+                            file
+                        )
+                        clipboard.setPrimaryClip(
+                            ClipData.newUri(contentResolver, mimeType, uri)
+                        )
+                        result.success(true)
+                    } catch (error: Exception) {
+                        result.success(false)
+                    }
                     return@setMethodCallHandler
                 }
                 val uri = when (call.method) {
