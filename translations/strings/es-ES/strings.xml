@@ -1014,6 +1014,7 @@
     <string name="chatMembersRemoveFailedPermission">No se pudo quitar; puede que no tengas permiso</string>
     <string name="chatMembersRemoveMemberConfirmation">¿Quitar a {value1} del grupo?</string>
     <string name="chatMembersRemoveMemberTitle">Quitar miembro</string>
+    <string name="chatMembersRemovedTitle">Usuarios eliminados</string>
     <string name="chatMembersSearchHint">Buscar miembros</string>
     <string name="chatMembersRestrict">Restringir</string>
     <string name="chatMembersRestrictApply">Aplicar</string>
@@ -1022,7 +1023,10 @@
     <string name="chatMembersRestrictForever">Para siempre</string>
     <string name="chatMembersRestrictTitle">Restringir miembro</string>
     <string name="chatMembersSetTitle">Definir cargo</string>
+    <string name="chatMembersSubscribersTitleWithCount">Suscriptores ({value1})</string>
     <string name="chatMembersTitleWithCount">Miembros del grupo ({value1})</string>
+    <string name="chatMembersUnban">Desbloquear</string>
+    <string name="chatMembersUnbanConfirmation">¿Quitar a {value1} de los usuarios eliminados?</string>
     <string name="chatMembersUnrestrict">Quitar restricciones</string>
     <string name="chatMembersUpdateFailed">No se pudo actualizar este miembro.</string>
     <string name="chatMenu">Menú</string>
@@ -1450,7 +1454,7 @@
     <string name="fileDetailApkInstallMessage">Android requiere tu aprobación antes de que Mithka pueda instalar archivos APK. Permítelo en los ajustes del sistema y el instalador se abrirá.</string>
     <string name="fileDetailApkInstallOpenSettings">Abrir ajustes</string>
     <string name="fileDetailApkInstallTitle">¿Permitir instalar apps?</string>
-<string name="fileDetailDownloadProgress">Descargando archivo… ({value1}/{value2})</string>
+    <string name="fileDetailDownloadProgress">Descargando archivo… ({value1}/{value2})</string>
     <string name="fileDetailNoAppCanOpenFile">No hay ninguna app para abrir este archivo</string>
     <string name="fileDetailOpen">Abrir</string>
     <string name="gallerySendLiveAsVideo">Enviar como vídeo</string>
@@ -1663,6 +1667,8 @@
     <string name="groupManagementAdvancedControls">Controles avanzados</string>
     <string name="groupManagementBasicSection">Gestión básica</string>
     <string name="groupManagementBoostsAndGiveaways">Impulsos y sorteos</string>
+    <string name="groupManagementChannelName">Nombre del canal</string>
+    <string name="groupManagementChannelSubscribers">Suscriptores</string>
     <string name="groupManagementDeleteChannel">Eliminar canal</string>
     <string name="groupManagementDeleteGroup">Eliminar grupo</string>
     <string name="groupManagementEditFailed">No se pudo modificar</string>
@@ -1732,6 +1738,8 @@
     <string name="groupManagementPostingPermissions">Permisos para publicar</string>
     <string name="groupManagementPublicUsername">Nombre de usuario público</string>
     <string name="groupManagementReadOnly">Solo lectura</string>
+    <string name="groupManagementRemovedUsers">Usuarios eliminados</string>
+    <string name="groupManagementRetry">Reintentar</string>
     <string name="groupManagementSetFailed">No se pudo configurar</string>
     <string name="groupManagementStatistics">Estadísticas</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">El nombre de usuario no está disponible o no tienes permiso</string>

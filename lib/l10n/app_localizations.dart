@@ -122,9 +122,19 @@ abstract final class AppStringKeys {
       'appearancePreviewMessageSample';
   static const appearancePreviewUsersSample = 'appearancePreviewUsersSample';
   static const chatInputResizeMessageInput = 'chatInputResizeMessageInput';
+  static const chatMembersRemovedTitle = 'chatMembersRemovedTitle';
+  static const chatMembersSubscribersTitleWithCount =
+      'chatMembersSubscribersTitleWithCount';
+  static const chatMembersUnban = 'chatMembersUnban';
+  static const chatMembersUnbanConfirmation = 'chatMembersUnbanConfirmation';
   static const debugBubblePreviewExperimental =
       'debugBubblePreviewExperimental';
   static const debugBubblePreviewGenres = 'debugBubblePreviewGenres';
+  static const groupManagementChannelName = 'groupManagementChannelName';
+  static const groupManagementChannelSubscribers =
+      'groupManagementChannelSubscribers';
+  static const groupManagementRemovedUsers = 'groupManagementRemovedUsers';
+  static const groupManagementRetry = 'groupManagementRetry';
   static const hiddenSendersEmpty = 'hiddenSendersEmpty';
   static const hiddenSendersEverywhere = 'hiddenSendersEverywhere';
   static const hiddenSendersNote = 'hiddenSendersNote';

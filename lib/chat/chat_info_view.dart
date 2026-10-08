@@ -924,6 +924,7 @@ class _ChatInfoViewState extends State<ChatInfoView> {
                   builder: (_) => GroupManagementView(
                     chatId: widget.chatId,
                     title: _vm.title,
+                    isChannel: _vm.isChannel,
                   ),
                 ),
               ),

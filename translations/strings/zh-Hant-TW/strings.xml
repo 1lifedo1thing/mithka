@@ -1012,6 +1012,7 @@
     <string name="chatMembersRemoveFailedPermission">移除失敗，可能沒有權限</string>
     <string name="chatMembersRemoveMemberConfirmation">要將 {value1} 移出群組嗎？</string>
     <string name="chatMembersRemoveMemberTitle">移除成員</string>
+    <string name="chatMembersRemovedTitle">黑名單</string>
     <string name="chatMembersSearchHint">搜尋成員</string>
     <string name="chatMembersRestrict">限制</string>
     <string name="chatMembersRestrictApply">套用</string>
@@ -1020,7 +1021,10 @@
     <string name="chatMembersRestrictForever">永久</string>
     <string name="chatMembersRestrictTitle">限制成員</string>
     <string name="chatMembersSetTitle">設定名牌</string>
+    <string name="chatMembersSubscribersTitleWithCount">訂閱者 ({value1})</string>
     <string name="chatMembersTitleWithCount">群組成員 ({value1})</string>
+    <string name="chatMembersUnban">解除封鎖</string>
+    <string name="chatMembersUnbanConfirmation">將 {value1} 移出黑名單？</string>
     <string name="chatMembersUnrestrict">取消限制</string>
     <string name="chatMembersUpdateFailed">無法修改此成員。</string>
     <string name="chatMenu">選單</string>
@@ -1443,7 +1447,7 @@
     <string name="fileDetailApkInstallMessage">Android 需要你先授權，Mithka 才能安裝 APK 檔案。請在系統設定中允許，之後會自動開啟安裝器。</string>
     <string name="fileDetailApkInstallOpenSettings">前往設定</string>
     <string name="fileDetailApkInstallTitle">允許安裝應用程式？</string>
-<string name="fileDetailDownloadProgress">檔案下載中…({value1}/{value2})</string>
+    <string name="fileDetailDownloadProgress">檔案下載中…({value1}/{value2})</string>
     <string name="fileDetailNoAppCanOpenFile">沒有可開啟此檔案的應用程式</string>
     <string name="fileDetailOpen">開啟</string>
     <string name="gallerySendLiveAsVideo">以影片傳送</string>
@@ -1656,6 +1660,8 @@
     <string name="groupManagementAdvancedControls">進階控制</string>
     <string name="groupManagementBasicSection">基本管理</string>
     <string name="groupManagementBoostsAndGiveaways">助力和抽獎</string>
+    <string name="groupManagementChannelName">頻道名稱</string>
+    <string name="groupManagementChannelSubscribers">訂閱者</string>
     <string name="groupManagementDeleteChannel">永久刪除頻道</string>
     <string name="groupManagementDeleteGroup">永久解散群組</string>
     <string name="groupManagementEditFailed">修改失敗</string>
@@ -1725,6 +1731,8 @@
     <string name="groupManagementPostingPermissions">發言權限</string>
     <string name="groupManagementPublicUsername">公開使用者名稱</string>
     <string name="groupManagementReadOnly">唯讀</string>
+    <string name="groupManagementRemovedUsers">黑名單</string>
+    <string name="groupManagementRetry">重試</string>
     <string name="groupManagementSetFailed">設定失敗</string>
     <string name="groupManagementStatistics">統計</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">使用者名稱不可用或沒有權限</string>
