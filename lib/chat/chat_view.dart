@@ -4751,7 +4751,6 @@ class _ChatViewState extends State<ChatView> {
   }
 
   ImageViewerMessageActions? _imageMessageActions(List<ChatMessage> pairs) {
-    if (widget.chatId <= 0) return null;
     return ImageViewerMessageActions(
       messageIds: [for (final m in pairs) m.id],
       onViewInChat: (messageId) async => _jumpToMessage(messageId),
@@ -4761,10 +4760,15 @@ class _ChatViewState extends State<ChatView> {
 
   Future<void> _jumpToMessage(int messageId, {bool reply = false}) async {
     if (mounted) {
-      Navigator.of(context, rootNavigator: true).popUntil((route) {
-        final name = route.settings.name;
-        return route is PageRoute && (name == null || name != '/');
-      });
+      // The gallery rides the root navigator above the chat's tab navigator.
+      // Pop back to the shell's first route so the viewer (and any dialog
+      // stacked over it) closes and the chat jump is actually visible; the
+      // previous name-based predicate accepted the viewer's own unnamed
+      // route and stopped there, leaving the gallery open on top.
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).popUntil((route) => route.isFirst);
     }
     if (!mounted) return;
     setState(() => _setScrollTarget(messageId, forceNavigation: true));

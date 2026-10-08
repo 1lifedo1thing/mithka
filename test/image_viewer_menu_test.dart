@@ -52,10 +52,13 @@ void main() {
         findsOneWidget,
       );
       // Copy follows DesktopClipboardImageService.canWriteImage, which reads
-      // dart:io Platform — on the linux test host it stays hidden.
+      // dart:io Platform — visible exactly on the host platforms that
+      // implement the channel (macOS/iOS/Android), hidden elsewhere.
       expect(
         find.byKey(const ValueKey('image-viewer-action-copy')),
-        findsNothing,
+        Platform.isMacOS || Platform.isIOS || Platform.isAndroid
+            ? findsOneWidget
+            : findsNothing,
       );
       expect(
         find.byKey(const ValueKey('image-viewer-action-save')),

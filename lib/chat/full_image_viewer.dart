@@ -111,6 +111,9 @@ class _FullImageViewerState extends State<FullImageViewer> {
     if (messageId == null) return;
     final actions = widget.messageActions!;
     if (mounted) setState(() => _menuVisible = false);
+    // The jump target owns closing this viewer: _jumpToMessage pops the root
+    // navigator back to its first route, which removes this gallery route
+    // above the chat.
     final replyHandler = reply ? actions.onReply : null;
     if (replyHandler != null) {
       await replyHandler(messageId);
