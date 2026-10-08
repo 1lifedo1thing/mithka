@@ -183,57 +183,75 @@ class VoicePlayer extends ChangeNotifier {
   /// Releases a native player instance for good.
   ///
   /// [wasOpened] tells whether the instance's openPlayer ever completed in
-  /// our bookkeeping. An opened instance is first released through the
-  /// regular verb: flutter_sound serializes every verb behind one
-  /// non-reentrant lock, and a start whose completion never arrives pins
-  /// that lock, so the queued closePlayer runs when the lock releases (the
-  /// late completion). Timing that verb out does NOT release the native
-  /// session — the lock is still pinned forever — so after the bounded wait
-  /// the session is also closed directly on the platform interface. That
-  /// covers the lost-callback case (the completion never comes at all);
-  /// when the late completion does arrive, the verb's own close runs as a
-  /// harmless duplicate on the already-closed session. An instance whose
-  /// openPlayer never completed can never be released by the verb at all —
-  /// closePlayer returns early on the uninitialized flag without touching
-  /// the platform — so its native session goes straight to the platform
-  /// interface. Every path is bound to this exact instance and can never
-  /// close a fresh player a later load opened.
+  /// our bookkeeping. Every path is bound to this exact instance and can
+  /// never close a fresh player a later load opened.
+  ///
+  /// The dart-side session slot is what the platform's dispatcher routes
+  /// reverse callbacks (audioPlayerFinishedPlaying, late completions)
+  /// through: `closeSession` frees the slot for reuse, so it may only run
+  /// AFTER the platform acknowledged the close of this exact session.
+  /// Freeing it earlier would let a fresh session reuse the slot and a late
+  /// event for this instance would be routed to the new owner — stopping
+  /// its playback. Closing the platform session first and waiting for the
+  /// acknowledgment keeps the routing table pinned while stray events
+  /// still arrive; a slot whose close never gets acknowledged stays
+  /// occupied forever (safe: the SDK's closePlayer verb never registers a
+  /// duplicate session, so the list only grows by leaked slot).
   void _releaseNative(FlutterSoundPlayer player, {required bool wasOpened}) {
     if (wasOpened) {
+      // The regular verb close queues behind the instance's operation
+      // lock. A start whose completion never arrives pins that lock
+      // forever, and a queued closePlayer runs the moment the late
+      // completion releases it. A verb close that completes has already
+      // released the native session and freed the callback slot itself —
+      // no further cleanup follows. Only when it fails or times out does
+      // the native session still need releasing: close it on the
+      // platform interface directly. The dart-side slot stays registered
+      // until that close is acknowledged, so late events keep routing to
+      // this retired instance instead of a fresh one.
       unawaited(
         player
             .closePlayer()
-            .timeout(const Duration(seconds: 3))
+            .timeout(nativeCallTimeout)
+            .catchError((Object _) {
+              _platformClose(player);
+            })
+            // A wedged lock releases late: the verb close then runs on an
+            // instance whose platform session was already closed above,
+            // and _closePlayer can throw (e.g. the platform close above
+            // already answered). Keep the release silent either way: the
+            // native session is released, nothing else can happen here.
             .catchError((Object _) {}),
-      );
-      // Belt and braces: the verb close above queues behind the instance's
-      // operation lock. If that lock is permanently wedged (the lost-
-      // callback case the timeout cannot fix), the native session still
-      // needs releasing — close it on the platform interface directly.
-      unawaited(
-        Future<void>.delayed(const Duration(seconds: 3)).then((_) {
-          try {
-            unawaited(
-              FlutterSoundPlayerPlatform.instance
-                  .closePlayer(player)
-                  .timeout(const Duration(seconds: 3))
-                  .catchError((Object _) => 0),
-            );
-            FlutterSoundPlayerPlatform.instance.closeSession(player);
-          } catch (_) {}
-        }),
       );
       return;
     }
-    try {
-      unawaited(
-        FlutterSoundPlayerPlatform.instance
-            .closePlayer(player)
-            .timeout(const Duration(seconds: 3))
-            .catchError((Object _) => 0),
-      );
-      FlutterSoundPlayerPlatform.instance.closeSession(player);
-    } catch (_) {}
+    // An instance whose openPlayer never completed can never be released
+    // by the verb at all — closePlayer returns early on the uninitialized
+    // flag without touching the platform — so its native session goes
+    // straight to the platform interface.
+    _platformClose(player);
+  }
+
+  /// Closes [player]'s native session on the platform interface and frees
+  /// its dart-side callback slot only after the platform acknowledged the
+  /// close.
+  void _platformClose(FlutterSoundPlayer player) {
+    unawaited(
+      FlutterSoundPlayerPlatform.instance
+          .closePlayer(player)
+          .timeout(nativeCallTimeout)
+          .then((_) {
+            // Acknowledged: no further reverse callback can be routed
+            // through this slot, so freeing it is safe now.
+            FlutterSoundPlayerPlatform.instance.closeSession(player);
+          })
+          .catchError((Object _) {
+            // The platform close was not acknowledged. Keep the slot
+            // occupied: recycling it now would let the next session reuse
+            // it and receive this instance's late events. A leaked slot is
+            // bounded — the SDK registers one slot per openPlayer call.
+          }),
+    );
   }
 
   /// Retires the current native player and resets the open bookkeeping.
