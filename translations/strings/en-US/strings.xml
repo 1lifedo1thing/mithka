@@ -1477,6 +1477,8 @@
     <string name="generalRepeatPreserveSender">Preserve sender when using +1</string>
     <string name="generalForwardRichMarkdown">Render Markdown when forwarding</string>
     <string name="generalForwardRichMarkdownHint">Offer to send Markdown-formatted text (like AI replies) as rich text</string>
+    <string name="generalKeepChatContextPaneClosed">Keep the group side panel closed</string>
+    <string name="generalKeepChatContextPaneClosedHint">On tablet and desktop, a group or channel opens without the member and announcement panel on the right. The chat header button still opens it</string>
     <string name="generalSaveCapturedPhotos">Save captured photos to the system album</string>
     <string name="generalSaveCapturedPhotosHint">When off, photos are taken with the in-app camera and never reach the album.</string>
     <string name="generalSendMessageWithEnter">Send messages with Enter</string>

@@ -1470,6 +1470,8 @@
     <string name="generalRepeatPreserveSender">+1 時保留傳送者</string>
     <string name="generalForwardRichMarkdown">轉發時渲染 Markdown</string>
     <string name="generalForwardRichMarkdownHint">識別 Markdown 排版的文字（如 AI 回覆），轉發時可渲染為富文本</string>
+    <string name="generalKeepChatContextPaneClosed">保持群組側欄收合</string>
+    <string name="generalKeepChatContextPaneClosedHint">平板和桌面版進入群組或頻道時，不再自動展開右側的成員與公告面板，聊天頂端按鈕仍可手動開啟</string>
     <string name="generalSaveCapturedPhotos">拍攝的照片儲存到系統相簿</string>
     <string name="generalSaveCapturedPhotosHint">關閉後改用應用程式內建相機拍攝，照片不會進入系統相簿。</string>
     <string name="generalSendMessageWithEnter">按 Enter 傳送訊息</string>
