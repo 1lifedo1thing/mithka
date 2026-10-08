@@ -1743,6 +1743,10 @@
     <string name="groupManagementRetry">Erneut versuchen</string>
     <string name="groupManagementSetFailed">Festlegen fehlgeschlagen</string>
     <string name="groupManagementStatistics">Statistiken</string>
+    <string name="groupManagementUpgradeConfirmMessage">Die Gruppe wird zu einer Supergruppe aktualisiert. Die ursprüngliche einfache Gruppe wird deaktiviert und der Chat in die neue Supergruppe verschoben. Das kann nicht rückgängig gemacht werden.</string>
+    <string name="groupManagementUpgradeConfirmTitle">In Supergruppe umwandeln?</string>
+    <string name="groupManagementUpgradeFailed">Gruppe konnte nicht umgewandelt werden.</string>
+    <string name="groupManagementUpgradeToSupergroup">In Supergruppe umwandeln</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">Benutzername nicht verfügbar oder keine Berechtigung</string>
     <string name="hiddenSendersEmpty">Niemand ist ausgeblendet. Wähle in einer Gruppe im Nachrichtenmenü „Absender ausblenden“.</string>
     <string name="hiddenSendersEverywhere">Alle Chats</string>

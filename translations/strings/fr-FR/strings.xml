@@ -1743,6 +1743,10 @@
     <string name="groupManagementRetry">Réessayer</string>
     <string name="groupManagementSetFailed">Échec de la configuration</string>
     <string name="groupManagementStatistics">Statistiques</string>
+    <string name="groupManagementUpgradeConfirmMessage">Le groupe est mis à niveau en supergroupe. Le groupe de base d'origine est désactivé et la discussion passe au nouveau supergroupe. Cette action est irréversible.</string>
+    <string name="groupManagementUpgradeConfirmTitle">Convertir en supergroupe ?</string>
+    <string name="groupManagementUpgradeFailed">Impossible de convertir le groupe.</string>
+    <string name="groupManagementUpgradeToSupergroup">Convertir en supergroupe</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">Nom d’utilisateur indisponible ou non autorisé</string>
     <string name="hiddenSendersEmpty">Personne n’est masqué. Dans un groupe, choisissez Masquer l’auteur dans le menu d’un message.</string>
     <string name="hiddenSendersEverywhere">Toutes les discussions</string>

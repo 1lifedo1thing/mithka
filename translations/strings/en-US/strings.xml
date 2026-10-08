@@ -1743,6 +1743,10 @@
     <string name="groupManagementRetry">Retry</string>
     <string name="groupManagementSetFailed">Setup failed</string>
     <string name="groupManagementStatistics">Statistics</string>
+    <string name="groupManagementUpgradeConfirmMessage">The group is upgraded to a supergroup. The original basic group is deactivated and the chat moves to the new supergroup. This can't be undone.</string>
+    <string name="groupManagementUpgradeConfirmTitle">Convert to supergroup?</string>
+    <string name="groupManagementUpgradeFailed">Couldn't convert the group.</string>
+    <string name="groupManagementUpgradeToSupergroup">Convert to supergroup</string>
     <string name="groupManagementUsernameUnavailableOrForbidden">Username is unavailable or not allowed</string>
     <string name="hiddenSendersEmpty">No one is hidden. In a group, choose Hide sender from a message’s menu.</string>
     <string name="hiddenSendersEverywhere">All chats</string>
