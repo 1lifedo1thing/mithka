@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chats/chat_list_view.dart';
 import 'package:mithka/chats/chat_list_view_model.dart';
+import 'package:mithka/components/chat_folder_icons.dart';
 import 'package:mithka/tdlib/td_models.dart';
+import 'package:mithka/theme/theme_controller.dart';
 
 void main() {
   ChatSummary chat(
@@ -213,9 +215,7 @@ void main() {
     },
   );
 
-  testWidgets('folder tab strips and rails draw the badge next to the glyph', (
-    tester,
-  ) async {
+  testWidgets('folder rails draw the badge after the label', (tester) async {
     const filter = ChatFilterOption(
       title: 'Work',
       folderId: 7,
@@ -238,5 +238,67 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     expect(find.text('3'), findsNothing);
+  });
+
+  testWidgets('the badge never covers the folder glyph or title', (
+    tester,
+  ) async {
+    const filter = ChatFilterOption(
+      title: 'Zeta',
+      folderId: 9,
+      unreadChatCount: 12,
+      hasUnmutedUnread: true,
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ChatFolderRail(
+          filters: [filter],
+          selectedFolderId: null,
+          showUnreadBadges: true,
+        ),
+      ),
+    );
+    final badge = tester.getRect(find.byType(FolderUnreadBadge));
+    final title = tester.getRect(find.text('Zeta'));
+    final glyph = tester.getRect(find.byType(ChatFolderIcon).first);
+    // Same row as the title: the pill starts clear of the last letter.
+    expect(badge.left, greaterThanOrEqualTo(title.right));
+    // And it intersects neither the title nor the glyph.
+    expect(badge.overlaps(title), isFalse);
+    expect(badge.overlaps(glyph), isFalse);
+  });
+
+  testWidgets('folder badges cap at 99+ unless exact counts are requested', (
+    tester,
+  ) async {
+    const filter = ChatFilterOption(
+      title: 'Busy',
+      folderId: 8,
+      unreadChatCount: 150,
+      hasUnmutedUnread: true,
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ChatFolderRail(
+          filters: [filter],
+          selectedFolderId: null,
+          showUnreadBadges: true,
+        ),
+      ),
+    );
+    expect(find.text('99+'), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ChatFolderRail(
+          filters: [filter],
+          selectedFolderId: null,
+          showUnreadBadges: true,
+          badgeOverflowMode: UnreadBadgeOverflowMode.exact,
+        ),
+      ),
+    );
+    expect(find.text('150'), findsOneWidget);
+    expect(find.text('99+'), findsNothing);
   });
 }
