@@ -1470,6 +1470,8 @@
     <string name="generalRepeatPreserveSender">+1 で送信者を保持</string>
     <string name="generalForwardRichMarkdown">転送時にMarkdownを反映</string>
     <string name="generalForwardRichMarkdownHint">Markdown形式のテキスト（AIの返信など）をリッチテキストとして転送するか選べます</string>
+    <string name="generalKeepChatContextPaneClosed">グループのサイドパネルを閉じたままにする</string>
+    <string name="generalKeepChatContextPaneClosedHint">タブレットやデスクトップでグループやチャンネルを開いたとき、右側のメンバーと告知のパネルを自動では開きません。チャット上部のボタンからは開けます</string>
     <string name="generalSaveCapturedPhotos">撮影した写真をシステムのアルバムに保存</string>
     <string name="generalSaveCapturedPhotosHint">オフにするとアプリ内カメラで撮影し、写真はアルバムに保存されません。</string>
     <string name="generalSendMessageWithEnter">Enterキーでメッセージを送信</string>

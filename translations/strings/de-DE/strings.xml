@@ -1477,6 +1477,8 @@
     <string name="generalRepeatPreserveSender">Absender bei +1 beibehalten</string>
     <string name="generalForwardRichMarkdown">Markdown beim Weiterleiten darstellen</string>
     <string name="generalForwardRichMarkdownHint">Bei Markdown-Texten (z. B. KI-Antworten) Weiterleitung als Rich Text anbieten</string>
+    <string name="generalKeepChatContextPaneClosed">Gruppen-Seitenleiste geschlossen lassen</string>
+    <string name="generalKeepChatContextPaneClosedHint">Auf Tablets und dem Desktop öffnet eine Gruppe oder ein Kanal nicht automatisch das Mitglieder- und Ankündigungsfeld rechts. Die Schaltfläche im Chat-Kopf öffnet es weiterhin</string>
     <string name="generalSaveCapturedPhotos">Aufgenommene Fotos im System-Album speichern</string>
     <string name="generalSaveCapturedPhotosHint">Aus: Fotos werden mit der App-Kamera aufgenommen und gelangen nie ins Album.</string>
     <string name="generalSendMessageWithEnter">Nachricht mit Eingabetaste senden</string>

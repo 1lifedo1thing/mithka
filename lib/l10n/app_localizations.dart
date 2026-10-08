@@ -1614,6 +1614,10 @@ abstract final class AppStringKeys {
   static const generalForwardRichMarkdown = 'generalForwardRichMarkdown';
   static const generalForwardRichMarkdownHint =
       'generalForwardRichMarkdownHint';
+  static const generalKeepChatContextPaneClosed =
+      'generalKeepChatContextPaneClosed';
+  static const generalKeepChatContextPaneClosedHint =
+      'generalKeepChatContextPaneClosedHint';
   static const generalSaveCapturedPhotos = 'generalSaveCapturedPhotos';
   static const generalSaveCapturedPhotosHint = 'generalSaveCapturedPhotosHint';
   static const generalSendMessageWithEnter = 'generalSendMessageWithEnter';
