@@ -1013,8 +1013,15 @@
     <string name="chatMembersRemoveMemberConfirmation">{value1}をグループから削除しますか？</string>
     <string name="chatMembersRemoveMemberTitle">メンバーを削除</string>
     <string name="chatMembersSearchHint">メンバーを検索</string>
+    <string name="chatMembersRestrict">制限</string>
+    <string name="chatMembersRestrictApply">適用</string>
+    <string name="chatMembersRestrictDuration">期間</string>
+    <string name="chatMembersRestrictFailed">制限を更新できませんでした。</string>
+    <string name="chatMembersRestrictForever">無期限</string>
+    <string name="chatMembersRestrictTitle">メンバーを制限</string>
     <string name="chatMembersSetTitle">肩書きを設定</string>
     <string name="chatMembersTitleWithCount">グループメンバー（{value1}）</string>
+    <string name="chatMembersUnrestrict">制限を解除</string>
     <string name="chatMembersUpdateFailed">このメンバーを更新できませんでした。</string>
     <string name="chatMenu">メニュー</string>
     <string name="chatMessageInputPlaceholder">メッセージを送信…</string>

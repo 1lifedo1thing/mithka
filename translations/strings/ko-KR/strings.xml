@@ -1013,8 +1013,15 @@
     <string name="chatMembersRemoveMemberConfirmation">{value1}님을 그룹 채팅에서 내보낼까요?</string>
     <string name="chatMembersRemoveMemberTitle">멤버 제거</string>
     <string name="chatMembersSearchHint">멤버 검색</string>
+    <string name="chatMembersRestrict">제한</string>
+    <string name="chatMembersRestrictApply">적용</string>
+    <string name="chatMembersRestrictDuration">기간</string>
+    <string name="chatMembersRestrictFailed">제한을 업데이트할 수 없습니다.</string>
+    <string name="chatMembersRestrictForever">무기한</string>
+    <string name="chatMembersRestrictTitle">멤버 제한</string>
     <string name="chatMembersSetTitle">직함 설정</string>
     <string name="chatMembersTitleWithCount">그룹 멤버 ({value1})</string>
+    <string name="chatMembersUnrestrict">제한 해제</string>
     <string name="chatMembersUpdateFailed">이 멤버를 변경할 수 없습니다.</string>
     <string name="chatMenu">메뉴</string>
     <string name="chatMessageInputPlaceholder">메시지 보내기…</string>

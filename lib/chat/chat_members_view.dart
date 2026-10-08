@@ -11,6 +11,7 @@ import 'package:mithka/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 
 import '../components/app_icons.dart';
+import '../components/app_interactive_surface.dart';
 import '../components/confirm_dialog.dart';
 import '../components/desktop_row_actions.dart';
 import '../components/photo_avatar.dart';
@@ -22,6 +23,7 @@ import '../settings/edit_field_view.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'chat_administrator_edit_view.dart';
@@ -107,6 +109,31 @@ class _ChatMembersViewState extends State<ChatMembersView> {
   bool _isChannel = false;
   int? _openRowId;
 
+  /// Pins every query this view issues to the account that was active when
+  /// the view opened. Chat ids, member ids and moderation rights all belong
+  /// to that account; a foreground account switch while a confirmation sheet
+  /// is open must never retarget the mutation to another client. The lease
+  /// also keeps the slot alive if the account is removed mid-view: queries
+  /// then fail (and the page shows its error toast) instead of silently
+  /// hitting the wrong account.
+  TdAccountLease? _accountLease;
+  bool _disposed = false;
+
+  /// Queries through the pinned account lease. Missing or released ownership
+  /// fails closed; later awaits must never fall back to the active account.
+  Future<Map<String, dynamic>> _query(Map<String, dynamic> request) {
+    final lease = _accountLease;
+    if (_disposed || lease == null || lease.isReleased) {
+      return Future.error(StateError('Member list ownership is unavailable'));
+    }
+    return lease.query(request);
+  }
+
+  /// True while this view still owns its account lease. Moderation flows
+  /// check this after awaiting user confirmation so a sheet that outlived
+  /// its view never sends the mutation.
+  bool get _leaseValid => !_disposed && _accountLease != null;
+
   /// What the list renders: the full supergroup list, or the basic-group
   /// list filtered by the current search locally.
   List<GroupMember> get _visibleMembers =>
@@ -121,11 +148,17 @@ class _ChatMembersViewState extends State<ChatMembersView> {
   @override
   void initState() {
     super.initState();
+    _accountLease = TdClient.shared.retainAccountSlot(
+      TdClient.shared.activeSlot,
+    );
     _load();
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    _accountLease?.release();
+    _accountLease = null;
     _search.dispose();
     super.dispose();
   }
@@ -164,10 +197,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     // already owns. Null (initial load) always applies.
     final myEpoch = epoch ?? ++_listEpoch;
     try {
-      final chat = await TdClient.shared.query({
-        '@type': 'getChat',
-        'chat_id': widget.chatId,
-      });
+      final chat = await _query({'@type': 'getChat', 'chat_id': widget.chatId});
       final type = chat.obj('type');
       await _loadSelfPermissions();
       _isChannel =
@@ -178,7 +208,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
         _isBasicGroup = true;
         final gid = type?.int64('basic_group_id');
         if (gid != null) {
-          final full = await TdClient.shared.query({
+          final full = await _query({
             '@type': 'getBasicGroupFullInfo',
             'basic_group_id': gid,
           });
@@ -201,14 +231,14 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           int? fullCount;
           if (!searching) {
             try {
-              final fullInfo = await TdClient.shared.query({
+              final fullInfo = await _query({
                 '@type': 'getSupergroupFullInfo',
                 'supergroup_id': sgid,
               });
               fullCount = fullInfo.integer('member_count');
             } catch (_) {}
           }
-          final res = await TdClient.shared.query(
+          final res = await _query(
             searching
                 ? {
                     '@type': 'searchChatMembers',
@@ -269,7 +299,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     final epoch = ++_listEpoch;
     setState(() => _loadingMore = true);
     try {
-      final res = await TdClient.shared.query({
+      final res = await _query({
         '@type': 'getSupergroupMembers',
         'supergroup_id': sgid,
         'filter': {
@@ -296,10 +326,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
         final title = _memberTitle(entry, status);
         role ??= MemberRole.member;
         try {
-          final user = await TdClient.shared.query({
-            '@type': 'getUser',
-            'user_id': uid,
-          });
+          final user = await _query({'@type': 'getUser', 'user_id': uid});
           fresh.add(
             GroupMember(
               id: uid,
@@ -342,10 +369,10 @@ class _ChatMembersViewState extends State<ChatMembersView> {
 
   Future<void> _loadSelfPermissions() async {
     try {
-      final me = await TdClient.shared.query({'@type': 'getMe'});
+      final me = await _query({'@type': 'getMe'});
       final uid = me.int64('id');
       if (uid == null) return;
-      final member = await TdClient.shared.query({
+      final member = await _query({
         '@type': 'getChatMember',
         'chat_id': widget.chatId,
         'member_id': {'@type': 'messageSenderUser', 'user_id': uid},
@@ -377,10 +404,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
       final title = _memberTitle(entry, status);
       role ??= MemberRole.member;
       try {
-        final user = await TdClient.shared.query({
-          '@type': 'getUser',
-          'user_id': uid,
-        });
+        final user = await _query({'@type': 'getUser', 'user_id': uid});
         result.add(
           GroupMember(
             id: uid,
@@ -418,6 +442,85 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     }
   }
 
+  /// Per-user restrictions are a supergroup feature; basic groups only
+  /// support remove (and channels have no members tab actions).
+  bool get _canRestrict =>
+      _canRemove &&
+      !_isBasicGroup &&
+      !_isChannel &&
+      widget.mode == ChatMembersMode.members;
+
+  bool _isRestricted(GroupMember m) =>
+      m.rawStatus?.type == 'chatMemberStatusRestricted';
+
+  /// Opens the restriction sheet: duration + per-permission switches,
+  /// prefilled from the member's current chatMemberStatusRestricted.
+  Future<void> _restrict(GroupMember m) async {
+    if (!_canRestrict || m.role == MemberRole.owner) return;
+    final result = await showAppModalSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.card,
+      builder: (_) => _MemberRestrictSheet(name: m.name, status: m.rawStatus),
+    );
+    // The sheet can outlive this view, and the user may have switched the
+    // foreground account while it was open. The member list, chat id and
+    // rights all belong to the account this view pinned; never let the
+    // confirmation retarget another client.
+    if (result == null || !mounted || !_leaseValid) return;
+    try {
+      await _query({
+        '@type': 'setChatMemberStatus',
+        'chat_id': widget.chatId,
+        'member_id': {'@type': 'messageSenderUser', 'user_id': m.id},
+        'status': {
+          '@type': 'chatMemberStatusRestricted',
+          'is_member': result['is_member'] as bool? ?? true,
+          'restricted_until_date': result['until'] as int? ?? 0,
+          'permissions': {
+            '@type': 'chatPermissions',
+            ...(result['permissions'] as Map<String, dynamic>),
+          },
+        },
+      });
+      if (mounted) await _reload();
+    } catch (_) {
+      if (mounted) {
+        showToast(context, AppStringKeys.chatMembersRestrictFailed);
+      }
+    }
+  }
+
+  /// Lifts restrictions by restoring plain membership.
+  /// Lifts restrictions. A restricted member who left while restricted
+  /// (is_member false) must not be re-added: they go to Left, still
+  /// without restrictions; a present member returns to plain membership.
+  Future<void> _unrestrict(GroupMember m) async {
+    if (!_canRestrict || m.role == MemberRole.owner) return;
+    final stillMember =
+        m.rawStatus?.boolean('is_member') ??
+        // is_member is absent in old cached statuses; assume present,
+        // matching how the restriction sheet prefills.
+        true;
+    try {
+      await _query({
+        '@type': 'setChatMemberStatus',
+        'chat_id': widget.chatId,
+        'member_id': {'@type': 'messageSenderUser', 'user_id': m.id},
+        'status': {
+          '@type': stillMember
+              ? 'chatMemberStatusMember'
+              : 'chatMemberStatusLeft',
+        },
+      });
+      if (mounted) await _reload();
+    } catch (_) {
+      if (mounted) {
+        showToast(context, AppStringKeys.chatMembersRestrictFailed);
+      }
+    }
+  }
+
   Future<void> _confirmRemove(GroupMember m) async {
     if (!_canRemove || m.role == MemberRole.owner) return;
     final ok = await confirmDialog(
@@ -429,9 +532,11 @@ class _ChatMembersViewState extends State<ChatMembersView> {
       confirmText: AppStrings.t(AppStringKeys.chatInfoRemove),
       destructive: true,
     );
-    if (!ok) return;
+    // Same ownership rule as the restriction sheet: the confirmation must
+    // not send through a different foreground account.
+    if (!ok || !mounted || !_leaseValid) return;
     try {
-      await TdClient.shared.query({
+      await _query({
         '@type': 'setChatMemberStatus',
         'chat_id': widget.chatId,
         'member_id': {'@type': 'messageSenderUser', 'user_id': m.id},
@@ -495,7 +600,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     );
     if (!mounted || value == null) return;
     try {
-      await TdClient.shared.query({
+      await _query({
         '@type': 'setChatMemberTag',
         'chat_id': widget.chatId,
         'user_id': member.id,
@@ -530,7 +635,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     if (!mounted || value == null) return;
     final tag = value.trim();
     try {
-      await TdClient.shared.query({
+      await _query({
         '@type': 'setChatMemberTag',
         'chat_id': widget.chatId,
         'user_id': member.id,
@@ -564,7 +669,7 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     );
     if (!ok) return;
     try {
-      await TdClient.shared.query({
+      await _query({
         '@type': 'setChatMemberStatus',
         'chat_id': widget.chatId,
         'member_id': {'@type': 'messageSenderUser', 'user_id': member.id},
@@ -668,13 +773,29 @@ class _ChatMembersViewState extends State<ChatMembersView> {
                               color: AppTheme.tagRed,
                               onTap: () => _confirmDemote(m),
                             )
-                          else if (_canRemove && m.role != MemberRole.owner)
+                          else if (_isRestricted(m) && _canRestrict)
                             MemberRowAction(
-                              title: AppStringKeys.chatInfoRemove,
-                              icon: HeroAppIcons.trash,
-                              color: AppTheme.tagRed,
-                              onTap: () => _confirmRemove(m),
-                            ),
+                              title: AppStringKeys.chatMembersUnrestrict,
+                              icon: HeroAppIcons.check,
+                              color: const Color(0xFF16A085),
+                              onTap: () => _unrestrict(m),
+                            )
+                          else ...[
+                            if (_canRestrict && m.role != MemberRole.owner)
+                              MemberRowAction(
+                                title: AppStringKeys.chatMembersRestrict,
+                                icon: HeroAppIcons.microphoneSlash,
+                                color: AppTheme.tagRed,
+                                onTap: () => _restrict(m),
+                              ),
+                            if (_canRemove && m.role != MemberRole.owner)
+                              MemberRowAction(
+                                title: AppStringKeys.chatInfoRemove,
+                                icon: HeroAppIcons.trash,
+                                color: AppTheme.tagRed,
+                                onTap: () => _confirmRemove(m),
+                              ),
+                          ],
                         ];
                         return Column(
                           mainAxisSize: MainAxisSize.min,
@@ -992,6 +1113,192 @@ class _MemberActionRowState extends State<MemberActionRow> {
                 color: context.colors.background,
                 child: widget.child,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Duration choices for a per-user restriction. 0 means forever.
+const _restrictDurations = <int>[0, 3600, 86400, 604800, 2592000];
+
+/// Bottom sheet for per-user restrictions: pick a duration and toggle the
+/// permissions the member keeps. Returns the raw payload for
+/// chatMemberStatusRestricted, or null when cancelled.
+class _MemberRestrictSheet extends StatefulWidget {
+  const _MemberRestrictSheet({required this.name, required this.status});
+
+  final String name;
+  final Map<String, dynamic>? status;
+
+  @override
+  State<_MemberRestrictSheet> createState() => _MemberRestrictSheetState();
+}
+
+class _MemberRestrictSheetState extends State<_MemberRestrictSheet> {
+  static const _permKeys = <String, String>{
+    'can_send_basic_messages':
+        AppStringKeys.groupManagementPermissionSendMessages,
+    'can_send_photos': AppStringKeys.groupManagementPermissionSendPhotos,
+    'can_send_videos': AppStringKeys.groupManagementPermissionSendVideos,
+    'can_send_documents': AppStringKeys.groupManagementPermissionSendFiles,
+    'can_send_voice_notes': AppStringKeys.groupManagementPermissionSendVoice,
+    'can_send_video_notes':
+        AppStringKeys.groupManagementPermissionSendVideoMessages,
+    'can_send_audios': AppStringKeys.groupManagementPermissionSendMusic,
+    'can_send_polls': AppStringKeys.groupManagementPermissionSendPolls,
+    'can_send_other_messages':
+        AppStringKeys.groupManagementPermissionSendStickersAndGifs,
+    'can_add_link_previews':
+        AppStringKeys.groupManagementPermissionLinkPreviews,
+    'can_react_to_messages':
+        AppStringKeys.groupManagementPermissionSendReactions,
+    'can_edit_tag': AppStringKeys.groupManagementPermissionEditOwnTag,
+    'can_invite_users': AppStringKeys.addMembersInviteMembersTitle,
+    'can_pin_messages': AppStringKeys.groupManagementPermissionPinMessages,
+    'can_change_info': AppStringKeys.groupManagementPermissionEditGroupInfo,
+    'can_create_topics': AppStringKeys.groupManagementPermissionCreateTopics,
+  };
+
+  late int _duration;
+  late Map<String, bool> _permissions;
+  late bool _isMember;
+
+  @override
+  void initState() {
+    super.initState();
+    final status = widget.status;
+    final existing = status?.type == 'chatMemberStatusRestricted'
+        ? status?.obj('permissions')
+        : null;
+    _isMember = status?.type == 'chatMemberStatusRestricted'
+        ? (status?.boolean('is_member') ?? true)
+        : true;
+    final until = status?.integer('restricted_until_date') ?? 0;
+    final remaining = until <= 0
+        ? 0
+        : until - DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    _duration = _restrictDurations.contains(remaining) ? remaining : 0;
+    _permissions = {
+      for (final key in _permKeys.keys) key: existing?.boolean(key) ?? false,
+    };
+  }
+
+  String _durationLabel(BuildContext context, int seconds) => switch (seconds) {
+    0 => AppStringKeys.chatMembersRestrictForever.l10n(context),
+    3600 => AppStringKeys.groupAdminHour.l10n(context),
+    86400 => context.l10n.t(AppStringKeys.groupAdminMinutes, {
+      'value1': 24 * 60,
+    }),
+    604800 => context.l10n.t(AppStringKeys.groupAdminMinutes, {
+      'value1': 7 * 24 * 60,
+    }),
+    2592000 => context.l10n.t(AppStringKeys.groupAdminMinutes, {
+      'value1': 30 * 24 * 60,
+    }),
+    _ => context.l10n.t(AppStringKeys.groupAdminSeconds, {'value1': seconds}),
+  };
+
+  void _submit() => Navigator.of(context).pop(<String, dynamic>{
+    'is_member': _isMember,
+    'until': _duration == 0
+        ? 0
+        : DateTime.now().millisecondsSinceEpoch ~/ 1000 + _duration,
+    'permissions': _permissions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 20),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 6, bottom: 10),
+            child: Text(
+              AppStrings.t(AppStringKeys.chatMembersRestrictTitle),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: c.textPrimary,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 6, bottom: 12),
+            child: Text(
+              widget.name,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ),
+          Text(
+            AppStringKeys.chatMembersRestrictDuration.l10n(context),
+            style: TextStyle(fontSize: 13, color: c.textTertiary),
+          ),
+          const SizedBox(height: 6),
+          for (final seconds in _restrictDurations)
+            SettingsSwitchRow(
+              title: _durationLabel(context, seconds),
+              value: _duration == seconds,
+              onChanged: (_) => setState(() => _duration = seconds),
+            ),
+          const SizedBox(height: 12),
+          Text(
+            AppStringKeys.chatMembersAdminPermissions.l10n(context),
+            style: TextStyle(fontSize: 13, color: c.textTertiary),
+          ),
+          const SizedBox(height: 6),
+          for (final entry in _permKeys.entries)
+            SettingsSwitchRow(
+              title: entry.value,
+              value: _permissions[entry.key] ?? false,
+              onChanged: (value) =>
+                  setState(() => _permissions[entry.key] = value),
+            ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                AppInteractiveSurface(
+                  onTap: () => Navigator.of(context).pop(),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      AppStrings.t(AppStringKeys.confirmCancel),
+                      style: TextStyle(fontSize: 15, color: c.textSecondary),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                AppInteractiveSurface(
+                  onTap: _submit,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      AppStringKeys.chatMembersRestrictApply.l10n(context),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.brand,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
