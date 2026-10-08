@@ -121,6 +121,7 @@ abstract final class AppStringKeys {
   static const appearancePreviewMessageSample =
       'appearancePreviewMessageSample';
   static const appearancePreviewUsersSample = 'appearancePreviewUsersSample';
+  static const appearanceShowFolderBadges = 'appearanceShowFolderBadges';
   static const chatInputResizeMessageInput = 'chatInputResizeMessageInput';
   static const chatMembersRemovedTitle = 'chatMembersRemovedTitle';
   static const chatMembersSubscribersTitleWithCount =
