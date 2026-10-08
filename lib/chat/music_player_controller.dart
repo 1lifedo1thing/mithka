@@ -43,6 +43,7 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
   MusicPlayerController._({VoicePlayer? player})
     : _player = player ?? VoicePlayer() {
     _player.onFinished = _onFinished;
+    _player.onFailed = _onPlaybackFailed;
     _player.addListener(notifyListeners);
   }
 
@@ -576,6 +577,25 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
       return;
     }
     _playAdjacent(1, manual: false);
+  }
+
+  /// A track that failed to start (download stall, native start timeout,
+  /// unsupported container). Stay on the track so the user can retry, but
+  /// stop auto-advance: skipping past the failure silently would look like
+  /// playback never started.
+  void _onPlaybackFailed(int fileId, Object error) {
+    debugPrint('MusicPlayerController: track $fileId failed to start: $error');
+    final overlay = appNavigatorKey.currentState?.overlay;
+    if (overlay == null) {
+      // No shell yet (tests, early startup): the state change still notifies.
+      notifyListeners();
+      return;
+    }
+    showToastOverlay(
+      overlay,
+      AppStrings.t(AppStringKeys.musicPlayerStartFailed),
+    );
+    notifyListeners();
   }
 
   void _playAdjacent(int delta, {required bool manual}) {
@@ -1585,31 +1605,62 @@ class _MusicQueueSheet extends StatefulWidget {
 class _MusicQueueSheetState extends State<_MusicQueueSheet> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey _firstRowKey = GlobalKey();
+  int? _revealedFileId;
+  bool _animated = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+    widget.controller.addListener(_onControllerChanged);
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
     _scroll.dispose();
     super.dispose();
+  }
+
+  // The current track moves while the sheet is open: auto-advance, manual
+  // skips and switching the playback mode reorder the visible rows. Follow
+  // it so the playing row never drifts out of view.
+  void _onControllerChanged() {
+    if (!mounted) return;
+    final id = widget.controller.current?.music?.file?.id;
+    if (id != null && id != _revealedFileId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+    }
   }
 
   void _revealCurrent() {
     if (!mounted || !_scroll.hasClients) return;
     final controller = widget.controller;
     final currentId = controller.current?.music?.file?.id;
+    if (currentId == null || currentId == _revealedFileId) return;
     final index = controller.displayQueue.indexWhere(
       (item) => item.music?.file?.id == currentId,
     );
     final row = _firstRowKey.currentContext?.size?.height ?? 0;
-    if (index <= 0 || row <= 0) return;
+    if (index < 0 || row <= 0) return;
+    _revealedFileId = currentId;
     final position = _scroll.position;
-    final target = index * row - (position.viewportDimension - row) / 2;
-    _scroll.jumpTo(target.clamp(0.0, position.maxScrollExtent));
+    final target = (index * row - (position.viewportDimension - row) / 2).clamp(
+      0.0,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    if (_animated) {
+      _scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      // The opening jump should not animate over the whole list.
+      _scroll.jumpTo(target);
+      _animated = true;
+    }
   }
 
   @override

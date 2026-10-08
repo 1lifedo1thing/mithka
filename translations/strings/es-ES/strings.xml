@@ -2208,6 +2208,7 @@
     <string name="musicPlayerRemoveFromPlaylist">Eliminar de la lista de reproducción</string>
     <string name="musicPlayerRemovedFromPlaylist">Eliminado de la lista de reproducción</string>
     <string name="musicPlayerShowPlaylist">Lista de reproducción</string>
+<string name="musicPlayerStartFailed">No se pudo reproducir esta canción</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="one">{count} canción</item>
         <item quantity="other">{count} canciones</item>

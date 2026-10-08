@@ -2199,6 +2199,7 @@
     <string name="musicPlayerRemoveFromPlaylist">プレイリストから削除</string>
     <string name="musicPlayerRemovedFromPlaylist">プレイリストから削除しました</string>
     <string name="musicPlayerShowPlaylist">プレイリスト</string>
+<string name="musicPlayerStartFailed">この曲を再生できません</string>
     <plurals name="musicPlayerTrackCount">
         <item quantity="other">{count}曲</item>
     </plurals>
