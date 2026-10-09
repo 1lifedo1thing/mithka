@@ -290,6 +290,18 @@ class ChatListViewModel extends ChangeNotifier {
 
   int? communityForChat(int chatId) => _communityByChat[chatId];
 
+  /// The community a chat row links to from its avatar corner, or null when the
+  /// row stands on its own.
+  CommunitySummary? communityBadgeFor(
+    int chatId, {
+    required bool communitiesEnabled,
+  }) => CommunityRowBadge.communityFor(
+    chatId: chatId,
+    communityByChat: _communityByChat,
+    communities: _communities,
+    communitiesEnabled: communitiesEnabled,
+  );
+
   void setCommunityCollapsed(int communityId, bool collapsed) {
     final community = _communities[communityId];
     if (community == null || community.collapsed == collapsed) return;
@@ -1321,7 +1333,7 @@ class ChatListViewModel extends ChangeNotifier {
     final existing = _communities[id];
     final community = CommunitySummary.fromTd(
       object,
-      collapsed: existing?.collapsed ?? true,
+      collapsed: existing?.collapsed ?? false,
     );
     if (existing == null) {
       _communities[id] = community;
