@@ -92,6 +92,12 @@ mithka_apply_legacy_winrt_coroutine_compat()
     );
     expect(workflow, contains('Original release needs a passed quality gate'));
     expect(workflow, contains('Original build stamp is ambiguous'));
+    expect(
+      workflow,
+      contains(
+        'scripts/build-tdjson-desktop.sh windows native-libs/tdjson.dll arm64',
+      ),
+    );
     expect(workflow, isNot(contains('gh release')));
     expect(workflow, isNot(contains('git push')));
     expect(workflow, isNot(contains('sendMessage')));

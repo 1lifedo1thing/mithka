@@ -92,7 +92,7 @@ jobs:
       - name: Prepare original native dependencies
         shell: bash
         run: |
-          scripts/build-tdjson-desktop.sh windows native-libs/tdjson.dll
+          scripts/build-tdjson-desktop.sh windows native-libs/tdjson.dll arm64
           flutter pub get
           python3 scripts/drop-windows-plugin.py firebase_core \
             --reason 'Firebase publishes no Windows ARM64 binaries'
@@ -155,7 +155,9 @@ jobs:
           }
           '@
           $releaseModule = [ReleaseNativeCheck]::LoadLibrary((Resolve-Path "$releaseBundle\tdjson.dll"))
-          if ($releaseModule -eq [IntPtr]::Zero) { throw 'Packaged TDJSON cannot load on arm64' }
+          if ($releaseModule -eq [IntPtr]::Zero) {
+            throw "Packaged TDJSON cannot load on arm64: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+          }
           try {
             foreach ($symbol in @('td_create_client_id', 'td_mithka_export_session_string', 'td_mithka_import_session_string', 'td_mithka_last_error', 'td_mithka_set_transfer_boost')) {
               if ([ReleaseNativeCheck]::GetProcAddress($releaseModule, $symbol) -eq [IntPtr]::Zero) {
