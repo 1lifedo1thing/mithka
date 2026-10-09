@@ -152,6 +152,20 @@ bool chatViewRequiresFullSync({
   required int nextRevision,
 }) => previousRevision != nextRevision;
 
+/// Whether a model notification should still synchronize the transcript.
+///
+/// A covered transcript defers until its tickers come back. One that has already
+/// captured its exit state is only animating out, and its own exit work is what
+/// notifies the model: marking the conversation read notifies once, then the
+/// local `updateChatReadInbox` it emits notifies again, so both land inside the
+/// closing transition. Synchronizing there walks the transcript and rebuilds a
+/// page nobody will see again, which is the stutter behind closing a chat.
+@visibleForTesting
+bool chatViewSyncsModelNotification({
+  required bool viewTickerEnabled,
+  required bool exitStatePrepared,
+}) => viewTickerEnabled && !exitStatePrepared;
+
 /// Rebuilds a narrow chat fragment only while its route is active. Hidden
 /// split-view/tab routes deliberately detach from high-frequency TDLib bubble
 /// and header updates; their next TickerMode build reads the latest model.
@@ -2786,8 +2800,15 @@ class _ChatViewState extends State<ChatView> {
       previousRevision: _fullViewRevision,
       nextRevision: nextFullViewRevision,
     );
-    if (!_viewTickerEnabled) {
-      if (requiresFullViewSync) _modelDirtyWhileInactive = true;
+    if (!chatViewSyncsModelNotification(
+      viewTickerEnabled: _viewTickerEnabled,
+      exitStatePrepared: _exitStatePrepared,
+    )) {
+      // A covered transcript still owes the sync once it is visible again; one
+      // that is on its way out never does.
+      if (!_viewTickerEnabled && requiresFullViewSync) {
+        _modelDirtyWhileInactive = true;
+      }
       return;
     }
     if (!requiresFullViewSync) return;
