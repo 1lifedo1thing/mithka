@@ -448,4 +448,51 @@ void main() {
       expect(identical(memo.resolve('中文English', entities), first), isFalse);
     });
   });
+
+  group('detected tokens', () {
+    List<String> spans(String text) => [
+      for (final range in PanguSpacing.detectedRangesFor(text))
+        text.substring(range.start, range.end),
+    ];
+
+    test('claims a link whose path mixes scripts', () {
+      expect(
+        spans('看https://example.com/中文abc'),
+        contains('https://example.com/中文abc'),
+      );
+      expect(spans('example.com/中文abc'), contains('example.com/中文abc'));
+    });
+
+    test('claims a mention, a hashtag and an address', () {
+      final found = spans('@user #中文tag 寄到mail@example.com');
+      expect(found, containsAll(<String>['@user', '#中文tag']));
+      expect(found, contains('mail@example.com'));
+    });
+
+    test('a mention stops where its username does', () {
+      // Telegram usernames are ASCII, so the CJK after one is ordinary text and
+      // still gets its space.
+      expect(spans('中文@username中文'), contains('@username'));
+    });
+
+    test('a command stops at its name', () {
+      expect(spans('/help中文'), contains('/help'));
+    });
+
+    test('gives back the sentence punctuation a link picks up', () {
+      expect(
+        spans('https://example.com/a. 然后'),
+        contains('https://example.com/a'),
+      );
+    });
+
+    test('leaves ordinary text alone', () {
+      // A full stop between two CJK clauses is not a domain, and a version
+      // number is not one either.
+      expect(spans('今天用iPhone很开心.明天继续'), isEmpty);
+      expect(spans('版本1.2.3发布'), isEmpty);
+      expect(spans('没有链接'), isEmpty);
+      expect(spans(''), isEmpty);
+    });
+  });
 }

@@ -116,9 +116,11 @@ class _ScheduledMessagesViewState extends State<ScheduledMessagesView> {
     );
     if (!mounted || text == null || text.isEmpty) return;
     // 盘古之白 for the text as it is authored; a scheduled message has not gone
-    // out yet, so it follows the sending switch rather than the edit one.
+    // out yet, so it follows the sending switch rather than the edit one. The
+    // draft has no entities, so the tokens TDLib will detect in it are protected
+    // from the raw text.
     final spaced = context.read<ThemeController>().panguOnSend
-        ? PanguSpacing.transformText(text).text
+        ? PanguSpacing.transformUnannotated(text).text
         : text;
     try {
       if (entry.raw.obj('content')?.type == 'messageText') {

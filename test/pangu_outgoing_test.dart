@@ -127,6 +127,92 @@ void main() {
     expect(outgoingText(sent()), '中文 photo');
   });
 
+  // A caption typed by hand carries no entities, so the only thing standing
+  // between 盘古之白 and a rewritten link is the detector. TDLib adds the `Url`
+  // entity after the message is sent, and a space inside it changes the target
+  // rather than how it reads.
+  test('a caption keeps a link whose path mixes scripts', () async {
+    final vm = model(send: true);
+    const caption = 'https://example.com/中文abc';
+    await vm.sendAttachments(const [
+      OutgoingAttachment(
+        path: '/synthetic/a.jpg',
+        kind: OutgoingAttachmentKind.photo,
+      ),
+    ], caption: caption);
+    expect(outgoingText(sent()), caption);
+  });
+
+  test('a link keeps its query values and is spaced into the sentence', () async {
+    final vm = model(send: true)..setDraft('看https://example.com/a?q=中文abc');
+    expect(await vm.send(), isTrue);
+    // The space before the link is outside it, so it stays. TDLib's path runs to
+    // the next whitespace, so whatever follows the query is part of the link and
+    // cannot be spaced off it.
+    expect(outgoingText(sent()), '看 https://example.com/a?q=中文abc');
+  });
+
+  test('an address keeps its local part', () async {
+    final vm = model(send: true)..setDraft('寄到mail@example.com谢谢');
+    expect(await vm.send(), isTrue);
+    expect(outgoingText(sent()), '寄到 mail@example.com 谢谢');
+  });
+
+  test('a mention is spaced around, never inside', () async {
+    final vm = model(send: true)..setDraft('中文@username中文');
+    expect(await vm.send(), isTrue);
+    // `@` is not a half-width letter, so nothing lands in front of the mention;
+    // the space after it sits on the token's edge, outside the protected range.
+    expect(outgoingText(sent()), '中文@username 中文');
+  });
+
+  test('a hashtag keeps its whole token', () async {
+    final vm = model(send: true)..setDraft('话题#中文tag结束');
+    expect(await vm.send(), isTrue);
+    // TDLib reads a hashtag to the end of its letters, whatever script they are
+    // in, so spacing the CJK off the tag would make it two tokens.
+    expect(outgoingText(sent()), '话题#中文tag结束');
+  });
+
+  test('a command is spaced after its name, not inside it', () async {
+    final vm = model(send: true)..setDraft('/help中文');
+    expect(await vm.send(), isTrue);
+    expect(outgoingText(sent()), '/help 中文');
+  });
+
+  test(
+    'a detected link and a formatting entity agree on the offsets',
+    () async {
+      final vm = model(send: true);
+      const text = '中文https://example.com/中文abc';
+      expect(
+        await vm.sendFormatted(text, [
+          {
+            '@type': 'textEntity',
+            'offset': 0,
+            'length': text.length,
+            'type': {'@type': 'textEntityTypeBold'},
+          },
+        ]),
+        isTrue,
+      );
+      final request = sent();
+      final spaced = outgoingText(request);
+      expect(spaced, '中文 https://example.com/中文abc');
+      final entity = outgoingEntities(request).single;
+      final offset = entity['offset'] as int;
+      final length = entity['length'] as int;
+      expect(offset, 0);
+      expect(spaced.substring(offset, offset + length), spaced);
+    },
+  );
+
+  test('a link is left byte-identical while the switch is off', () async {
+    final vm = model()..setDraft('看https://example.com/中文abc和mail@example.com');
+    expect(await vm.send(), isTrue);
+    expect(outgoingText(sent()), '看https://example.com/中文abc和mail@example.com');
+  });
+
   test('editing spaces only when the edit switch is on', () async {
     final message = ChatMessage(
       id: 7,

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
+
 import '../tdlib/td_models.dart';
 
 /// 盘古之白 — the space that splits full-width CJK text from half-width text.
@@ -83,6 +85,42 @@ class PanguSpacing {
     return ranges;
   }
 
+  /// The tokens TDLib's own detector would claim in [text], as ranges to
+  /// protect.
+  ///
+  /// An outgoing message carries only the entities its composer made, so a plain
+  /// caption reaches the spacing pass unannotated — and TDLib adds `Url`,
+  /// `Mention`, `Hashtag` and the rest afterwards (`find_entities` in
+  /// td/telegram/MessageEntity.cpp). Spacing inside one of those changes what
+  /// the token means rather than how it reads: `https://example.com/中文abc`
+  /// becomes a different URL, and `#中文tag` becomes a hashtag and a word.
+  ///
+  /// Detecting more than TDLib would is safe — it only costs a space that was
+  /// not inserted, never a moved entity — so the patterns stay broad. Hosts are
+  /// ASCII, because a unicode label would let an ordinary CJK sentence with a
+  /// full stop in it swallow the words around it; a path is not, because that is
+  /// where the CJK a link can legitimately carry lives.
+  @visibleForTesting
+  static List<PanguProtectedRange> detectedRangesFor(String text) {
+    if (text.length < 2) return const [];
+    final ranges = <PanguProtectedRange>[];
+    for (final pattern in _detectedTokenPatterns) {
+      for (final match in pattern.allMatches(text)) {
+        final end = _tokenEnd(text, match.start, match.end);
+        if (end > match.start) {
+          ranges.add(PanguProtectedRange(match.start, end));
+        }
+      }
+    }
+    return ranges;
+  }
+
+  /// Spaced [text] for a surface that has no entity list to trust: a caption or
+  /// a draft, where the only ranges worth protecting are the ones TDLib would
+  /// detect in the raw text.
+  static PanguText transformUnannotated(String text) =>
+      transformText(text, protectedRanges: detectedRangesFor(text));
+
   /// Spaced text and the entities moved onto it, for rendering a message.
   ///
   /// Returns the arguments unchanged — same list identity — when nothing was
@@ -142,7 +180,11 @@ class PanguSpacing {
     String text,
     List<Map<String, dynamic>> entities,
   ) {
-    final ranges = <PanguProtectedRange>[];
+    final ranges = <PanguProtectedRange>[
+      // The composer's entities, plus whatever TDLib will detect in the text
+      // itself once it is sent — a caption typed by hand has no link entities.
+      ...detectedRangesFor(text),
+    ];
     for (final entity in entities) {
       final type = entity['type'];
       final name = type is Map ? type['@type'] : null;
@@ -235,6 +277,64 @@ class PanguSpacing {
     int() => value,
     num() => value.toInt(),
     _ => 0,
+  };
+
+  /// A URL with a scheme, then everything up to whitespace or one of the
+  /// delimiters TDLib ends a path at (`is_url_path_symbol`).
+  static final RegExp _schemedUrl = RegExp(
+    r'[A-Za-z][A-Za-z0-9+.-]*://[^\s<>"\u00ab\u00bb]+',
+  );
+
+  /// A bare host with its optional user info, port and path. The host ends in an
+  /// ASCII letter TLD so a version number, a filename or a CJK sentence with a
+  /// full stop in it is not mistaken for one; the path is unrestricted, because
+  /// that is where a link carries its CJK.
+  static final RegExp _bareUrl = RegExp(
+    r'(?:[A-Za-z0-9_~%+-]+@)?'
+    r'(?:[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?\.)+'
+    r'[A-Za-z]{2,}'
+    r'(?::[0-9]{1,5})?'
+    r'(?:[/?#][^\s<>"\u00ab\u00bb]*)?',
+  );
+
+  static final List<RegExp> _detectedTokenPatterns = [
+    _schemedUrl,
+    _bareUrl,
+    // A mention: Telegram usernames are ASCII, so a CJK tail is not part of it.
+    RegExp(r'@[A-Za-z0-9_]{3,32}'),
+    // A hashtag runs to 256 letters of any script (TDLib's `is_hashtag_letter`),
+    // so `#中文tag` is one token and a space would make it two.
+    RegExp(r'#[\p{L}\p{N}_]{1,256}', unicode: true),
+    // A cashtag is ASCII letters, like the tickers it names.
+    RegExp(r'\$[A-Za-z]{2,}'),
+    // A bot command only opens a message or follows a space, so a path is not
+    // read as one twice over. Its name is ASCII, like Telegram's own syntax.
+    RegExp(r'(?:^|(?<=\s))/[A-Za-z0-9_]{2,}(?:@[A-Za-z0-9_]{3,})?'),
+  ];
+
+  /// Where a detected token really ends. TDLib strips the sentence punctuation a
+  /// link picks up at its tail (`bad_path_end_chars`), and a space belongs after
+  /// that punctuation rather than inside the protected range.
+  static int _tokenEnd(String text, int start, int end) {
+    var last = end;
+    while (last > start + 1 &&
+        _tokenTailChars.contains(text.codeUnitAt(last - 1))) {
+      last--;
+    }
+    return last;
+  }
+
+  /// . : ; , ( ' ? ! and the backtick.
+  static const Set<int> _tokenTailChars = {
+    0x2e,
+    0x3a,
+    0x3b,
+    0x2c,
+    0x28,
+    0x27,
+    0x3f,
+    0x21,
+    0x60,
   };
 
   /// Whether a space belongs between the characters on either side of [index].

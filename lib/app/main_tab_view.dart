@@ -310,7 +310,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         preview.attachments,
       );
       final spacedCaption = spaceCaption
-          ? PanguSpacing.transformText(preview.caption).text
+          ? PanguSpacing.transformUnannotated(preview.caption).text
           : preview.caption;
       final requests = buildAttachmentSendRequests(
         chatId: picked.id,
