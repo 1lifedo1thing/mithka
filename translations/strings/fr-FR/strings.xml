@@ -2460,6 +2460,8 @@
     <string name="profileDetailBirthday">Anniversaire</string>
     <string name="profileDetailBusinessHours">Horaires d'ouverture</string>
     <string name="profileDetailCardLinkCopied">Lien de carte de visite copié</string>
+    <string name="profileDetailCopied">Copié</string>
+    <string name="profileDetailCopyFailed">Copie impossible</string>
     <string name="profileDetailCopyLink">Copier le lien</string>
     <string name="profileDetailFeaturedPhotos">Photos à la une</string>
     <string name="profileDetailGifts">Cadeaux</string>
@@ -2468,6 +2470,7 @@
     <string name="profileDetailMonthDayDate">{value2} {value1}</string>
     <string name="profileDetailMusic">Musique</string>
     <string name="profileDetailPosts">Publications</string>
+    <string name="profileDetailRegistrationAroundValue1">Vers {value1}</string>
     <string name="profileDetailSendMessage">Envoyer un message</string>
     <string name="profileDetailYearMonthDate">{value2} {value1}</string>
     <string name="profileLogOutAccount">Déconnecter le compte</string>

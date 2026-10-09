@@ -2450,6 +2450,8 @@
     <string name="profileDetailBirthday">誕生日</string>
     <string name="profileDetailBusinessHours">営業時間</string>
     <string name="profileDetailCardLinkCopied">プロフィールカードのリンクをコピーしました</string>
+    <string name="profileDetailCopied">コピーしました</string>
+    <string name="profileDetailCopyFailed">コピーできませんでした</string>
     <string name="profileDetailCopyLink">リンクをコピー</string>
     <string name="profileDetailFeaturedPhotos">おすすめ写真</string>
     <string name="profileDetailGifts">ギフト</string>
@@ -2458,6 +2460,7 @@
     <string name="profileDetailMonthDayDate">{value1}月{value2}日</string>
     <string name="profileDetailMusic">音楽</string>
     <string name="profileDetailPosts">投稿</string>
+    <string name="profileDetailRegistrationAroundValue1">{value1}頃</string>
     <string name="profileDetailSendMessage">メッセージを送信</string>
     <string name="profileDetailYearMonthDate">{value1}年{value2}月</string>
     <string name="profileLogOutAccount">アカウントをログアウト</string>

@@ -2347,6 +2347,8 @@ abstract final class AppStringKeys {
   static const profileDetailBirthday = 'profileDetailBirthday';
   static const profileDetailBusinessHours = 'profileDetailBusinessHours';
   static const profileDetailCardLinkCopied = 'profileDetailCardLinkCopied';
+  static const profileDetailCopied = 'profileDetailCopied';
+  static const profileDetailCopyFailed = 'profileDetailCopyFailed';
   static const profileDetailCopyLink = 'profileDetailCopyLink';
   static const profileDetailFeaturedPhotos = 'profileDetailFeaturedPhotos';
   static const profileDetailGifts = 'profileDetailGifts';
@@ -2355,6 +2357,8 @@ abstract final class AppStringKeys {
   static const profileDetailMonthDayDate = 'profileDetailMonthDayDate';
   static const profileDetailMusic = 'profileDetailMusic';
   static const profileDetailPosts = 'profileDetailPosts';
+  static const profileDetailRegistrationAroundValue1 =
+      'profileDetailRegistrationAroundValue1';
   static const profileDetailSendMessage = 'profileDetailSendMessage';
   static const profileDetailYearMonthDate = 'profileDetailYearMonthDate';
   static const profileToolsAcceptGiftsFromChannels =
