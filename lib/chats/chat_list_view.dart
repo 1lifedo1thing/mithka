@@ -1020,7 +1020,7 @@ class _ChatListViewState extends State<ChatListView>
   bool _isRefreshing = false;
   bool _viewTickerEnabled = true;
   bool _modelDirtyWhileInactive = false;
-  bool _reactivationSyncScheduled = false;
+  bool _reactivationFollowUpPending = false;
   int _lastVisibleRows = 1;
   final ChatListSwipeSession _chatListSwipeSession = ChatListSwipeSession();
   final ScrollController _folderTabScrollController = ScrollController();
@@ -1087,14 +1087,28 @@ class _ChatListViewState extends State<ChatListView>
     _viewTickerEnabled = tickerEnabled;
     if (!reactivated ||
         !_modelDirtyWhileInactive ||
-        _reactivationSyncScheduled) {
+        _reactivationFollowUpPending) {
       return;
     }
-    _reactivationSyncScheduled = true;
+    // TickerMode.valuesOf registers an inherited-widget dependency, so the flip
+    // that brings this list back already rebuilds it in this same frame with
+    // everything the model applied while a conversation covered it. Only the
+    // work that needs a finished frame is still owed: scheduling a second full
+    // rebuild for the next frame put it in the middle of the returning
+    // transition, where the list is rasterizing itself again anyway.
+    _modelDirtyWhileInactive = false;
+    _reactivationFollowUpPending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reactivationSyncScheduled = false;
-      if (!mounted || !_viewTickerEnabled || !_modelDirtyWhileInactive) return;
-      _onModel();
+      _reactivationFollowUpPending = false;
+      if (!mounted) return;
+      if (!_viewTickerEnabled) {
+        // Covered again before the frame ended: keep the follow-up owed so the
+        // next reactivation runs it.
+        _modelDirtyWhileInactive = true;
+        return;
+      }
+      _showModelNotice();
+      _runPendingScrollRequest();
     });
   }
 
@@ -1105,15 +1119,21 @@ class _ChatListViewState extends State<ChatListView>
       return;
     }
     _modelDirtyWhileInactive = false;
-    if (_model.notice != null && mounted) {
-      final text = _model.notice!;
-      _model.clearNotice();
-      showToast(context, text);
-    }
+    _showModelNotice();
     setState(() {});
-    if (_pendingScrollToFirstUnreadRequest != null) {
-      _tryScrollToFirstUnread();
-    }
+    _runPendingScrollRequest();
+  }
+
+  void _showModelNotice() {
+    final notice = _model.notice;
+    if (notice == null || !mounted) return;
+    _model.clearNotice();
+    showToast(context, notice);
+  }
+
+  void _runPendingScrollRequest() {
+    if (_pendingScrollToFirstUnreadRequest == null) return;
+    _tryScrollToFirstUnread();
   }
 
   void _onScroll() {
