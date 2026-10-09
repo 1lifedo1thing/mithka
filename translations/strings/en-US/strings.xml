@@ -2535,6 +2535,10 @@
     <string name="proxyPort">Port</string>
     <string name="proxySecret">Secret</string>
     <string name="proxyServer">Server</string>
+    <string name="proxyStatusConnected">Connected</string>
+    <string name="proxyStatusConnecting">Connecting</string>
+    <string name="proxyStatusOff">Off</string>
+    <string name="proxyStatusUnreachable">No network</string>
     <string name="proxyTitle">Proxy</string>
     <string name="publicDiscoveryBotsSection">Bots</string>
     <string name="publicDiscoveryDiscover">Discover</string>

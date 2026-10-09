@@ -2525,6 +2525,10 @@
     <string name="proxyPort">端口</string>
     <string name="proxySecret">密钥</string>
     <string name="proxyServer">服务器</string>
+    <string name="proxyStatusConnected">已连接</string>
+    <string name="proxyStatusConnecting">连接中</string>
+    <string name="proxyStatusOff">未启用</string>
+    <string name="proxyStatusUnreachable">无网络</string>
     <string name="proxyTitle">代理</string>
     <string name="publicDiscoveryBotsSection">机器人</string>
     <string name="publicDiscoveryDiscover">发现</string>

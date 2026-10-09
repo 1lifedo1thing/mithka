@@ -2525,6 +2525,10 @@
     <string name="proxyPort">포트</string>
     <string name="proxySecret">비밀 키</string>
     <string name="proxyServer">서버</string>
+    <string name="proxyStatusConnected">연결됨</string>
+    <string name="proxyStatusConnecting">연결 중</string>
+    <string name="proxyStatusOff">사용 안 함</string>
+    <string name="proxyStatusUnreachable">네트워크 없음</string>
     <string name="proxyTitle">프록시</string>
     <string name="publicDiscoveryBotsSection">봇</string>
     <string name="publicDiscoveryDiscover">발견하다</string>
