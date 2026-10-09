@@ -120,6 +120,7 @@ import 'message_bubble_repository_view.dart';
 import 'message_quote_selection_dialog.dart';
 import 'message_reaction_availability.dart';
 import 'message_replies_sheet.dart';
+import 'message_swipe_reply.dart';
 import 'message_text_quote.dart';
 import 'message_translation_cache.dart';
 import 'music_player_controller.dart';
@@ -4259,6 +4260,13 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
+  /// Answers a swipe on the transcript. The gesture is a shortcut to typing,
+  /// so the composer takes the caret as well as the reply target.
+  void _beginSwipeReply(ChatMessage message) {
+    _vm.setReply(message);
+    _vm.requestComposerFocus();
+  }
+
   Widget _buildMessageBubble(
     ChatMessage message,
     int messageIndex, {
@@ -4296,7 +4304,7 @@ class _ChatViewState extends State<ChatView> {
               message.id,
               mobileSelectionKey,
             ),
-      onReply: (m) => _vm.setReply(m),
+      onReply: _beginSwipeReply,
       onAvatarTap: _openSenderProfile,
       onAvatarLongPress: (m) {
         if (_vm.isGroup && (m.senderName?.isNotEmpty ?? false)) {
@@ -9880,55 +9888,62 @@ class _ChatViewState extends State<ChatView> {
             _mobileTextSelectionMessageId == captionMessage?.id
         ? _mobileTextSelectionAreaKey
         : null;
-    return ImageMediaAlbumBubble(
-      messages: group,
-      peerTitle: _vm.peerTitle,
-      peerPhoto: _vm.peerPhoto,
-      isGroup: _vm.isGroup,
-      meName: _vm.meName,
-      mePhoto: _vm.mePhoto,
-      hasCustomChatTheme: _hasCustomChatTheme,
-      showCommentAttachment: chatTranscriptAllowsCommentAttachment(
-        isChannel: _vm.isChannel,
+    // An album is one row, so it swipes as one. The reply lands on the member
+    // that already owns the album's interaction, the way a document album's
+    // bubble does.
+    return MessageSwipeReplyRow(
+      swipeEnabled: !_isSelecting && mobileSelectionKey == null,
+      onReply: () => _beginSwipeReply(_mediaAlbumInteractionOwner(group)),
+      child: ImageMediaAlbumBubble(
+        messages: group,
+        peerTitle: _vm.peerTitle,
+        peerPhoto: _vm.peerPhoto,
+        isGroup: _vm.isGroup,
+        meName: _vm.meName,
+        mePhoto: _vm.mePhoto,
+        hasCustomChatTheme: _hasCustomChatTheme,
+        showCommentAttachment: chatTranscriptAllowsCommentAttachment(
+          isChannel: _vm.isChannel,
+        ),
+        channelHasLinkedDiscussion: _vm.hasLinkedDiscussion,
+        selecting: _isSelecting,
+        selectedMessageIds: _selectedMessageIds,
+        outgoingBubbleColor: _effectiveOutgoingColor(),
+        outgoingBubbleTextColor: _effectiveOutgoingTextColor(),
+        incomingBubbleColor: _effectiveIncomingColor(),
+        incomingBubbleTextColor: _effectiveIncomingTextColor(),
+        messageColors: _effectiveMessageColors(),
+        translationDisplayStyle: _translation.displayStyle,
+        showOriginalTranslationMessageIds: _showOriginalTranslationMessageIds,
+        onAvatarTap: _openSenderProfile,
+        onAvatarLongPress: (message) {
+          if (_vm.isGroup && (message.senderName?.isNotEmpty ?? false)) {
+            _vm.insertMention(message);
+          }
+        },
+        onOpenForwarded: _openForwardedMessage,
+        onOpenImage: _openImage,
+        onPlayVideo: _playVideo,
+        onEditCaption: (message) => unawaited(_editMessageText(message)),
+        onOpenComments: _openMessageComments,
+        onLongPress: _showActionMenuForMessage,
+        onDesktopQuoteChanged: _handleDesktopQuoteChanged,
+        mobileTextSelectionAreaKey: mobileSelectionKey,
+        onMobileTextSelectionChanged: _handleMobileTextSelectionChanged,
+        onMobileTextSelectionDisposed:
+            captionMessage == null || mobileSelectionKey == null
+            ? null
+            : () => _handleMobileTextSelectionDisposed(
+                captionMessage!.id,
+                mobileSelectionKey,
+              ),
+        onToggleSelection: (message) => _toggleSelection([message]),
+        onBotCommandTap: _sendCommand,
+        onHashtagTap: _openHashtagSearch,
+        onMentionTap: _openUserProfile,
+        targetMessageId: targetMessageId,
+        targetKey: targetKey,
       ),
-      channelHasLinkedDiscussion: _vm.hasLinkedDiscussion,
-      selecting: _isSelecting,
-      selectedMessageIds: _selectedMessageIds,
-      outgoingBubbleColor: _effectiveOutgoingColor(),
-      outgoingBubbleTextColor: _effectiveOutgoingTextColor(),
-      incomingBubbleColor: _effectiveIncomingColor(),
-      incomingBubbleTextColor: _effectiveIncomingTextColor(),
-      messageColors: _effectiveMessageColors(),
-      translationDisplayStyle: _translation.displayStyle,
-      showOriginalTranslationMessageIds: _showOriginalTranslationMessageIds,
-      onAvatarTap: _openSenderProfile,
-      onAvatarLongPress: (message) {
-        if (_vm.isGroup && (message.senderName?.isNotEmpty ?? false)) {
-          _vm.insertMention(message);
-        }
-      },
-      onOpenForwarded: _openForwardedMessage,
-      onOpenImage: _openImage,
-      onPlayVideo: _playVideo,
-      onEditCaption: (message) => unawaited(_editMessageText(message)),
-      onOpenComments: _openMessageComments,
-      onLongPress: _showActionMenuForMessage,
-      onDesktopQuoteChanged: _handleDesktopQuoteChanged,
-      mobileTextSelectionAreaKey: mobileSelectionKey,
-      onMobileTextSelectionChanged: _handleMobileTextSelectionChanged,
-      onMobileTextSelectionDisposed:
-          captionMessage == null || mobileSelectionKey == null
-          ? null
-          : () => _handleMobileTextSelectionDisposed(
-              captionMessage!.id,
-              mobileSelectionKey,
-            ),
-      onToggleSelection: (message) => _toggleSelection([message]),
-      onBotCommandTap: _sendCommand,
-      onHashtagTap: _openHashtagSearch,
-      onMentionTap: _openUserProfile,
-      targetMessageId: targetMessageId,
-      targetKey: targetKey,
     );
   }
 
