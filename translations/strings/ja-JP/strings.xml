@@ -2525,6 +2525,10 @@
     <string name="proxyPort">ポート</string>
     <string name="proxySecret">シークレット</string>
     <string name="proxyServer">サーバー</string>
+    <string name="proxyStatusConnected">接続済み</string>
+    <string name="proxyStatusConnecting">接続中</string>
+    <string name="proxyStatusOff">オフ</string>
+    <string name="proxyStatusUnreachable">ネットワークなし</string>
     <string name="proxyTitle">プロキシ</string>
     <string name="publicDiscoveryBotsSection">ボット</string>
     <string name="publicDiscoveryDiscover">発見する</string>
