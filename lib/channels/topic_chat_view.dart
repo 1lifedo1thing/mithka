@@ -3237,7 +3237,7 @@ class _TopicDraftDialogState extends State<_TopicDraftDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.title,
+                      widget.title.l10n(context),
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
