@@ -32,7 +32,6 @@ import '../components/ui_components.dart';
 import '../l10n/app_localizations.dart';
 import '../notifications/notification_settings_payload.dart';
 import '../profile/profile_icon_picker_view.dart';
-import '../settings/topic_group_display_mode.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -85,10 +84,10 @@ void _replaceTrackedChatWithTopic(
     () => replaceWithAppChatRoute<void, void>(
       context,
       AppChatPageRoute<void>(
-        builder: (_) => TopicChatView(
-          chat: chat,
-          initialThreadId: threadId,
-          routeSession: routeSession,
+        builder: (_) => ChatView(
+          chatId: chat.id,
+          title: chat.title,
+          forumTopicId: threadId,
         ),
       ),
     ),
@@ -1540,8 +1539,6 @@ class _TopicChatViewState extends State<TopicChatView> {
   }
 
   Future<void> _openChatView() async {
-    await TopicGroupDisplayPreference.set(TopicGroupDisplayMode.chat);
-    if (!mounted) return;
     final onOpenChatView = widget.onOpenChatView;
     if (onOpenChatView != null) {
       onOpenChatView();
@@ -1571,7 +1568,7 @@ class _TopicChatViewState extends State<TopicChatView> {
         chatId: chat.id,
         title: chat.title,
         seedMessage: chat.lastChatMessage,
-        onOpenTopicMode: routeSession == null
+        onOpenTopicTranscript: routeSession == null
             ? null
             : (threadId) => _replaceTrackedChatWithTopic(
                 chatContext,
