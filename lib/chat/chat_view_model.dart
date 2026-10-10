@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:mithka/notifications/scope_notification_settings.dart';
 
+import '../channels/topic_list_actions.dart';
 import '../notifications/notification_settings_payload.dart';
 import '../settings/blocked_user_service.dart';
 import '../settings/hidden_sender_store.dart';
@@ -350,6 +351,14 @@ class ForumTopicOption {
     this.iconColor = 0,
     this.unreadCount = 0,
     this.isMuted = false,
+    this.isPinned = false,
+    this.isGeneral = false,
+    this.isClosed = false,
+    this.creatorId = 0,
+    this.lastPreview = '',
+    this.lastSender,
+    this.lastMessageDate = 0,
+    this.lastMessageId = 0,
   });
 
   final int id;
@@ -361,6 +370,67 @@ class ForumTopicOption {
   /// index; 0 when unknown.
   final int unreadCount;
   final bool isMuted;
+
+  /// Order and row badges a chat-list-style topic row draws: pinned marker,
+  /// the General avatar rule and the closed lock. The page from getForumTopics
+  /// carries them; live updates patch them in place.
+  final bool isPinned;
+
+  /// The General topic (id 1): shows the chat avatar and cannot be deleted.
+  final bool isGeneral;
+  final bool isClosed;
+
+  /// Topic creator's user id, 0 when unknown. The creator may delete their
+  /// own topic even without can_manage_topics (TDLib enforces the rest).
+  final int creatorId;
+
+  /// Last-message preview text with media/service placeholders already
+  /// composed the way the chat list composes them; empty hides the line.
+  final String lastPreview;
+
+  /// Sender prefix for [lastPreview] ("Alice", "You:"); null for none.
+  final String? lastSender;
+
+  /// Unix seconds of the last message; 0 hides the timestamp.
+  final int lastMessageDate;
+
+  /// The newest message id this row has seen — mark-read views it.
+  final int lastMessageId;
+
+  /// Display-field equality: a republished list that changed nothing must not
+  /// re-notify a listening topic list.
+  bool sameDisplay(ForumTopicOption other) =>
+      id == other.id &&
+      name == other.name &&
+      iconCustomEmojiId == other.iconCustomEmojiId &&
+      iconColor == other.iconColor &&
+      unreadCount == other.unreadCount &&
+      isMuted == other.isMuted &&
+      isPinned == other.isPinned &&
+      isGeneral == other.isGeneral &&
+      isClosed == other.isClosed &&
+      creatorId == other.creatorId &&
+      lastPreview == other.lastPreview &&
+      lastSender == other.lastSender &&
+      lastMessageDate == other.lastMessageDate &&
+      lastMessageId == other.lastMessageId;
+
+  ForumTopicOption _withIndex(ForumTopicIndexEntry entry) => ForumTopicOption(
+    id: entry.id,
+    name: entry.name,
+    iconCustomEmojiId: entry.iconCustomEmojiId,
+    iconColor: entry.iconColor,
+    unreadCount: entry.unreadCount,
+    isMuted: entry.isMuted,
+    isPinned: isPinned,
+    isGeneral: isGeneral,
+    isClosed: isClosed,
+    creatorId: creatorId,
+    lastPreview: lastPreview,
+    lastSender: lastSender,
+    lastMessageDate: lastMessageDate,
+    lastMessageId: lastMessageId,
+  );
 }
 
 class _DraftMention {
@@ -418,29 +488,25 @@ class ChatViewModel extends ChangeNotifier {
   bool get isForumTopicTranscript => (forumTopicId ?? 0) != 0;
 
   void _onForumTopicIndexChanged() {
-    // Only the rail is live-indexed here: a transcript's own unread state
-    // arrives through its chat-scoped updates, and topics of other chats
-    // never move this view model.
+    // Only the topic list is live-indexed here: a transcript's own unread
+    // state arrives through its chat-scoped updates, and topics of other
+    // chats never move this view model.
     final indexed = ForumTopicIndex.shared.topicsFor(_accountSlot, chatId);
     if (indexed.isEmpty) return;
-    if (indexed.length == forumTopics.length) {
-      var same = true;
-      for (var i = 0; i < indexed.length; i++) {
-        final entry = indexed[i];
-        final option = forumTopics[i];
-        if (entry.id != option.id ||
-            entry.unreadCount != option.unreadCount ||
-            entry.isMuted != option.isMuted ||
-            entry.name != option.name ||
-            entry.iconCustomEmojiId != option.iconCustomEmojiId ||
-            entry.iconColor != option.iconColor) {
-          same = false;
-          break;
-        }
-      }
-      if (same) return;
+    final previous = forumTopics;
+    // The index owns identity + counters; row-only fields (preview, pin,
+    // closed, creator) stay with the option that already carries them.
+    final byId = {for (final option in previous) option.id: option};
+    var same = indexed.length == previous.length;
+    final next = <ForumTopicOption>[];
+    for (final entry in indexed) {
+      final option =
+          byId[entry.id]?._withIndex(entry) ?? _optionFromIndex(entry);
+      if (same && !option.sameDisplay(previous[next.length])) same = false;
+      next.add(option);
     }
-    forumTopics = [for (final entry in indexed) _optionFromIndex(entry)];
+    if (same) return;
+    forumTopics = next;
     notifyListeners();
   }
 
@@ -638,6 +704,24 @@ class ChatViewModel extends ChangeNotifier {
   String peerRestrictionText = '';
   bool hasProtectedContent = false;
   bool _chatCanSend = true; // chat-wide default can_send_basic_messages
+
+  /// Topic moderation rights for forum chats. Creating needs the
+  /// can_manage_topics administrator right or the can_create_topics member
+  /// right; pinning/editing/closing need can_manage_topics; deleting needs
+  /// can_delete_messages unless the user created the topic.
+  bool _chatCanCreateTopics = false;
+  bool canManageTopics = false;
+  bool canDeleteForumTopics = false;
+  bool get canCreateForumTopics => _chatCanCreateTopics || canManageTopics;
+
+  /// Whether this account may delete [topic]: topic creators may delete
+  /// their own topic, and admins need can_delete_messages or
+  /// can_manage_topics.
+  bool canDeleteTopic(ForumTopicOption topic) =>
+      !topic.isGeneral &&
+      (canManageTopics ||
+          canDeleteForumTopics ||
+          (meId != null && topic.creatorId == meId));
   bool peerIsBot = false;
   bool isBotApiAccount = false;
   bool botApiCanReadAllGroupMessages = false;
@@ -657,6 +741,13 @@ class ChatViewModel extends ChangeNotifier {
   bool get supportsTopics => isForum || supportsBotTopics;
   bool forumTopicsLoading = false;
   List<ForumTopicOption> forumTopics = const [];
+
+  /// Resolved display names for topic-preview senders, kept across reloads so
+  /// the row's "Alice: …" prefix survives a getForumTopics refresh.
+  final Map<int, String> _topicSenderNames = {};
+
+  /// Topic id → its last message's sender id, for late sender resolution.
+  final Map<int, int> _topicRowSenderIds = {};
   int messageAutoDeleteTime = 0;
   int paidMessageStarCount = 0;
 
@@ -3766,6 +3857,8 @@ class ChatViewModel extends ChangeNotifier {
     // (refined per type below).
     _chatCanSend =
         chat.obj('permissions')?.boolean('can_send_basic_messages') ?? true;
+    _chatCanCreateTopics =
+        chat.obj('permissions')?.boolean('can_create_topics') ?? false;
     canSendMessages = _chatCanSend;
     canSendVoiceNotes =
         chat.obj('permissions')?.boolean('can_send_voice_notes') ?? true;
@@ -3778,6 +3871,8 @@ class ChatViewModel extends ChangeNotifier {
     isDirectMessagesGroup = false;
     isAdministeredDirectMessagesGroup = false;
     canDeleteMessagesBySender = false;
+    canManageTopics = false;
+    canDeleteForumTopics = false;
     sendDisabledReason = '';
     isPeerRestricted = false;
     isPeerPornographicRestricted = false;
@@ -4166,8 +4261,10 @@ class ChatViewModel extends ChangeNotifier {
         'offset_forum_topic_id': 0,
         'limit': 80,
       });
+      if (_isDisposed) return;
       final raw = response.objects('topics') ?? const <Map<String, dynamic>>[];
       final topics = <ForumTopicOption>[];
+      final previewMessages = <ChatMessage>[];
       for (final topic in raw) {
         final info = topic.obj('info') ?? topic;
         final id = _forumTopicId(topic, info);
@@ -4190,6 +4287,12 @@ class ChatViewModel extends ChangeNotifier {
         final unread = live != null && live.readsAheadOfPage(pageRead, pageLast)
             ? live.unreadCount
             : (pageUnread < 0 ? 0 : pageUnread);
+        // A real last message (a service one included) drives the row preview;
+        // a synthetic fallback's text is the topic's own name, so the preview
+        // stays hidden exactly the way the chat list hides empty ones.
+        final rawLast = topic.obj('last_message');
+        final parsed = rawLast == null ? null : TDParse.message(rawLast);
+        if (parsed != null) previewMessages.add(parsed);
         topics.add(
           ForumTopicOption(
             id: id,
@@ -4208,18 +4311,40 @@ class ChatViewModel extends ChangeNotifier {
             isMuted:
                 (topic.obj('notification_settings')?.integer('mute_for') ?? 0) >
                 0,
+            isPinned: topic.boolean('is_pinned') ?? false,
+            isGeneral:
+                info.boolean('is_general') == true ||
+                topic.boolean('is_general') == true,
+            isClosed:
+                info.boolean('is_closed') == true ||
+                topic.boolean('is_closed') == true,
+            creatorId: _forumTopicCreatorId(info),
+            lastPreview: parsed != null ? parsed.text.trim() : '',
+            lastSender: parsed != null ? _topicPreviewSender(id, parsed) : null,
+            lastMessageDate: parsed?.date ?? 0,
+            lastMessageId: parsed?.id ?? 0,
           ),
         );
       }
+      final previous = forumTopics;
       forumTopics = topics;
       ForumTopicIndex.shared.storeAll(_accountSlot, chatId, [
         for (final topic in raw) ?ForumTopicIndexEntry.fromTopic(topic),
       ]);
-      // storeAll merged the live counters; show exactly what it kept.
+      // storeAll merged the live counters; show exactly what it kept, without
+      // discarding the page's row fields (preview, pin, closed, creator).
       final stored = ForumTopicIndex.shared.topicsFor(_accountSlot, chatId);
       if (stored.isNotEmpty) {
-        forumTopics = [for (final entry in stored) _optionFromIndex(entry)];
+        final byId = {for (final option in topics) option.id: option};
+        final oldById = {for (final option in previous) option.id: option};
+        forumTopics = [
+          for (final entry in stored)
+            byId[entry.id]?._withIndex(entry) ??
+                oldById[entry.id]?._withIndex(entry) ??
+                _optionFromIndex(entry),
+        ];
       }
+      unawaited(_resolveTopicPreviewSenders(previewMessages));
     } catch (_) {
       forumTopics = const [];
     } finally {
@@ -4243,6 +4368,310 @@ class ChatViewModel extends ChangeNotifier {
         topic.integer('forum_topic_id') ??
         info.int64('message_thread_id') ??
         topic.int64('message_thread_id');
+  }
+
+  int _forumTopicCreatorId(Map<String, dynamic> info) {
+    final creator = info.obj('creator_id');
+    if (creator?.type == 'messageSenderUser') {
+      return creator?.int64('user_id') ?? 0;
+    }
+    return 0;
+  }
+
+  /// Resolves preview sender names so the topic rows can draw the
+  /// "Alice: …" prefix; unresolved senders simply keep the name TDLib
+  /// carried, or omit the prefix entirely.
+  Future<void> _resolveTopicPreviewSenders(List<ChatMessage> messages) async {
+    final missing = messages
+        .where((message) => !message.isOutgoing)
+        .map((message) => message.senderId)
+        .whereType<int>()
+        .where((id) => id != 0 && !_topicSenderNames.containsKey(id))
+        .toSet();
+    if (missing.isEmpty) return;
+    for (final id in missing) {
+      try {
+        if (id > 0) {
+          final user = await _client.query({'@type': 'getUser', 'user_id': id});
+          _topicSenderNames[id] = TDParse.userName(user);
+        } else {
+          final chat = await _client.query({'@type': 'getChat', 'chat_id': id});
+          _topicSenderNames[id] =
+              chat.str('title') ?? AppStrings.t(AppStringKeys.topicChatUsers);
+        }
+      } catch (_) {
+        // An unresolved sender simply omits the preview prefix.
+      }
+    }
+    if (_isDisposed) return;
+    _refreshTopicRowSenders();
+  }
+
+  /// Re-derives resolved sender names onto the topic rows.
+  void _refreshTopicRowSenders() {
+    var changed = false;
+    final next = <ForumTopicOption>[];
+    for (final option in forumTopics) {
+      final senderId = _topicRowSenderIds[option.id];
+      String? sender = option.lastSender;
+      if (option.lastPreview.isNotEmpty &&
+          senderId != null &&
+          _topicSenderNames.containsKey(senderId)) {
+        final resolved = _topicSenderNames[senderId]?.trim();
+        if (resolved != null && resolved.isNotEmpty) sender = resolved;
+      }
+      final withSender = _topicOptionWithSender(option, sender);
+      if (!withSender.sameDisplay(option)) changed = true;
+      next.add(withSender);
+    }
+    if (!changed) return;
+    forumTopics = next;
+    notifyListeners();
+  }
+
+  ForumTopicOption _topicOptionWithSender(
+    ForumTopicOption option,
+    String? sender,
+  ) => ForumTopicOption(
+    id: option.id,
+    name: option.name,
+    iconCustomEmojiId: option.iconCustomEmojiId,
+    iconColor: option.iconColor,
+    unreadCount: option.unreadCount,
+    isMuted: option.isMuted,
+    isPinned: option.isPinned,
+    isGeneral: option.isGeneral,
+    isClosed: option.isClosed,
+    creatorId: option.creatorId,
+    lastPreview: option.lastPreview,
+    lastSender: sender,
+    lastMessageDate: option.lastMessageDate,
+    lastMessageId: option.lastMessageId,
+  );
+
+  /// The preview sender for a topic's last message: "You" for outgoing, the
+  /// resolved sender name, or the name TDLib carried with the message.
+  String? _topicPreviewSender(int topicId, ChatMessage message) {
+    if (message.isOutgoing) {
+      return AppStrings.t(AppStringKeys.chatMeLabel);
+    }
+    final senderId = message.senderId;
+    if (senderId != null && senderId != 0) {
+      _topicRowSenderIds[topicId] = senderId;
+      final cached = _topicSenderNames[senderId]?.trim();
+      if (cached != null && cached.isNotEmpty) return cached;
+    }
+    final name = message.senderName?.trim();
+    return name != null && name.isNotEmpty ? name : null;
+  }
+
+  // MARK: - Topic moderation (Telegram iOS parity)
+
+  /// Creates a topic; returns its id, or throws the request error.
+  Future<int?> createForumTopic({
+    required String name,
+    required int iconColor,
+    required int iconCustomEmojiId,
+  }) async {
+    final created = await _client.query(
+      createForumTopicRequest(
+        chatId: chatId,
+        name: name,
+        color: iconColor,
+        customEmojiId: iconCustomEmojiId,
+      ),
+    );
+    await loadForumTopics();
+    return created.integer('forum_topic_id');
+  }
+
+  Future<void> editForumTopic({
+    required int forumTopicId,
+    required String name,
+    required int iconCustomEmojiId,
+  }) async {
+    await _client.query(
+      editForumTopicRequest(
+        chatId: chatId,
+        forumTopicId: forumTopicId,
+        name: name,
+        customEmojiId: iconCustomEmojiId,
+      ),
+    );
+    await loadForumTopics();
+  }
+
+  Future<void> deleteForumTopic(int forumTopicId) async {
+    await _client.query(
+      deleteForumTopicRequest(chatId: chatId, forumTopicId: forumTopicId),
+    );
+    await loadForumTopics();
+  }
+
+  Future<void> setForumTopicPinned(
+    int forumTopicId, {
+    required bool pinned,
+  }) async {
+    await _client.query(
+      toggleForumTopicPinnedRequest(
+        chatId: chatId,
+        forumTopicId: forumTopicId,
+        isPinned: pinned,
+      ),
+    );
+    await loadForumTopics();
+  }
+
+  Future<void> setForumTopicMuted(
+    int forumTopicId, {
+    required bool muted,
+  }) async {
+    await _client.query(
+      setForumTopicMutedRequest(
+        chatId: chatId,
+        forumTopicId: forumTopicId,
+        muted: muted,
+      ),
+    );
+    await loadForumTopics();
+  }
+
+  Future<void> setForumTopicClosed(
+    int forumTopicId, {
+    required bool closed,
+  }) async {
+    await _client.query(
+      toggleForumTopicClosedRequest(
+        chatId: chatId,
+        forumTopicId: forumTopicId,
+        isClosed: closed,
+      ),
+    );
+    await loadForumTopics();
+  }
+
+  /// Marks the topic read the way viewing its newest message does: TDLib
+  /// advances the topic's inbox watermark to the highest viewed message id.
+  Future<void> markForumTopicRead(ForumTopicOption topic) async {
+    if (topic.lastMessageId == 0 || topic.unreadCount == 0) return;
+    try {
+      await _client.query(
+        forumTopicViewMessagesRequest(
+          chatId: chatId,
+          messageIds: [topic.lastMessageId],
+        ),
+      );
+      await loadForumTopics();
+    } catch (_) {
+      // A failed mark-read is silent: nothing destructive happened.
+    }
+  }
+
+  /// Folds live updates into the topic rows so previews, pins, closes and
+  /// renames move without a full getForumTopics round-trip. Runs for every
+  /// update of this chat — including topics other than the open transcript.
+  void _foldForumTopicRowUpdate(Map<String, dynamic> update) {
+    if (!supportsTopics || forumTopics.isEmpty) return;
+    switch (update.type) {
+      case 'updateNewMessage':
+        final raw = update.obj('message');
+        if (raw?.int64('chat_id') != chatId) return;
+        final message = TDParse.message(raw!);
+        if (message == null) return;
+        final topicRef = raw.obj('topic_id');
+        final topicId = topicRef?.type == 'messageTopicForum'
+            ? topicRef?.integer('forum_topic_id')
+            : 1;
+        if (topicId == null) return;
+        final index = forumTopics.indexWhere((topic) => topic.id == topicId);
+        if (index < 0) return;
+        final topic = forumTopics[index];
+        if (topic.lastMessageId != 0 &&
+            (message.date < topic.lastMessageDate ||
+                message.id < topic.lastMessageId)) {
+          return;
+        }
+        forumTopics[index] = ForumTopicOption(
+          id: topic.id,
+          name: topic.name,
+          iconCustomEmojiId: topic.iconCustomEmojiId,
+          iconColor: topic.iconColor,
+          unreadCount: topic.unreadCount,
+          isMuted: topic.isMuted,
+          isPinned: topic.isPinned,
+          isGeneral: topic.isGeneral,
+          isClosed: topic.isClosed,
+          creatorId: topic.creatorId,
+          lastPreview: message.text.trim(),
+          lastSender: _topicPreviewSender(topic.id, message),
+          lastMessageDate: message.date,
+          lastMessageId: message.id,
+        );
+        notifyListeners();
+        unawaited(_resolveTopicPreviewSenders([message]));
+
+      case 'updateForumTopic':
+        if (update.int64('chat_id') != chatId) return;
+        final topicId = update.integer('forum_topic_id');
+        if (topicId == null) return;
+        final index = forumTopics.indexWhere((topic) => topic.id == topicId);
+        if (index < 0) return;
+        final settings = update.obj('notification_settings');
+        forumTopics[index] = ForumTopicOption(
+          id: forumTopics[index].id,
+          name: forumTopics[index].name,
+          iconCustomEmojiId: forumTopics[index].iconCustomEmojiId,
+          iconColor: forumTopics[index].iconColor,
+          unreadCount: forumTopics[index].unreadCount,
+          isMuted: settings == null
+              ? forumTopics[index].isMuted
+              : (settings.integer('mute_for') ?? 0) > 0,
+          isPinned: update.boolean('is_pinned') ?? forumTopics[index].isPinned,
+          isGeneral: forumTopics[index].isGeneral,
+          isClosed: forumTopics[index].isClosed,
+          creatorId: forumTopics[index].creatorId,
+          lastPreview: forumTopics[index].lastPreview,
+          lastSender: forumTopics[index].lastSender,
+          lastMessageDate: forumTopics[index].lastMessageDate,
+          lastMessageId: forumTopics[index].lastMessageId,
+        );
+        notifyListeners();
+
+      case 'updateForumTopicInfo':
+        final info = update.obj('info');
+        if (info?.int64('chat_id') != chatId) return;
+        final topicId = info?.integer('forum_topic_id');
+        final name = info?.str('name');
+        if (topicId == null || name == null || name.isEmpty) return;
+        final index = forumTopics.indexWhere((topic) => topic.id == topicId);
+        if (index < 0) return;
+        final topic = forumTopics[index];
+        final icon = info?.obj('icon');
+        forumTopics[index] = ForumTopicOption(
+          id: topic.id,
+          name: name,
+          iconCustomEmojiId:
+              icon?.int64('custom_emoji_id') ?? topic.iconCustomEmojiId,
+          iconColor: icon?.integer('color') ?? topic.iconColor,
+          unreadCount: topic.unreadCount,
+          isMuted: topic.isMuted,
+          isPinned: topic.isPinned,
+          isGeneral: topic.isGeneral,
+          isClosed: info?.boolean('is_closed') ?? topic.isClosed,
+          creatorId: topic.creatorId,
+          lastPreview: topic.lastPreview,
+          lastSender: topic.lastSender,
+          lastMessageDate: topic.lastMessageDate,
+          lastMessageId: topic.lastMessageId,
+        );
+        notifyListeners();
+
+      case 'updateDeleteMessages':
+        if (update.int64('chat_id') != chatId) return;
+        // A deleted last message leaves a stale preview; a refresh is cheap
+        // enough here because deletions in forum lists are rare.
+        unawaited(loadForumTopics());
+    }
   }
 
   int _autoDeleteSeconds(Map<String, dynamic> chat) {
@@ -4347,16 +4776,22 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   /// Maps the current user's member status (+ channel-ness / chat defaults) onto
-  /// the send / membership / join flags the chat UI reads.
+  /// the send / membership / join flags the chat UI reads, plus the topic
+  /// moderation rights the forum topic list gates its actions on.
   void _applyGroupStatus(Map<String, dynamic>? status) {
     switch (status?.type) {
       case 'chatMemberStatusCreator':
         canDeleteMessagesBySender = true;
+        canManageTopics = true;
+        canDeleteForumTopics = true;
         isMember = true;
         canSendMessages = true;
       case 'chatMemberStatusAdministrator':
         canDeleteMessagesBySender =
             status?.obj('rights')?.boolean('can_delete_messages') ?? false;
+        canManageTopics =
+            status?.obj('rights')?.boolean('can_manage_topics') ?? false;
+        canDeleteForumTopics = canDeleteMessagesBySender;
         isMember = true;
         canSendMessages = true;
       case 'chatMemberStatusMember':
@@ -5270,6 +5705,7 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   void _handle(Map<String, dynamic> update) {
+    _foldForumTopicRowUpdate(update);
     switch (update.type) {
       case 'updateNewMessage':
         final raw = update.obj('message');

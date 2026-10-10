@@ -24,9 +24,10 @@ import 'package:mithka/theme/theme_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Forum chats always open as ordinary chat transcripts now; the old topic
-// feed surface and its overlay are gone. These tests pin what the split
-// shells do instead: the topic rail lives inside the conversation pane.
+// Forum chats always open as ordinary chat transcripts; the old topic
+// feed surface is gone. Wide split shells take that transcript's topic list
+// and paint it over the chat list column the way Telegram iOS does; phones
+// pick topics from the header sheet instead.
 
 void main() {
   late StreamController<Map<String, dynamic>> updates;
@@ -54,13 +55,14 @@ void main() {
     requests.clear();
     clearChatMemoryCaches();
     ForumTopicIndex.shared.clear();
+    topicCount = 12;
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
     await updates.close();
   });
 
-  testWidgets('tablet forum chat keeps its topic rail inside the pane', (
+  testWidgets('tablet forum chat overlays its topic list on the chat list', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -72,15 +74,29 @@ void main() {
       );
       await _settle(tester);
 
-      // No topic feed surface: the chat transcript carries the rail, inside
-      // the conversation pane beside the chat list — never over it.
+      // No topic feed surface: the chat transcript owns the topic data and the
+      // shell paints it over the chat list column, exactly filling it.
       expect(find.byType(TopicChatView), findsNothing);
       expect(find.byType(ChatView), findsOneWidget);
       final sidebar = tester.getRect(find.byType(ChatListView));
-      final rail = tester.getRect(
+      final list = tester.getRect(
         find.byKey(const ValueKey('topic-navigation-left')),
       );
-      expect(rail.left, greaterThanOrEqualTo(sidebar.right));
+      expect(list.left, sidebar.left);
+      expect(list.right, sidebar.right);
+      expect(list.top, sidebar.top);
+      // The overlay's chevron steps aside to reveal the chat list beneath.
+      expect(find.byKey(const ValueKey('topic-list-back')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('topic-list-back')));
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
+      // The chat header brings the overlay back — no picker sheet needed.
+      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
+      await _settle(tester);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
       // Unread counters stay round dots, never row-height strips.
       final badge = tester.getSize(
         find.byKey(const ValueKey('topic-navigation-unread-78')),
@@ -93,7 +109,7 @@ void main() {
     }
   });
 
-  testWidgets('rail rows switch topic transcripts without pushing a route', (
+  testWidgets('overlay rows switch topic transcripts without a route', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -127,6 +143,52 @@ void main() {
         findsOneWidget,
       );
       expect(navigator.canPop(), isFalse);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('switching topics keeps the overlay scroll position', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      topicCount = 40;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      ScrollableState overlayList() => tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('topic-navigation-left')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+
+      // Scroll the overlay well past its top and pick a row from there.
+      await tester.drag(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        const Offset(0, -600),
+      );
+      await _settle(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('topic-navigation-item-95')),
+      );
+      await _settle(tester);
+      final before = overlayList().position.pixels;
+      expect(before, greaterThan(300));
+
+      await tester.tap(find.byKey(const ValueKey('topic-navigation-item-95')));
+      await _settle(tester);
+      expect(tester.widget<ChatView>(find.byType(ChatView)).forumTopicId, 95);
+      // The shell owns the pane, so swapping the transcript underneath
+      // keeps the overlay's scroll exactly where the user left it.
+      expect(overlayList().position.pixels, before);
       expect(tester.takeException(), isNull);
       await _disposeShell(tester);
     } finally {
@@ -202,6 +264,8 @@ void main() {
   });
 }
 
+var topicCount = 12;
+
 ChatSummary _chat() => ChatSummary(
   id: -42,
   title: 'Forum',
@@ -255,7 +319,7 @@ Map<String, dynamic> _response(Map<String, dynamic> request) =>
       'getForumTopics' => {
         '@type': 'forumTopics',
         'topics': [
-          for (var index = 0; index < 12; index++)
+          for (var index = 0; index < topicCount; index++)
             {
               '@type': 'forumTopic',
               'info': {
