@@ -1,3 +1,22 @@
+//
+//  sticker_set_studio_view.dart
+//
+//  Sticker Studio — the owned sticker / mask / custom-emoji set editor,
+//  following Telegram-iOS interaction conventions:
+//
+//  * StickerSetStudioView: owned sets list (thumbnail, title, type · count).
+//  * StickerSetCreateView: type → stickers → metadata, with per-sticker
+//    inline editing of a draft, live short-name availability, and a Done
+//    (publish) action.
+//  * StickerSetManageView: manage screen with an edit mode (delete badges),
+//    long-press drag reordering of the sticker grid, the per-sticker action
+//    sheet (with move-earlier/later kept as the non-drag reorder fallback),
+//    mask badges and custom-emoji association shown on each cell.
+//  * StickerDraftEditorView: one sticker source (file, format, emoji,
+//    keywords, mask placement).
+//  * StickerMaskPlacementView: mask point, shifts, and scale.
+//
+
 import 'dart:async';
 import 'dart:io';
 
@@ -17,8 +36,11 @@ import '../theme/app_theme.dart';
 import 'custom_emoji.dart';
 import 'sticker_item.dart';
 import 'sticker_preview.dart';
+import 'sticker_reorder_grid.dart';
 import 'sticker_set_management_service.dart';
+import 'sticker_studio_controls.dart';
 
+/// The studio root: owned sets list plus the create entry.
 class StickerSetStudioView extends StatefulWidget {
   const StickerSetStudioView({super.key});
 
@@ -300,15 +322,25 @@ class _StudioRefreshRow extends StatelessWidget {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Create flow
+// ---------------------------------------------------------------------------
+
+enum _NameCheckState { idle, checking, available, unavailable }
+
 class StickerSetCreateView extends StatefulWidget {
-  const StickerSetCreateView({super.key});
+  const StickerSetCreateView({super.key, this.service});
+
+  /// Overrides the TDLib-backed service (used by tests to inject a fake).
+  final StickerSetManagementService? service;
 
   @override
   State<StickerSetCreateView> createState() => _StickerSetCreateViewState();
 }
 
 class _StickerSetCreateViewState extends State<StickerSetCreateView> {
-  final _service = StickerSetManagementService();
+  late final StickerSetManagementService _service =
+      widget.service ?? StickerSetManagementService();
   final _title = TextEditingController();
   final _name = TextEditingController();
   OwnedStickerSetType _type = OwnedStickerSetType.regular;
@@ -316,20 +348,33 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
   bool _working = false;
   final List<NewStickerDraft> _stickers = [];
 
+  _NameCheckState _nameState = _NameCheckState.idle;
+  int _nameCheckGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(_scheduleNameCheck);
+  }
+
   @override
   void dispose() {
+    _name.removeListener(_scheduleNameCheck);
     _title.dispose();
     _name.dispose();
     super.dispose();
   }
 
+  bool get _customEmoji => _type == OwnedStickerSetType.customEmoji;
+
+  int get _maximum => _customEmoji ? 200 : 120;
+
   Future<void> _add() async {
-    final maximum = _type == OwnedStickerSetType.customEmoji ? 200 : 120;
-    if (_stickers.length >= maximum) {
+    if (_stickers.length >= _maximum) {
       showToast(
         context,
         context.l10n.t(AppStringKeys.stickerStudioSetLimit, {
-          'value1': maximum,
+          'value1': _maximum,
         }),
       );
       return;
@@ -338,6 +383,47 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
       MaterialPageRoute(builder: (_) => StickerDraftEditorView(setType: _type)),
     );
     if (draft != null && mounted) setState(() => _stickers.add(draft));
+  }
+
+  Future<void> _editDraft(int index) async {
+    final draft = await Navigator.of(context).push<NewStickerDraft>(
+      MaterialPageRoute(
+        builder: (_) =>
+            StickerDraftEditorView(setType: _type, initial: _stickers[index]),
+      ),
+    );
+    if (draft != null && mounted) setState(() => _stickers[index] = draft);
+  }
+
+  void _scheduleNameCheck() {
+    if (_working) return;
+    final name = _name.text.trim();
+    _nameCheckGeneration += 1;
+    if (name.isEmpty) {
+      setState(() => _nameState = _NameCheckState.idle);
+      return;
+    }
+    setState(() => _nameState = _NameCheckState.checking);
+    final generation = _nameCheckGeneration;
+    Future<void>.delayed(const Duration(milliseconds: 420), () {
+      if (!mounted || generation != _nameCheckGeneration) return;
+      unawaited(_checkName(name, generation));
+    });
+  }
+
+  Future<void> _checkName(String name, int generation) async {
+    try {
+      final check = await _service.checkName(name);
+      if (!mounted || generation != _nameCheckGeneration) return;
+      setState(() {
+        _nameState = check.type == 'checkStickerSetNameResultOk'
+            ? _NameCheckState.available
+            : _NameCheckState.unavailable;
+      });
+    } catch (_) {
+      if (!mounted || generation != _nameCheckGeneration) return;
+      setState(() => _nameState = _NameCheckState.idle);
+    }
   }
 
   Future<void> _suggestName() async {
@@ -370,6 +456,13 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
       showToast(
         context,
         AppStringKeys.stickerStudioValidationAddSticker.l10n(context),
+      );
+      return;
+    }
+    if (_nameState == _NameCheckState.unavailable) {
+      showToast(
+        context,
+        AppStringKeys.stickerStudioNameUnavailable.l10n(context),
       );
       return;
     }
@@ -424,10 +517,13 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                 padding: const EdgeInsets.all(8),
                 child: _working
                     ? const AppActivityIndicator(size: 19)
-                    : AppIcon(
-                        HeroAppIcons.check,
-                        size: 22,
-                        color: AppTheme.brand,
+                    : Text(
+                        AppStringKeys.stickerStudioDone.l10n(context),
+                        style: TextStyle(
+                          color: AppTheme.brand,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
               ),
             ),
@@ -436,47 +532,6 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _section(
-                  colors,
-                  children: [
-                    _field(
-                      _title,
-                      AppStringKeys.stickerStudioFieldTitle.l10n(context),
-                      maxLength: 64,
-                    ),
-                    Divider(height: 1, color: colors.divider),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _field(
-                            _name,
-                            AppStringKeys.stickerStudioFieldShortName.l10n(
-                              context,
-                            ),
-                            maxLength: 64,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: _suggestName,
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Text(
-                              AppStringKeys.stickerStudioShortNameSuggest.l10n(
-                                context,
-                              ),
-                              style: TextStyle(
-                                color: colors.linkBlue,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
                 _section(
                   colors,
                   children: [
@@ -492,8 +547,7 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                       ),
                     ),
                     for (final type in OwnedStickerSetType.values)
-                      _choiceRow(
-                        colors,
+                      StickerStudioChoiceRow(
                         label: _typeLabel(context, type),
                         detail: switch (type) {
                           OwnedStickerSetType.regular =>
@@ -514,35 +568,31 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                           _stickers.clear();
                         }),
                       ),
-                    if (_type == OwnedStickerSetType.customEmoji)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => setState(() => _repainting = !_repainting),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  AppStringKeys.stickerStudioRepaint.l10n(
-                                    context,
-                                  ),
-                                  style: TextStyle(
-                                    color: colors.textPrimary,
-                                    fontSize: 15,
-                                  ),
+                    if (_customEmoji)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                AppStringKeys.stickerStudioRepaint.l10n(
+                                  context,
+                                ),
+                                style: TextStyle(
+                                  color: colors.textPrimary,
+                                  fontSize: 15,
                                 ),
                               ),
-                              _OwnedToggle(
-                                value: _repainting,
-                                onChanged: (value) =>
-                                    setState(() => _repainting = value),
-                              ),
-                            ],
-                          ),
+                            ),
+                            StickerStudioToggle(
+                              value: _repainting,
+                              onChanged: (value) =>
+                                  setState(() => _repainting = value),
+                            ),
+                          ],
                         ),
                       ),
                   ],
@@ -551,8 +601,25 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                 _section(
                   colors,
                   children: [
-                    for (var index = 0; index < _stickers.length; index++)
-                      _draftRow(colors, _stickers[index], index),
+                    ReorderableListView(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      onReorderItem: (oldIndex, newIndex) => setState(
+                        () => _stickers.insert(
+                          newIndex,
+                          _stickers.removeAt(oldIndex),
+                        ),
+                      ),
+                      children: [
+                        for (var index = 0; index < _stickers.length; index++)
+                          _draftRow(
+                            colors,
+                            _stickers[index],
+                            index,
+                            key: ObjectKey(_stickers[index]),
+                          ),
+                      ],
+                    ),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _add,
@@ -582,6 +649,60 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                     ),
                   ],
                 ),
+                if (_stickers.length > 1) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    AppStringKeys.stickerStudioReorderHint.l10n(context),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                _section(
+                  colors,
+                  children: [
+                    stickerStudioField(
+                      _title,
+                      AppStringKeys.stickerStudioFieldTitle.l10n(context),
+                      maxLength: 64,
+                    ),
+                    Divider(height: 1, color: colors.divider),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: stickerStudioField(
+                            _name,
+                            AppStringKeys.stickerStudioFieldShortName.l10n(
+                              context,
+                            ),
+                            maxLength: 64,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: _suggestName,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Text(
+                              AppStringKeys.stickerStudioShortNameSuggest.l10n(
+                                context,
+                              ),
+                              style: TextStyle(
+                                color: colors.linkBlue,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_nameState != _NameCheckState.idle)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 12),
+                        child: _nameStatus(colors),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 Text(
                   AppStringKeys.stickerStudioSourceSpecNote.l10n(context),
@@ -599,74 +720,149 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
     );
   }
 
+  Widget _nameStatus(AppColors colors) {
+    if (_nameState == _NameCheckState.checking) {
+      return Text(
+        AppStringKeys.stickerStudioNameChecking.l10n(context),
+        style: TextStyle(fontSize: 12, color: colors.textSecondary),
+      );
+    }
+    final available = _nameState == _NameCheckState.available;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppIcon(
+          available ? HeroAppIcons.check : HeroAppIcons.circleXmark,
+          size: 14,
+          color: available ? AppTheme.cloverGreen : AppTheme.tagRed,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            available
+                ? AppStringKeys.stickerStudioNameAvailable.l10n(context)
+                : AppStringKeys.stickerStudioNameUnavailable.l10n(context),
+            style: TextStyle(
+              fontSize: 12,
+              color: available ? AppTheme.cloverGreen : AppTheme.tagRed,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One draft row: tap to edit the source and its emoji/keywords, trash to
+  /// remove, long-press to reorder (ReorderableListView's default handles).
   Widget _draftRow(
     AppColors colors,
     NewStickerDraft draft,
-    int index,
-  ) => GestureDetector(
+    int index, {
+    required Key key,
+  }) => GestureDetector(
+    key: key,
     behavior: HitTestBehavior.opaque,
-    onTap: () => setState(() => _stickers.removeAt(index)),
-    child: Container(
-      padding: const EdgeInsets.all(12),
+    onTap: _working ? null : () => _editDraft(index),
+    child: DecoratedBox(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: colors.divider, width: 0.5)),
       ),
-      child: Row(
-        children: [
-          _DraftPreview(draft: draft, size: 44),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  draft.emojis,
-                  style: TextStyle(fontSize: 20, color: colors.textPrimary),
-                ),
-                Text(
-                  context.l10n.t(AppStringKeys.stickerStudioFormatFile, {
-                    'value1': draft.format.name.toUpperCase(),
-                    'value2': draft.path.split(Platform.pathSeparator).last,
-                  }),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
-                ),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            StickerDraftPreview(draft: draft, size: 44),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    draft.emojis,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 20, color: colors.textPrimary),
+                  ),
+                  Text(
+                    context.l10n.t(AppStringKeys.stickerStudioFormatFile, {
+                      'value1': draft.format.name.toUpperCase(),
+                      'value2': draft.path.split(Platform.pathSeparator).last,
+                    }),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                ],
+              ),
             ),
-          ),
-          AppIcon(HeroAppIcons.trash, size: 19, color: colors.textSecondary),
-        ],
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _working ? null : () => setState(() => _remove(index)),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: AppIcon(
+                  HeroAppIcons.trash,
+                  size: 19,
+                  color: colors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
+
+  void _remove(int index) {
+    if (index < 0 || index >= _stickers.length) return;
+    _stickers.removeAt(index);
+  }
 }
 
+// ---------------------------------------------------------------------------
+// Manage screen
+// ---------------------------------------------------------------------------
+
 class StickerSetManageView extends StatefulWidget {
-  const StickerSetManageView({super.key, required this.setId});
+  const StickerSetManageView({super.key, required this.setId, this.service});
 
   final int setId;
+
+  /// Overrides the TDLib-backed service (used by tests to inject a fake).
+  final StickerSetManagementService? service;
 
   @override
   State<StickerSetManageView> createState() => _StickerSetManageViewState();
 }
 
 class _StickerSetManageViewState extends State<StickerSetManageView> {
-  final _service = StickerSetManagementService();
+  late final StickerSetManagementService _service =
+      widget.service ?? StickerSetManagementService();
+  final _gridViewportKey = GlobalKey(debugLabel: 'studio-grid-viewport');
+  final _scrollController = ScrollController();
+
   Map<String, dynamic>? _set;
   List<Map<String, dynamic>> _rawStickers = const [];
   List<StickerItem> _stickers = const [];
   bool _loading = true;
   bool _working = false;
   bool _changed = false;
+  bool _editMode = false;
 
   OwnedStickerSetType get _type => _setTypeFromTd(_set?.obj('sticker_type'));
   String get _name => _set?.str('name') ?? '';
+  int get _maximum => _type == OwnedStickerSetType.customEmoji ? 200 : 120;
 
   @override
   void initState() {
     super.initState();
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -714,12 +910,11 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
   }
 
   Future<void> _add() async {
-    final maximum = _type == OwnedStickerSetType.customEmoji ? 200 : 120;
-    if (_rawStickers.length >= maximum) {
+    if (_rawStickers.length >= _maximum) {
       showToast(
         context,
         context.l10n.t(AppStringKeys.stickerStudioSetLimit, {
-          'value1': maximum,
+          'value1': _maximum,
         }),
       );
       return;
@@ -782,8 +977,26 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
     }
   }
 
+  /// Drag-drop reorder: one setStickerPositionInSet call moves the dragged
+  /// sticker to its new 0-based position, then the set reloads to confirm the
+  /// server-side order.
+  Future<void> _reorder(int oldIndex, int newIndex) async {
+    if (oldIndex == newIndex || _working) return;
+    final fileId = _stickerFileId(oldIndex);
+    if (fileId == 0) return;
+    await _run(() => _service.move(fileId, newIndex));
+  }
+
+  Map<String, dynamic> _rawAt(int index) =>
+      index >= 0 && index < _rawStickers.length
+      ? _rawStickers[index]
+      : const <String, dynamic>{};
+
+  int _stickerFileId(int index) =>
+      _rawAt(index).obj('sticker')?.int64('id') ?? 0;
+
   Future<void> _stickerActions(int index) async {
-    final raw = _rawStickers[index];
+    final raw = _rawAt(index);
     final fileId = raw.obj('sticker')?.int64('id') ?? 0;
     final customEmojiId = raw.obj('full_type')?.int64('custom_emoji_id') ?? 0;
     if (fileId == 0) return;
@@ -826,6 +1039,8 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
               AppStringKeys.stickerStudioActionReplace.l10n(context),
               HeroAppIcons.arrowsRotate,
             ),
+            // The non-drag reorder fallback: still reachable when dragging is
+            // disabled, and the a11y-reachable equivalent of the drag.
             if (index > 0)
               _actionTile(
                 sheetContext,
@@ -865,14 +1080,14 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
       case _StickerAction.keywords:
         final value = await _askText(
           title: AppStringKeys.stickerStudioFieldKeywords.l10n(context),
-          initial: '',
+          initial: _keywordsOf(raw),
           hint: AppStringKeys.stickerStudioKeywordsHint.l10n(context),
         );
         if (value != null) {
           await _run(() => _service.setKeywords(fileId, value.split(',')));
         }
       case _StickerAction.mask:
-        final placement = await _maskPlacement();
+        final placement = await _maskPlacement(initial: _placementFrom(raw));
         if (placement != null) {
           await _run(() => _service.setMaskPlacement(fileId, placement));
         }
@@ -894,16 +1109,52 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
       case _StickerAction.down:
         await _run(() => _service.move(fileId, index + 1));
       case _StickerAction.remove:
-        final yes = await confirmDialog(
-          context,
-          title: AppStringKeys.stickerStudioRemoveSticker.l10n(context),
-          message: AppStringKeys.stickerStudioRemoveMessage.l10n(context),
-          confirmText: AppStringKeys.stickerStudioRemove.l10n(context),
-          destructive: true,
-        );
-        if (yes) await _run(() => _service.remove(fileId));
+        await _confirmRemove(index);
     }
   }
+
+  Future<void> _confirmRemove(int index) async {
+    final fileId = _stickerFileId(index);
+    if (fileId == 0) return;
+    final yes = await confirmDialog(
+      context,
+      title: AppStringKeys.stickerStudioRemoveSticker.l10n(context),
+      message: AppStringKeys.stickerStudioRemoveMessage.l10n(context),
+      confirmText: AppStringKeys.stickerStudioRemove.l10n(context),
+      destructive: true,
+    );
+    if (yes) await _run(() => _service.remove(fileId));
+  }
+
+  String _keywordsOf(Map<String, dynamic> raw) =>
+      (raw['keywords'] as List? ?? const []).cast<String>().join(',');
+
+  StickerMaskPlacement? _placementFrom(Map<String, dynamic> raw) {
+    final mask = raw.obj('full_type')?.obj('mask_position');
+    if (mask == null) return null;
+    final point = switch (mask.obj('point')?.type) {
+      'maskPointForehead' => StickerMaskPoint.forehead,
+      'maskPointEyes' => StickerMaskPoint.eyes,
+      'maskPointMouth' => StickerMaskPoint.mouth,
+      'maskPointChin' => StickerMaskPoint.chin,
+      _ => null,
+    };
+    if (point == null) return null;
+    return StickerMaskPlacement(
+      point: point,
+      xShift: mask.dbl('x_shift') ?? 0,
+      yShift: mask.dbl('y_shift') ?? 0,
+      scale: mask.dbl('scale') ?? 1,
+    );
+  }
+
+  Future<StickerMaskPlacement?> _maskPlacement({
+    StickerMaskPlacement? initial,
+  }) => Navigator.of(context).push<StickerMaskPlacement>(
+    MaterialPageRoute(
+      builder: (_) => StickerMaskPlacementView(initial: initial),
+    ),
+  );
 
   Widget _actionTile(
     BuildContext sheetContext,
@@ -956,7 +1207,7 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
       barrierDismissible: true,
       barrierLabel: AppStringKeys.confirmCancel.l10n(context),
       barrierColor: const Color(0x99000000),
-      pageBuilder: (dialogContext, _, _) => _OwnedDialog(
+      pageBuilder: (dialogContext, _, _) => StickerStudioDialog(
         title: title,
         content: TextField(
           controller: controller,
@@ -964,11 +1215,11 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
           decoration: InputDecoration(hintText: hint, border: InputBorder.none),
         ),
         actions: [
-          _OwnedDialogAction(
+          StickerStudioDialogAction(
             label: AppStringKeys.confirmCancel.l10n(dialogContext),
             onTap: () => Navigator.of(dialogContext).pop(),
           ),
-          _OwnedDialogAction(
+          StickerStudioDialogAction(
             label: AppStringKeys.stickerStudioSave.l10n(dialogContext),
             color: AppTheme.brand,
             onTap: () => Navigator.of(dialogContext).pop(controller.text),
@@ -980,15 +1231,12 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
     return result;
   }
 
-  Future<StickerMaskPlacement?> _maskPlacement() => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => const StickerMaskPlacementView()));
-
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final title =
         _set?.str('title') ?? AppStringKeys.stickerStudioTitle.l10n(context);
+    final reducedMotion = AppMotion.isReduced(context);
     return Scaffold(
       backgroundColor: colors.groupedBackground,
       body: Column(
@@ -1001,17 +1249,39 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                     padding: EdgeInsets.all(10),
                     child: AppActivityIndicator(size: 18),
                   )
-                : GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _add,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: AppIcon(
-                        HeroAppIcons.plus,
-                        size: 23,
-                        color: colors.textPrimary,
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _editMode = !_editMode),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            _editMode
+                                ? AppStringKeys.stickerStudioDone.l10n(context)
+                                : AppStringKeys.messageActionEdit.l10n(context),
+                            style: TextStyle(
+                              color: AppTheme.brand,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _add,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: AppIcon(
+                            HeroAppIcons.plus,
+                            size: 23,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
           ),
           Expanded(
@@ -1020,6 +1290,8 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                 // A shrinkWrap grid under a ListView gets unbounded height and
                 // lays out every cell, mounting a decoder per sticker up front.
                 : CustomScrollView(
+                    key: _gridViewportKey,
+                    controller: _scrollController,
                     slivers: [
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -1042,56 +1314,37 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                             ),
                           ),
                         )
-                      else
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          sliver: SliverGrid.builder(
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 4,
-                                  mainAxisSpacing: 10,
-                                  crossAxisSpacing: 10,
+                      else ...[
+                        if (!reducedMotion && _stickers.length > 1)
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                            sliver: SliverToBoxAdapter(
+                              child: Text(
+                                AppStringKeys.stickerStudioReorderHint.l10n(
+                                  context,
                                 ),
-                            itemCount: _stickers.length,
-                            itemBuilder: (_, index) => GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: _working
-                                  ? null
-                                  : () => _stickerActions(index),
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: StickerPreview(
-                                      item: _stickers[index],
-                                      cornerRadius: 10,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 2,
-                                    bottom: 2,
-                                    child: Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        color: colors.card.withValues(
-                                          alpha: 0.9,
-                                        ),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Center(
-                                        child: AppIcon(
-                                          HeroAppIcons.ellipsis,
-                                          size: 15,
-                                          color: colors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.textSecondary,
+                                ),
                               ),
                             ),
                           ),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          sliver: StickerReorderGridSliver(
+                            itemCount: _stickers.length,
+                            reorderableCount: _stickers.length,
+                            dragEnabled: !_working,
+                            scrollController: _scrollController,
+                            viewportKey: _gridViewportKey,
+                            onReorder: _reorder,
+                            cellBuilder: (context, index) =>
+                                _stickerCell(context, index, colors),
+                          ),
                         ),
+                      ],
                     ],
                   ),
           ),
@@ -1099,6 +1352,101 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
       ),
     );
   }
+
+  /// One sticker cell: preview, the associated emoji (custom emoji sets show
+  /// the emoji each sticker stands in for), the mask-position badge for mask
+  /// sets, and in edit mode a delete badge instead of the action ellipsis.
+  Widget _stickerCell(BuildContext context, int index, AppColors colors) {
+    final sticker = _stickers[index];
+    final raw = _rawAt(index);
+    final emoji = raw.str('emoji') ?? sticker.emoji;
+    final mask = _type == OwnedStickerSetType.mask ? _placementFrom(raw) : null;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _working ? null : () => _stickerActions(index),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: StickerPreview(item: sticker, cornerRadius: 10),
+          ),
+          if (emoji.isNotEmpty)
+            Positioned(
+              left: rtl ? null : 3,
+              right: rtl ? 3 : null,
+              top: 3,
+              child: Container(
+                key: ValueKey('studio-sticker-emoji-$index'),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: colors.card.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  emoji.characters.first,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+          if (mask != null)
+            Positioned(
+              left: rtl ? 3 : null,
+              right: rtl ? null : 3,
+              top: 3,
+              child: Container(
+                key: ValueKey('studio-sticker-mask-$index'),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.card.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  context.l10n.t(AppStringKeys.stickerStudioMaskBadge, {
+                    'value1': mask.point.name,
+                  }),
+                  style: TextStyle(fontSize: 9, color: colors.textSecondary),
+                ),
+              ),
+            ),
+          Positioned(
+            right: 2,
+            bottom: 2,
+            child: _editMode
+                ? _deleteBadge(index)
+                : Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: colors.card.withValues(alpha: 0.9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: AppIcon(
+                        HeroAppIcons.ellipsis,
+                        size: 15,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _deleteBadge(int index) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: _working ? null : () => _confirmRemove(index),
+    child: Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(color: AppTheme.tagRed, shape: BoxShape.circle),
+      child: const Center(
+        child: AppIcon(HeroAppIcons.minus, size: 13, color: Color(0xFFFFFFFF)),
+      ),
+    ),
+  );
 
   Widget _manageCard(AppColors colors) => Container(
     decoration: BoxDecoration(
@@ -1194,21 +1542,37 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Draft editor
+// ---------------------------------------------------------------------------
+
 class StickerDraftEditorView extends StatefulWidget {
-  const StickerDraftEditorView({super.key, required this.setType});
+  const StickerDraftEditorView({
+    super.key,
+    required this.setType,
+    this.initial,
+  });
 
   final OwnedStickerSetType setType;
+
+  /// Set when editing an existing draft from the create flow.
+  final NewStickerDraft? initial;
 
   @override
   State<StickerDraftEditorView> createState() => _StickerDraftEditorViewState();
 }
 
 class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
-  final _emojis = TextEditingController(text: '🙂');
-  final _keywords = TextEditingController();
-  StickerFileFormat _format = StickerFileFormat.webp;
-  String? _path;
-  StickerMaskPlacement? _mask;
+  late final TextEditingController _emojis = TextEditingController(
+    text: widget.initial?.emojis ?? '🙂',
+  );
+  late final TextEditingController _keywords = TextEditingController(
+    text: widget.initial?.keywords.join(',') ?? '',
+  );
+  late StickerFileFormat _format =
+      widget.initial?.format ?? StickerFileFormat.webp;
+  late String? _path = widget.initial?.path;
+  late StickerMaskPlacement? _mask = widget.initial?.maskPlacement;
   bool _validating = false;
 
   @override
@@ -1258,13 +1622,13 @@ class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
         barrierDismissible: true,
         barrierLabel: AppStringKeys.confirmOk.l10n(context),
         barrierColor: const Color(0x99000000),
-        pageBuilder: (dialogContext, _, _) => _OwnedDialog(
+        pageBuilder: (dialogContext, _, _) => StickerStudioDialog(
           title: AppStringKeys.stickerStudioSourceNeedsChanges.l10n(
             dialogContext,
           ),
           content: Text(result.errors.map((error) => '• $error').join('\n\n')),
           actions: [
-            _OwnedDialogAction(
+            StickerStudioDialogAction(
               label: AppStringKeys.confirmOk.l10n(dialogContext),
               color: AppTheme.brand,
               onTap: () => Navigator.of(dialogContext).pop(),
@@ -1317,7 +1681,7 @@ class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
                       child: Row(
                         children: [
                           if (_path != null)
-                            _DraftPreview(
+                            StickerDraftPreview(
                               draft: NewStickerDraft(
                                 path: _path!,
                                 format: _format,
@@ -1383,8 +1747,7 @@ class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
                   colors,
                   children: [
                     for (final format in formats)
-                      _choiceRow(
-                        colors,
+                      StickerStudioChoiceRow(
                         label: format.name.toUpperCase(),
                         detail: switch (format) {
                           StickerFileFormat.webp =>
@@ -1408,14 +1771,14 @@ class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
                 _section(
                   colors,
                   children: [
-                    _field(
+                    stickerStudioField(
                       _emojis,
                       AppStringKeys.stickerStudioFieldMatchingEmoji.l10n(
                         context,
                       ),
                     ),
                     Divider(height: 1, color: colors.divider),
-                    _field(
+                    stickerStudioField(
                       _keywords,
                       AppStringKeys.stickerStudioFieldKeywords.l10n(context),
                     ),
@@ -1429,7 +1792,8 @@ class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
                       final result = await Navigator.of(context)
                           .push<StickerMaskPlacement>(
                             MaterialPageRoute(
-                              builder: (_) => const StickerMaskPlacementView(),
+                              builder: (_) =>
+                                  StickerMaskPlacementView(initial: _mask),
                             ),
                           );
                       if (result != null && mounted) {
@@ -1497,8 +1861,14 @@ class _StickerDraftEditorViewState extends State<StickerDraftEditorView> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Mask placement
+// ---------------------------------------------------------------------------
+
 class StickerMaskPlacementView extends StatefulWidget {
-  const StickerMaskPlacementView({super.key});
+  const StickerMaskPlacementView({super.key, this.initial});
+
+  final StickerMaskPlacement? initial;
 
   @override
   State<StickerMaskPlacementView> createState() =>
@@ -1506,10 +1876,10 @@ class StickerMaskPlacementView extends StatefulWidget {
 }
 
 class _StickerMaskPlacementViewState extends State<StickerMaskPlacementView> {
-  StickerMaskPoint _point = StickerMaskPoint.eyes;
-  double _x = 0;
-  double _y = 0;
-  double _scale = 1;
+  late StickerMaskPoint _point = widget.initial?.point ?? StickerMaskPoint.eyes;
+  late double _x = widget.initial?.xShift ?? 0;
+  late double _y = widget.initial?.yShift ?? 0;
+  late double _scale = widget.initial?.scale ?? 1;
 
   @override
   Widget build(BuildContext context) {
@@ -1545,12 +1915,10 @@ class _StickerMaskPlacementViewState extends State<StickerMaskPlacementView> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _section(
-                  colors,
+                StickerStudioSection(
                   children: [
                     for (final point in StickerMaskPoint.values)
-                      _choiceRow(
-                        colors,
+                      StickerStudioChoiceRow(
                         label:
                             point.name[0].toUpperCase() +
                             point.name.substring(1),
@@ -1564,29 +1932,28 @@ class _StickerMaskPlacementViewState extends State<StickerMaskPlacementView> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                _slider(
-                  colors,
-                  AppStringKeys.stickerStudioHorizontalShift.l10n(context),
-                  _x,
-                  -2,
-                  2,
-                  (value) => _x = value,
+                StickerStudioValueRow(
+                  label: AppStringKeys.stickerStudioHorizontalShift.l10n(
+                    context,
+                  ),
+                  value: _x,
+                  min: -2,
+                  max: 2,
+                  onChanged: (value) => setState(() => _x = value),
                 ),
-                _slider(
-                  colors,
-                  AppStringKeys.stickerStudioVerticalShift.l10n(context),
-                  _y,
-                  -2,
-                  2,
-                  (value) => _y = value,
+                StickerStudioValueRow(
+                  label: AppStringKeys.stickerStudioVerticalShift.l10n(context),
+                  value: _y,
+                  min: -2,
+                  max: 2,
+                  onChanged: (value) => setState(() => _y = value),
                 ),
-                _slider(
-                  colors,
-                  AppStringKeys.stickerStudioScale.l10n(context),
-                  _scale,
-                  0.1,
-                  4,
-                  (value) => _scale = value,
+                StickerStudioValueRow(
+                  label: AppStringKeys.stickerStudioScale.l10n(context),
+                  value: _scale,
+                  min: 0.1,
+                  max: 4,
+                  onChanged: (value) => setState(() => _scale = value),
                 ),
               ],
             ),
@@ -1595,256 +1962,6 @@ class _StickerMaskPlacementViewState extends State<StickerMaskPlacementView> {
       ),
     );
   }
-
-  Widget _slider(
-    AppColors colors,
-    String label,
-    double value,
-    double min,
-    double max,
-    ValueChanged<double> update,
-  ) => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-    decoration: BoxDecoration(
-      color: colors.card,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-    ),
-    child: Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(label, style: TextStyle(color: colors.textPrimary)),
-            ),
-            Text(
-              value.toStringAsFixed(2),
-              style: TextStyle(color: colors.textSecondary),
-            ),
-          ],
-        ),
-        _OwnedSlider(
-          value: value.clamp(min, max),
-          min: min,
-          max: max,
-          onChanged: (next) => setState(() => update(next)),
-        ),
-      ],
-    ),
-  );
-}
-
-class _OwnedToggle extends StatelessWidget {
-  const _OwnedToggle({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: () => onChanged(!value),
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-      width: 46,
-      height: 28,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: value ? AppTheme.brand : context.colors.textTertiary,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: AnimatedAlign(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          width: 24,
-          height: 24,
-          decoration: const BoxDecoration(
-            color: Color(0xFFFFFFFF),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x33000000),
-                blurRadius: 3,
-                offset: Offset(0, 1),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _OwnedSlider extends StatelessWidget {
-  const _OwnedSlider({
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final double value;
-  final double min;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  void _update(double dx, double width) {
-    final fraction = (dx / width).clamp(0.0, 1.0);
-    onChanged(min + (max - min) * fraction);
-  }
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (_, constraints) {
-      final fraction = max == min
-          ? 0.0
-          : ((value - min) / (max - min)).clamp(0.0, 1.0);
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (details) =>
-            _update(details.localPosition.dx, constraints.maxWidth),
-        onHorizontalDragUpdate: (details) =>
-            _update(details.localPosition.dx, constraints.maxWidth),
-        child: SizedBox(
-          height: 38,
-          child: Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              Container(
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.colors.textTertiary.withValues(alpha: 0.32),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              FractionallySizedBox(
-                widthFactor: fraction,
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.brand,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: (constraints.maxWidth - 22) * fraction,
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: AppTheme.brand,
-                    shape: BoxShape.circle,
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x33000000), blurRadius: 4),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
-
-class _OwnedDialog extends StatelessWidget {
-  const _OwnedDialog({
-    required this.title,
-    required this.content,
-    required this.actions,
-  });
-
-  final String title;
-  final Widget content;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: context.colors.card,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: context.colors.divider, width: 0.5),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x44000000),
-                blurRadius: 24,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: DefaultTextStyle(
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: context.colors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
-                  child: content,
-                ),
-                Container(height: 0.5, color: context.colors.divider),
-                SizedBox(height: 50, child: Row(children: actions)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _OwnedDialogAction extends StatelessWidget {
-  const _OwnedDialogAction({
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Center(
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color ?? context.colors.textSecondary,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.none,
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 enum _StickerAction {
@@ -1859,133 +1976,7 @@ enum _StickerAction {
 }
 
 Widget _section(AppColors colors, {required List<Widget> children}) =>
-    Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: colors.card,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Column(children: children),
-    );
-
-Widget _field(
-  TextEditingController controller,
-  String hint, {
-  int? maxLength,
-}) => Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-  child: TextField(
-    controller: controller,
-    maxLength: maxLength,
-    decoration: InputDecoration(
-      border: InputBorder.none,
-      hintText: hint,
-      counterText: '',
-    ),
-  ),
-);
-
-Widget _choiceRow(
-  AppColors colors, {
-  required String label,
-  required String detail,
-  required bool selected,
-  required VoidCallback onTap,
-}) => GestureDetector(
-  behavior: HitTestBehavior.opaque,
-  onTap: onTap,
-  child: Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-    child: Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 15, color: colors.textPrimary),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                detail,
-                style: TextStyle(fontSize: 12, color: colors.textSecondary),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: selected ? AppTheme.brand : Colors.transparent,
-            border: Border.all(
-              color: selected ? AppTheme.brand : colors.textTertiary,
-              width: 1.5,
-            ),
-          ),
-          child: selected
-              ? const Center(
-                  child: AppIcon(
-                    HeroAppIcons.check,
-                    size: 14,
-                    color: Colors.white,
-                  ),
-                )
-              : null,
-        ),
-      ],
-    ),
-  ),
-);
-
-class _DraftPreview extends StatelessWidget {
-  const _DraftPreview({required this.draft, required this.size});
-
-  final NewStickerDraft draft;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      color: context.colors.searchFill,
-      borderRadius: BorderRadius.circular(AppRadius.control),
-    ),
-    child: draft.format == StickerFileFormat.webp
-        ? Image.file(
-            File(draft.path),
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => _fallback(context),
-          )
-        : _fallback(context),
-  );
-
-  Widget _fallback(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AppIcon(
-          draft.format == StickerFileFormat.webm
-              ? HeroAppIcons.video
-              : HeroAppIcons.wandMagicSparkles,
-          size: size * 0.32,
-          color: context.colors.textSecondary,
-        ),
-        Text(
-          draft.format.name.toUpperCase(),
-          style: TextStyle(
-            fontSize: size * 0.14,
-            color: context.colors.textSecondary,
-          ),
-        ),
-      ],
-    ),
-  );
-}
+    StickerStudioSection(children: children);
 
 OwnedStickerSetType _setTypeFromTd(Map<String, dynamic>? object) =>
     switch (object?.type) {

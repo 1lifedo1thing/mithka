@@ -2858,6 +2858,7 @@
     <string name="stickerStudioDeleteFailed">Could not delete the set: {value1}</string>
     <string name="stickerStudioDeleteMessage">This permanently removes the set and all of its stickers.</string>
     <string name="stickerStudioDeleteTitle">Delete sticker set?</string>
+    <string name="stickerStudioDone">完成</string>
     <string name="stickerStudioEmpty">Sets you create will appear here.</string>
     <string name="stickerStudioEmptySet">This set has no stickers.</string>
     <string name="stickerStudioFieldKeywords">Search keywords, comma-separated</string>
@@ -2871,11 +2872,16 @@
     <string name="stickerStudioHorizontalShift">Horizontal shift</string>
     <string name="stickerStudioItemCount">{value1} · {value2} items</string>
     <string name="stickerStudioKeywordsHint">Comma-separated, up to 20</string>
+    <string name="stickerStudioLinkPrefixEmoji">t.me/addemoji/</string>
+    <string name="stickerStudioLinkPrefixStickers">t.me/addstickers/</string>
     <string name="stickerStudioLoadFailed">Could not load this set: {value1}</string>
     <string name="stickerStudioLoadOwnedFailed">Could not load owned sticker sets: {value1}</string>
+    <string name="stickerStudioMaskBadge">面具 · {value1}</string>
     <string name="stickerStudioMaskPlacement">Mask Placement</string>
     <string name="stickerStudioMaskPlacementValue">Mask placement: {value1}</string>
     <string name="stickerStudioMatchingEmojiHint">1–20 emoji</string>
+    <string name="stickerStudioNameAvailable">此短名可用。</string>
+    <string name="stickerStudioNameChecking">正在檢查可用性…</string>
     <string name="stickerStudioNameUnavailable">This short name is unavailable.</string>
     <string name="stickerStudioNewSet">新貼圖包</string>
     <string name="stickerStudioNoFile">No file selected</string>
@@ -2885,6 +2891,7 @@
     <string name="stickerStudioRemoveSticker">Remove sticker?</string>
     <string name="stickerStudioRemoveThumbnail">Remove thumbnail</string>
     <string name="stickerStudioRename">Rename set</string>
+    <string name="stickerStudioReorderHint">長按並拖曳即可重新排序貼圖。</string>
     <string name="stickerStudioRepaint">Repaint to match surrounding text</string>
     <string name="stickerStudioSave">Save</string>
     <string name="stickerStudioScale">Scale</string>
