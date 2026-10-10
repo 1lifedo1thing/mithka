@@ -3381,6 +3381,8 @@
     <string name="topicChatChannelNumber">Canal n° {value1}</string>
     <string name="topicChatChannelSettings">Paramètres du canal</string>
     <string name="topicChatCommentCount">{value1} commentaires</string>
+    <string name="topicChatCloseTopic">Fermer le sujet</string>
+    <string name="topicChatReopenTopic">Rouvrir le sujet</string>
     <string name="topicChatComposerPlaceholder">Partagez une idée, une légende ou un lien</string>
     <string name="topicChatExpand">Développer</string>
     <string name="topicChatGroupChatTitle">Discussion de sujet</string>

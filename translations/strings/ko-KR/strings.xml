@@ -3370,6 +3370,8 @@
     <string name="topicChatChannelNumber">채널 번호: {value1}</string>
     <string name="topicChatChannelSettings">채널 설정</string>
     <string name="topicChatCommentCount">댓글 {value1}</string>
+    <string name="topicChatCloseTopic">주제 닫기</string>
+    <string name="topicChatReopenTopic">주제 다시 열기</string>
     <string name="topicChatComposerPlaceholder">생각, 사진 설명 또는 링크 공유</string>
     <string name="topicChatExpand">펼치기</string>
     <string name="topicChatGroupChatTitle">주제 그룹 채팅</string>

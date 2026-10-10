@@ -3381,6 +3381,8 @@
     <string name="topicChatChannelNumber">Channel No. {value1}</string>
     <string name="topicChatChannelSettings">Channel Settings</string>
     <string name="topicChatCommentCount">{value1} comments</string>
+    <string name="topicChatCloseTopic">Close topic</string>
+    <string name="topicChatReopenTopic">Reopen topic</string>
     <string name="topicChatComposerPlaceholder">Share a thought, caption, or link</string>
     <string name="topicChatExpand">Expand</string>
     <string name="topicChatGroupChatTitle">Topic Group Chat</string>

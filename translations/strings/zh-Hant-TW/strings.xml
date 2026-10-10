@@ -3370,6 +3370,8 @@
     <string name="topicChatChannelNumber">頻道號：{value1}</string>
     <string name="topicChatChannelSettings">頻道設定</string>
     <string name="topicChatCommentCount">留言 {value1}</string>
+    <string name="topicChatCloseTopic">關閉話題</string>
+    <string name="topicChatReopenTopic">重新開啟話題</string>
     <string name="topicChatComposerPlaceholder">分享想法、圖片說明或連結</string>
     <string name="topicChatExpand">展開</string>
     <string name="topicChatGroupChatTitle">話題群聊</string>

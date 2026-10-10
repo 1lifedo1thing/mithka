@@ -3370,6 +3370,8 @@
     <string name="topicChatChannelNumber">チャンネル番号：{value1}</string>
     <string name="topicChatChannelSettings">チャンネル設定</string>
     <string name="topicChatCommentCount">コメント {value1}</string>
+    <string name="topicChatCloseTopic">トピックを閉じる</string>
+    <string name="topicChatReopenTopic">トピックを再開する</string>
     <string name="topicChatComposerPlaceholder">考え、画像の説明、リンクを共有</string>
     <string name="topicChatExpand">展開</string>
     <string name="topicChatGroupChatTitle">トピックグループチャット</string>

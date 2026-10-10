@@ -114,6 +114,16 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
       await _settle(tester);
 
+      // Chat-list-style rows are taller than the old chips, so the lower
+      // topics sit below the fold until the list scrolls to them.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('topic-navigation-item-88')),
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('topic-navigation-left')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await tester.tap(find.byKey(const ValueKey('topic-navigation-item-88')));
       await _settle(tester);
       expect(
