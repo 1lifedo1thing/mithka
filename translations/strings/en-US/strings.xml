@@ -3582,4 +3582,5 @@
     <string name="downloadsRemoveRetainedConfirm">Delete the retained copy of “{name}”? Chat messages and the download cache are not affected.</string>
     <string name="downloadsRetainedUnavailable">Cannot access retained files. Please retry.</string>
     <string name="downloadsNoRetained">No retained files yet. After a file or video finishes downloading, use its shield button to keep it.</string>
+    <string name="composerMediaPicker">Emoji, stickers and GIFs</string>
 </resources>

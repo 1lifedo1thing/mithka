@@ -3571,4 +3571,5 @@
     <string name="downloadsRemoveRetainedConfirm">“{name}”의 보관된 사본을 삭제할까요? 채팅 메시지와 다운로드 캐시에는 영향을 주지 않습니다.</string>
     <string name="downloadsRetainedUnavailable">보관된 파일에 접근할 수 없습니다. 다시 시도하세요.</string>
     <string name="downloadsNoRetained">보관된 파일이 없습니다. 파일이나 동영상 다운로드가 완료되면 방패 버튼을 눌러 보관하세요.</string>
+    <string name="composerMediaPicker">이모티콘, 스티커 및 GIF</string>
 </resources>

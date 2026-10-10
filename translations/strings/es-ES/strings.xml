@@ -3582,4 +3582,5 @@
     <string name="downloadsRemoveRetainedConfirm">¿Eliminar la copia conservada de «{name}»? No se modificarán los mensajes ni la caché de descarga.</string>
     <string name="downloadsRetainedUnavailable">No se puede acceder a los archivos conservados. Inténtalo de nuevo.</string>
     <string name="downloadsNoRetained">Aún no hay archivos conservados. Cuando termine la descarga de un archivo o vídeo, usa el botón del escudo para conservarlo.</string>
+    <string name="composerMediaPicker">Emojis, stickers y GIF</string>
 </resources>

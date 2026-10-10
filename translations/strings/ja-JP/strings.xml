@@ -3571,4 +3571,5 @@
     <string name="downloadsRemoveRetainedConfirm">「{name}」の保持したコピーを削除しますか？チャットのメッセージとダウンロードキャッシュには影響しません。</string>
     <string name="downloadsRetainedUnavailable">保持したファイルにアクセスできません。再試行してください。</string>
     <string name="downloadsNoRetained">保持したファイルはありません。ファイルや動画のダウンロード完了後、盾のボタンで保持できます。</string>
+    <string name="composerMediaPicker">絵文字・ステッカー・GIF</string>
 </resources>

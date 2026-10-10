@@ -3582,4 +3582,5 @@
     <string name="downloadsRemoveRetainedConfirm">Supprimer la copie conservée de « {name} » ? Les messages et le cache de téléchargement ne seront pas modifiés.</string>
     <string name="downloadsRetainedUnavailable">Impossible d’accéder aux fichiers conservés. Réessayez.</string>
     <string name="downloadsNoRetained">Aucun fichier conservé. Une fois le téléchargement d’un fichier ou d’une vidéo terminé, utilisez son bouton bouclier pour le conserver.</string>
+    <string name="composerMediaPicker">Emoji, stickers et GIF</string>
 </resources>
