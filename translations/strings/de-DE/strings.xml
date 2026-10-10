@@ -1430,7 +1430,9 @@
     <string name="emojiCategorySymbols">Symbole</string>
     <string name="emojiCategoryTravelAndPlaces">Reisen und Orte</string>
     <string name="emojiFontCatalogSystemDefault">Systemstandard</string>
+    <string name="emojiPanelPreview">Emoji-Vorschau</string>
     <string name="emojiPreviewFaceWithTearsOfJoy">Gesicht mit Freudentränen</string>
+    <string name="emojiRecentsSection">Zuletzt verwendet</string>
     <string name="emojiStatusClear">Entfernen</string>
     <string name="emojiStatusNoAvailableStatuses">Für dieses emoji-Paket sind keine Status verfügbar</string>
     <string name="emojiStatusNoAvailableStatusesPremiumRequired">Keine Status verfügbar (Premium erforderlich)</string>

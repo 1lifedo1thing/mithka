@@ -1423,7 +1423,9 @@
     <string name="emojiCategorySymbols">기호</string>
     <string name="emojiCategoryTravelAndPlaces">여행 및 장소</string>
     <string name="emojiFontCatalogSystemDefault">시스템 기본값</string>
+    <string name="emojiPanelPreview">이모지 미리보기</string>
     <string name="emojiPreviewFaceWithTearsOfJoy">기쁨의 눈물 얼굴</string>
+    <string name="emojiRecentsSection">최근 사용</string>
     <string name="emojiStatusClear">지우기</string>
     <string name="emojiStatusNoAvailableStatuses">이 emoji 팩에는 사용 가능한 상태가 없습니다</string>
     <string name="emojiStatusNoAvailableStatusesPremiumRequired">사용 가능한 상태가 없습니다(Premium 필요)</string>

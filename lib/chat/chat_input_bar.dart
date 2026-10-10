@@ -68,7 +68,9 @@ import 'custom_emoji.dart';
 import 'desktop_composer_height.dart';
 import 'desktop_voice_message_controller.dart';
 import 'desktop_voice_waveform.dart';
-import 'emoji_catalog.dart';
+import 'emoji_panel.dart';
+import 'emoji_panel_layout.dart';
+import 'emoji_recents_store.dart';
 import 'emoji_store.dart';
 import 'emoji_text_controller.dart';
 import 'gif_item.dart';
@@ -733,6 +735,7 @@ class _ChatInputBarState extends State<ChatInputBar>
     });
     vm.addListener(_syncFromVm);
     EmojiStore.shared.addListener(_onStore);
+    EmojiRecentsStore.shared.addListener(_onStore);
     StickerStore.shared.addListener(_onStore);
     GifStore.shared.addListener(_onStore);
     _botPlatformUpdates = TdClient.shared
@@ -1337,6 +1340,7 @@ class _ChatInputBarState extends State<ChatInputBar>
     _aiReplyWorkingContextSnapshot = null;
     vm.removeListener(_syncFromVm);
     EmojiStore.shared.removeListener(_onStore);
+    EmojiRecentsStore.shared.removeListener(_onStore);
     StickerStore.shared.removeListener(_onStore);
     GifStore.shared.removeListener(_onStore);
     if (widget.quickReplyLoader == null) {
@@ -3854,6 +3858,7 @@ class _ChatInputBarState extends State<ChatInputBar>
       widget.onPanelGeometryChanged?.call();
     }
     EmojiStore.shared.loadIfNeeded();
+    EmojiRecentsStore.shared.loadIfNeeded();
     _desktopEmojiPopoverController.show();
     setState(() => _desktopEmojiPopoverVisible = true);
     if (_isPanelSearchSelected && _panelSearch.text.trim().isNotEmpty) {
@@ -6344,6 +6349,7 @@ class _ChatInputBarState extends State<ChatInputBar>
               _toggle(_Panel.emoji);
               if (_panel == _Panel.emoji) {
                 EmojiStore.shared.loadIfNeeded();
+                EmojiRecentsStore.shared.loadIfNeeded();
                 if (_isPanelSearchSelected &&
                     _panelSearch.text.trim().isNotEmpty) {
                   _queuePanelSearch();
@@ -7407,71 +7413,33 @@ class _ChatInputBarState extends State<ChatInputBar>
         }
       }
       if (pack != null) {
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 8,
+        final packEmoji = pack.emoji;
+        return LayoutBuilder(
+          builder: (context, constraints) => GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: emojiPanelColumnCount(constraints.maxWidth),
+            ),
+            itemCount: packEmoji.length,
+            itemBuilder: (context, index) {
+              final item = packEmoji[index];
+              return item.customEmojiId != 0
+                  ? EmojiPanelCell(
+                      customItem: item,
+                      onTap: () => _controller.insertCustomEmoji(
+                        item.customEmojiId,
+                        item.emoji,
+                      ),
+                    )
+                  : const SizedBox();
+            },
           ),
-          itemCount: pack.emoji.length,
-          itemBuilder: (context, index) {
-            final item = pack!.emoji[index];
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () =>
-                  _controller.insertCustomEmoji(item.customEmojiId, item.emoji),
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: item.customEmojiId != 0
-                    ? CustomEmojiView(
-                        id: item.customEmojiId,
-                        size: 34,
-                        color: context.colors.textPrimary,
-                      )
-                    : const SizedBox(),
-              ),
-            );
-          },
         );
       }
     }
-    return CustomScrollView(
-      slivers: [
-        const SliverToBoxAdapter(child: SizedBox(height: 8)),
-        for (final category in EmojiCatalog.categories) ...[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 14, top: 6, bottom: 2),
-              child: Text(
-                category.name.l10n(context),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: context.colors.textSecondary,
-                ),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 8,
-              ),
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final emoji = category.emojis[index];
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _controller.insertText(emoji),
-                  child: Center(
-                    child: Text(emoji, style: const TextStyle(fontSize: 26)),
-                  ),
-                );
-              }, childCount: category.emojis.length),
-            ),
-          ),
-        ],
-        const SliverToBoxAdapter(child: SizedBox(height: 8)),
-      ],
+    return StandardEmojiPane(
+      insertText: _controller.insertText,
+      insertCustomEmoji: _controller.insertCustomEmoji,
     );
   }
 
@@ -7528,48 +7496,55 @@ class _ChatInputBarState extends State<ChatInputBar>
   Widget _emojiSearchContent() {
     final count = _emojiSearchResults.length + _customEmojiSearchResults.length;
     if (count == 0) return _panelSearchState();
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 8,
-      ),
-      itemCount: count,
-      itemBuilder: (context, index) {
-        if (index < _emojiSearchResults.length) {
-          final emoji = _emojiSearchResults[index];
+    return LayoutBuilder(
+      builder: (context, constraints) => GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: emojiPanelColumnCount(constraints.maxWidth),
+        ),
+        itemCount: count,
+        itemBuilder: (context, index) {
+          if (index < _emojiSearchResults.length) {
+            final emoji = _emojiSearchResults[index];
+            return EmojiPanelCell(
+              key: ValueKey('emojiSearch-$emoji'),
+              emoji: emoji,
+              onTap: () {
+                EmojiRecentsStore.shared.record(emoji);
+                _controller.insertText(emoji);
+              },
+            );
+          }
+          final item =
+              _customEmojiSearchResults[index - _emojiSearchResults.length];
           return GestureDetector(
-            key: ValueKey('emojiSearch-$emoji'),
+            key: ValueKey('customEmojiSearch-${item.customEmojiId}'),
             behavior: HitTestBehavior.opaque,
-            onTap: () => _controller.insertText(emoji),
-            child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 26)),
+            onTap: () {
+              if (item.customEmojiId != 0) {
+                EmojiRecentsStore.shared.recordCustom(
+                  item.customEmojiId,
+                  item.emoji,
+                );
+                _controller.insertCustomEmoji(item.customEmojiId, item.emoji);
+              } else if (item.emoji.isNotEmpty) {
+                EmojiRecentsStore.shared.record(item.emoji);
+                _controller.insertText(item.emoji);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: item.customEmojiId != 0
+                  ? CustomEmojiView(
+                      id: item.customEmojiId,
+                      size: 34,
+                      color: context.colors.textPrimary,
+                    )
+                  : StickerPreview(item: item),
             ),
           );
-        }
-        final item =
-            _customEmojiSearchResults[index - _emojiSearchResults.length];
-        return GestureDetector(
-          key: ValueKey('customEmojiSearch-${item.customEmojiId}'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (item.customEmojiId != 0) {
-              _controller.insertCustomEmoji(item.customEmojiId, item.emoji);
-            } else if (item.emoji.isNotEmpty) {
-              _controller.insertText(item.emoji);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: item.customEmojiId != 0
-                ? CustomEmojiView(
-                    id: item.customEmojiId,
-                    size: 34,
-                    color: context.colors.textPrimary,
-                  )
-                : StickerPreview(item: item),
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 
