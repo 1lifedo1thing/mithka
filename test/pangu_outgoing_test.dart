@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chat/chat_view_model.dart';
+import 'package:mithka/chat/message_text_quote.dart';
 import 'package:mithka/chat/outgoing_attachment.dart';
+import 'package:mithka/chat/pangu_spacing.dart';
 import 'package:mithka/tdlib/td_client.dart';
 import 'package:mithka/tdlib/td_models.dart';
 
@@ -206,6 +208,77 @@ void main() {
       expect(spaced.substring(offset, offset + length), spaced);
     },
   );
+
+  // A quote addresses what the author stored, never what the bubble painted, so
+  // a selection made in 盘古之白 offsets is mapped back before the payload is
+  // built — otherwise the quoted link goes out with a space nobody typed.
+  test('a quote taken off the spaced display keeps the stored bytes', () async {
+    const link = 'https://example.com/中文abc';
+    const stored = '中文English看$link';
+    final source = ChatMessage(
+      id: 11,
+      isOutgoing: false,
+      date: 1,
+      contentType: 'messageText',
+      text: stored,
+      textEntities: [
+        const MessageTextEntity(
+          offset: 2,
+          length: 7,
+          type: 'textEntityTypeBold',
+        ),
+        MessageTextEntity(
+          offset: stored.indexOf(link),
+          length: link.length,
+          type: 'textEntityTypeUrl',
+        ),
+      ],
+    );
+    final painted = PanguSpacing.display(stored, source.textEntities);
+    expect(painted.text, '中文 English 看 $link');
+
+    MessageTextQuote? quoteFromPainted(int start, int end) {
+      final mapped = PanguSpacing.reverseRange(
+        start: start,
+        end: end,
+        insertedOffsets: painted.insertedOffsets,
+        sourceLength: stored.length,
+      );
+      return quoteMessageRange(source, start: mapped.start, end: mapped.end);
+    }
+
+    // Across an inserted space: the words are quoted, the space is not, and the
+    // bold entity keeps the offsets it has in the stored text.
+    final word = painted.text.indexOf('English');
+    final across = quoteFromPainted(word, word + 'English 看'.length);
+    expect(across?.text, 'English看');
+    expect(across?.position, stored.indexOf('English'));
+    expect(across?.entities.single.type, 'textEntityTypeBold');
+    expect(across?.entities.single.offset, 0);
+    expect(across?.entities.single.length, 'English'.length);
+
+    // A selection starting on the space in front of a mixed-script link still
+    // quotes exactly the link; TDLib keeps no link entity inside a quote.
+    final at = painted.text.indexOf('https://');
+    final whole = quoteFromPainted(at - 1, at + link.length);
+    expect(whole?.text, link);
+    expect(whole?.position, stored.indexOf(link));
+    expect(whole?.entities, isEmpty);
+
+    final vm = model(send: true)
+      ..setReply(source, quote: whole)
+      ..setDraft('回复中文English');
+    expect(await vm.send(), isTrue);
+    final request = sent();
+    expect(outgoingText(request), '回复中文 English');
+    final replyTo = (request['reply_to'] as Map).cast<String, dynamic>();
+    expect(replyTo['message_id'], 11);
+    final sentQuote = (replyTo['quote'] as Map).cast<String, dynamic>();
+    expect(sentQuote['position'], stored.indexOf(link));
+    final quoted = (sentQuote['text'] as Map).cast<String, dynamic>();
+    expect(quoted['text'], link);
+    expect(quoted['entities'], isEmpty);
+  });
 
   test('a link is left byte-identical while the switch is off', () async {
     final vm = model()..setDraft('看https://example.com/中文abc和mail@example.com');
