@@ -16,6 +16,7 @@ import 'dart:convert';
 
 import 'package:flutter/gestures.dart' show kLongPressTimeout;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chat/sticker_preview.dart';
@@ -212,7 +213,20 @@ Future<void> _dragCell(WidgetTester tester, Finder from, Finder to) async {
 void main() {
   final fixtures = L10nFixtures.load();
 
+  // The mock clipboard answers Clipboard.setData/Clipboard.getData, which
+  // otherwise hang in a plain widget test (no platform plugin).
+  TestWidgetsFlutterBinding.ensureInitialized();
+  final clipboardWrites = <String>[];
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardWrites.add(call.arguments['text'] as String);
+        }
+        return null;
+      });
+
   setUp(() {
+    clipboardWrites.clear();
     fixtures.install();
     AppStrings.setLocale(const Locale('en'));
   });
@@ -359,5 +373,115 @@ void main() {
     // Let the toast fully retire so no timer is pending at teardown.
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('manage card shows the set link and copies it on tap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final td = _FakeTd(set: _maskSet());
+    await _pumpManage(tester, td);
+
+    expect(find.text('t.me/addstickers/masks_by_me'), findsOneWidget);
+
+    await tester.tap(find.text('t.me/addstickers/masks_by_me'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Link copied'), findsOneWidget);
+    expect(clipboardWrites, ['https://t.me/addstickers/masks_by_me']);
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('custom emoji sets use the addemoji link prefix', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final td = _FakeTd(set: _customEmojiSet());
+    await _pumpManage(tester, td);
+
+    expect(find.text('t.me/addemoji/emojis_by_me'), findsOneWidget);
+  });
+
+  testWidgets('use-as-thumbnail from a cell sends inputFileId, no upload', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final td = _FakeTd(set: _maskSet());
+    await _pumpManage(tester, td);
+
+    await tester.tap(find.byType(StickerPreview).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use as set thumbnail'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 1600));
+
+    final thumbnails = td.requests
+        .where((request) => request['@type'] == 'setStickerSetThumbnail')
+        .toList();
+    expect(thumbnails, hasLength(1));
+    expect(thumbnails.single['thumbnail'], {'@type': 'inputFileId', 'id': 11});
+    expect(thumbnails.single['name'], 'masks_by_me');
+    expect(thumbnails.single['format'], {'@type': 'stickerFormatWebm'});
+    expect(
+      td.requests.where((request) => request['@type'] == 'uploadStickerFile'),
+      isEmpty,
+    );
+  });
+
+  testWidgets('edit mode picks cells and batch-removes after one confirm', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final td = _FakeTd(set: _maskSet());
+    await _pumpManage(tester, td);
+
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('studio-selection-toolbar')),
+      findsOneWidget,
+    );
+    expect(find.text('Tap stickers to select them'), findsOneWidget);
+
+    await tester.tap(find.byType(StickerPreview).at(1));
+    await tester.pump();
+    await tester.tap(find.byType(StickerPreview).at(2));
+    await tester.pump();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('studio-selection-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove 2 stickers?'), findsOneWidget);
+    expect(
+      td.requests.where(
+        (request) => request['@type'] == 'removeStickerFromSet',
+      ),
+      isEmpty,
+    );
+
+    await tester.tap(find.text('Remove').last);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 1600));
+    final removed = td.requests
+        .where((request) => request['@type'] == 'removeStickerFromSet')
+        .toList();
+    expect(removed, hasLength(2));
+    expect(
+      removed.map((request) => (request['sticker'] as Map)['id']).toSet(),
+      {12, 13},
+    );
+    // The toolbar collapses back to the hint once the batch is gone.
+    expect(find.text('Tap stickers to select them'), findsOneWidget);
   });
 }

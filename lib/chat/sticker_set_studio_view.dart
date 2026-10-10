@@ -22,6 +22,8 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../components/app_icons.dart';
 import '../components/confirm_dialog.dart';
@@ -849,6 +851,9 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
   bool _changed = false;
   bool _editMode = false;
 
+  /// Sticker file ids picked in edit mode for a batch delete.
+  final Set<int> _selectedFileIds = {};
+
   OwnedStickerSetType get _type => _setTypeFromTd(_set?.obj('sticker_type'));
   String get _name => _set?.str('name') ?? '';
   int get _maximum => _type == OwnedStickerSetType.customEmoji ? 200 : 120;
@@ -951,6 +956,101 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
     );
   }
 
+  /// The shareable set link (t.me/addstickers/«name», or /addemoji/ for
+  /// custom-emoji sets). Empty until the set exists — the create flow has no
+  /// link to preview, which is why only the manage screen shows it.
+  String get _setLink {
+    if (_name.isEmpty) return '';
+    final prefix = _type == OwnedStickerSetType.customEmoji
+        ? AppStringKeys.stickerStudioLinkPrefixEmoji.l10n(context)
+        : AppStringKeys.stickerStudioLinkPrefixStickers.l10n(context);
+    return 'https://$prefix$_name';
+  }
+
+  /// Opens the set's t.me link the way the repo opens external links
+  /// (url_launcher directly, see auth/terms_sheet.dart), keeping the studio
+  /// clear of the chat-link stack.
+  Future<void> _openSetLink() async {
+    final link = _setLink;
+    if (link.isEmpty) return;
+    final uri = Uri.tryParse(link);
+    if (uri == null || !uri.isScheme('https')) {
+      _toastLinkInvalid();
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) _toastLinkInvalid();
+  }
+
+  Future<void> _copySetLink() async {
+    final link = _setLink;
+    if (link.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: link));
+    if (mounted) {
+      showToast(context, context.l10n.t(AppStringKeys.stickerStudioLinkCopied));
+    }
+  }
+
+  void _toastLinkInvalid() {
+    if (!mounted) return;
+    showToast(context, context.l10n.t(AppStringKeys.stickerStudioLinkInvalid));
+  }
+
+  /// Edit-mode batch delete: one confirmation, then the picked stickers are
+  /// removed serially (TDLib has no bulk remove; order doesn't matter, and a
+  /// mid-batch failure leaves the rest of the set intact and reported).
+  Future<void> _removeSelected() async {
+    if (_selectedFileIds.isEmpty || _working) return;
+    final count = _selectedFileIds.length;
+    final yes = await confirmDialog(
+      context,
+      title: context.l10n.t(AppStringKeys.stickerStudioRemoveSelectedTitle, {
+        'value1': count,
+      }),
+      message: context.l10n.t(
+        AppStringKeys.stickerStudioRemoveSelectedMessage,
+        {'value1': count},
+      ),
+      confirmText: AppStringKeys.stickerStudioRemove.l10n(context),
+      destructive: true,
+    );
+    if (!yes) return;
+    setState(() => _working = true);
+    var failures = 0;
+    try {
+      for (final fileId in _selectedFileIds.toList()) {
+        try {
+          await _service.remove(fileId);
+        } catch (_) {
+          failures++;
+        }
+      }
+      _changed = true;
+      _selectedFileIds.clear();
+      await _load();
+    } finally {
+      if (mounted) setState(() => _working = false);
+      if (mounted && failures > 0) {
+        showToast(
+          context,
+          context.l10n.t(AppStringKeys.stickerStudioUpdateFailed, {
+            'value1': failures,
+          }),
+        );
+      }
+    }
+  }
+
+  /// Tapping a cell in edit mode toggles its picked state instead of opening
+  /// the action sheet.
+  void _toggleCellSelection(int index) {
+    final fileId = _stickerFileId(index);
+    if (fileId == 0) return;
+    setState(() {
+      if (!_selectedFileIds.remove(fileId)) _selectedFileIds.add(fileId);
+    });
+  }
+
   Future<void> _delete() async {
     final yes = await confirmDialog(
       context,
@@ -1033,6 +1133,22 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                 AppStringKeys.stickerStudioActionUseThumbnail.l10n(context),
                 HeroAppIcons.image,
               ),
+            if (_type != OwnedStickerSetType.customEmoji &&
+                _formatFromTd(raw.obj('format')?.type) != null)
+              // Telegram iOS picks the set's thumbnail straight from the
+              // grid; TDLib accepts an inputFileId, so no re-upload.
+              _actionTile(
+                sheetContext,
+                _StickerAction.thumbnailFromFile,
+                AppStringKeys.stickerStudioActionUseThumbnail.l10n(context),
+                HeroAppIcons.image,
+              ),
+            _actionTile(
+              sheetContext,
+              _StickerAction.link,
+              AppStringKeys.stickerStudioOpenLink.l10n(context),
+              HeroAppIcons.arrowTopRight,
+            ),
             _actionTile(
               sheetContext,
               _StickerAction.replace,
@@ -1095,6 +1211,15 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
         await _run(
           () => _service.setCustomEmojiThumbnail(_name, customEmojiId),
         );
+      case _StickerAction.thumbnailFromFile:
+        final format = _formatFromTd(raw.obj('format')?.type);
+        if (format != null) {
+          await _run(
+            () => _service.setThumbnailFromFileId(_name, fileId, format),
+          );
+        }
+      case _StickerAction.link:
+        await _openSetLink();
       case _StickerAction.replace:
         final draft = await Navigator.of(context).push<NewStickerDraft>(
           MaterialPageRoute(
@@ -1254,7 +1379,10 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                     children: [
                       GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => setState(() => _editMode = !_editMode),
+                        onTap: () => setState(() {
+                          _editMode = !_editMode;
+                          if (!_editMode) _selectedFileIds.clear();
+                        }),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: Text(
@@ -1336,7 +1464,7 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                           sliver: StickerReorderGridSliver(
                             itemCount: _stickers.length,
                             reorderableCount: _stickers.length,
-                            dragEnabled: !_working,
+                            dragEnabled: !_working && !_editMode,
                             scrollController: _scrollController,
                             viewportKey: _gridViewportKey,
                             onReorder: _reorder,
@@ -1344,6 +1472,8 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                                 _stickerCell(context, index, colors),
                           ),
                         ),
+                        if (_editMode)
+                          SliverToBoxAdapter(child: _selectionToolbar(colors)),
                       ],
                     ],
                   ),
@@ -1362,15 +1492,23 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
     final emoji = raw.str('emoji') ?? sticker.emoji;
     final mask = _type == OwnedStickerSetType.mask ? _placementFrom(raw) : null;
     final rtl = Directionality.of(context) == TextDirection.rtl;
+    final selected = _selectedFileIds.contains(_stickerFileId(index));
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _working ? null : () => _stickerActions(index),
+      onTap: _working
+          ? null
+          : _editMode
+          ? () => _toggleCellSelection(index)
+          : () => _stickerActions(index),
       child: Stack(
         fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: StickerPreview(item: sticker, cornerRadius: 10),
           ),
+          // Edit-mode pick state: a dimmed scrim plus the check mark, so a
+          // picked cell reads at a glance before the batch delete.
+          if (_editMode && selected) Positioned.fill(child: _pickScrim(colors)),
           if (emoji.isNotEmpty)
             Positioned(
               left: rtl ? null : 3,
@@ -1413,7 +1551,23 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
             right: 2,
             bottom: 2,
             child: _editMode
-                ? _deleteBadge(index)
+                ? (selected
+                      ? Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: AppTheme.brand,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: AppIcon(
+                              HeroAppIcons.check,
+                              size: 13,
+                              color: Color(0xFFFFFFFF),
+                            ),
+                          ),
+                        )
+                      : _deleteBadge(index))
                 : Container(
                     width: 22,
                     height: 22,
@@ -1430,6 +1584,58 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
                     ),
                   ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pickScrim(AppColors colors) => ColoredBox(
+    key: const ValueKey('studio-cell-scrim'),
+    color: AppTheme.brand.withValues(alpha: 0.25),
+  );
+
+  /// The batch-delete bar shown below the grid while picking cells.
+  Widget _selectionToolbar(AppColors colors) {
+    final count = _selectedFileIds.length;
+    return Padding(
+      key: const ValueKey('studio-selection-toolbar'),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              count == 0
+                  ? AppStringKeys.stickerStudioSelectHint.l10n(context)
+                  : context.l10n.t(AppStringKeys.stickerStudioSelectedCount, {
+                      'value1': count,
+                    }),
+              style: TextStyle(fontSize: 13, color: colors.textSecondary),
+            ),
+          ),
+          if (count > 0)
+            GestureDetector(
+              key: const ValueKey('studio-selection-delete'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _working ? null : _removeSelected,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.tagRed,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                child: Text(
+                  AppStringKeys.stickerStudioRemove.l10n(context),
+                  style: const TextStyle(
+                    color: Color(0xFFFFFFFF),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1455,6 +1661,10 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
     ),
     child: Column(
       children: [
+        if (_setLink.isNotEmpty) ...[
+          _linkRow(colors),
+          Divider(height: 1, indent: 48, color: colors.divider),
+        ],
         _manageRow(
           colors,
           AppStringKeys.stickerStudioRename.l10n(context),
@@ -1499,6 +1709,51 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
       ],
     ),
   );
+
+  /// The shareable set link row: the t.me address, tap to copy, and the
+  /// open-link affordance — Telegram iOS shows the link on the manage screen
+  /// and offers it in the per-sticker sheet.
+  Widget _linkRow(AppColors colors) {
+    final link = _setLink;
+    return GestureDetector(
+      key: const ValueKey('studio-set-link-row'),
+      behavior: HitTestBehavior.opaque,
+      onTap: _working ? null : _copySetLink,
+      child: SizedBox(
+        height: 51,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              AppIcon(HeroAppIcons.link, size: 20, color: colors.textPrimary),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Text(
+                  link.replaceFirst('https://', ''),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 15, color: colors.linkBlue),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _working ? null : _openSetLink,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: AppIcon(
+                    HeroAppIcons.arrowTopRight,
+                    size: 18,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _manageRow(
     AppColors colors,
@@ -1969,11 +2224,21 @@ enum _StickerAction {
   keywords,
   mask,
   thumbnail,
+  thumbnailFromFile,
+  link,
   replace,
   up,
   down,
   remove,
 }
+
+/// The raw TDLib sticker's `format` (@type) → the studio's format enum.
+StickerFileFormat? _formatFromTd(String? type) => switch (type) {
+  'stickerFormatWebp' => StickerFileFormat.webp,
+  'stickerFormatTgs' => StickerFileFormat.tgs,
+  'stickerFormatWebm' => StickerFileFormat.webm,
+  _ => null,
+};
 
 Widget _section(AppColors colors, {required List<Widget> children}) =>
     StickerStudioSection(children: children);

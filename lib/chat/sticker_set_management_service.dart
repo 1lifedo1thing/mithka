@@ -474,6 +474,22 @@ class StickerSetManagementService {
     });
   }
 
+  /// Uses one of the set's own sticker files as the set thumbnail. Telegram
+  /// iOS picks a thumbnail from the grid; TDLib accepts an inputFileId that
+  /// references a file it already knows, so no re-upload is needed. The
+  /// sticker's own format is the thumbnail's format.
+  Future<void> setThumbnailFromFileId(
+    String name,
+    int stickerFileId,
+    StickerFileFormat format,
+  ) async => _query({
+    '@type': 'setStickerSetThumbnail',
+    'user_id': await myId(),
+    'name': name,
+    'thumbnail': {'@type': 'inputFileId', 'id': stickerFileId},
+    'format': {'@type': format.tdType},
+  });
+
   Future<void> setCustomEmojiThumbnail(String name, int customEmojiId) =>
       _query({
         '@type': 'setCustomEmojiStickerSetThumbnail',
