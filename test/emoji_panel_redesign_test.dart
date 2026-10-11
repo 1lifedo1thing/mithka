@@ -4,9 +4,12 @@
 //  Covers the iOS-style standard emoji pane: recents persistence + ordering +
 //  cap, custom-emoji recents gated on Premium, the scroll-following category
 //  strip (tap to jump, scroll to highlight), adaptive column count, and the
-//  long-press preview.
+//  long-press preview contract: raise on hold, insert on release, dismiss on
+//  cancel, survive movement, clean up on mid-hold disposal, and never raise
+//  for a mouse pointer.
 //
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -437,6 +440,112 @@ void main() {
       await tester.pumpAndSettle();
       expect(inserted, [firstEmoji]);
       expect(find.byKey(const ValueKey('emojiLongPressPreview')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a cancelled long-press dismisses the preview and inserts '
+        'nothing', (tester) async {
+      final inserted = <String>[];
+      await _pumpPane(tester, inserted: inserted);
+      final firstEmoji = EmojiCatalog.categories.first.emojis.first;
+      final target = find.text(firstEmoji).first;
+
+      final gesture = await tester.startGesture(tester.getCenter(target));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(
+        find.byKey(const ValueKey('emojiLongPressPreview')),
+        findsOneWidget,
+      );
+
+      // The system steals the pointer (modal dialog, route change): the
+      // recognizer gets a cancel, not an up.
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('emojiLongPressPreview')), findsNothing);
+      expect(inserted, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('moving the pointer during a hold keeps the preview and '
+        'inserts once on release', (tester) async {
+      final inserted = <String>[];
+      await _pumpPane(tester, inserted: inserted);
+      final firstEmoji = EmojiCatalog.categories.first.emojis.first;
+      final target = find.text(firstEmoji).first;
+
+      final gesture = await tester.startGesture(tester.getCenter(target));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(
+        find.byKey(const ValueKey('emojiLongPressPreview')),
+        findsOneWidget,
+      );
+
+      // The finger drifts 200px while held; the long-press is already
+      // accepted, so the drag must neither cancel the hold nor drop the
+      // preview.
+      await gesture.moveBy(const Offset(0, -200));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('emojiLongPressPreview')),
+        findsOneWidget,
+      );
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('emojiLongPressPreview')), findsNothing);
+      // Exactly one insert for the whole hold, no double-fire from the drag.
+      expect(inserted, [firstEmoji]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('disposing the panel mid-hold leaves no exception and no '
+        'insert', (tester) async {
+      final inserted = <String>[];
+      await _pumpPane(tester, inserted: inserted);
+      final firstEmoji = EmojiCatalog.categories.first.emojis.first;
+      final target = find.text(firstEmoji).first;
+
+      final gesture = await tester.startGesture(tester.getCenter(target));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(
+        find.byKey(const ValueKey('emojiLongPressPreview')),
+        findsOneWidget,
+      );
+
+      // The panel closes while the finger is still down (composer toggle,
+      // chat switch): the overlay entry must go with it.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('emojiLongPressPreview')), findsNothing);
+      expect(inserted, isEmpty);
+      expect(tester.takeException(), isNull);
+
+      // The held pointer is never released; leaving it down would make the
+      // next event hit-test against a disposed gesture.
+      await gesture.cancel();
+    });
+
+    testWidgets('a mouse-pointer hold never raises the preview', (
+      tester,
+    ) async {
+      final inserted = <String>[];
+      await _pumpPane(tester, inserted: inserted);
+      final firstEmoji = EmojiCatalog.categories.first.emojis.first;
+      final target = find.text(firstEmoji).first;
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(target),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      // Desktop clicks never raise the bubble.
+      expect(find.byKey(const ValueKey('emojiLongPressPreview')), findsNothing);
+
+      // A mouse long-press has no preview to end, so it inserts nothing; the
+      // tap path is the only mouse route to an insert.
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(inserted, isEmpty);
       expect(tester.takeException(), isNull);
     });
 
