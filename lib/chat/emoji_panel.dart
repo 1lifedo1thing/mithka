@@ -6,7 +6,8 @@
 //  adaptive grid, and a bottom strip of category icons that follows the scroll
 //  position — scroll the grid and the highlighted category updates, tap a
 //  category and the grid jumps to it. Long-pressing a cell raises an iOS-style
-//  enlarged preview bubble and suppresses the insert.
+//  enlarged preview bubble; releasing the held emoji inserts it (exactly once),
+//  and a cancelled long-press dismisses the preview without inserting.
 //
 //  The surrounding chrome (pack tab strip, search field, desktop popovers)
 //  stays in chat_input_bar.dart; this file owns only the pane and its cells so
@@ -435,8 +436,10 @@ class _EmojiCategoryStripState extends State<_EmojiCategoryStrip> {
 ///
 /// Tap inserts with a subtle iOS-style pop (skipped under reduce-motion) and a
 /// selection haptic on touch platforms; long-press raises an enlarged preview
-/// bubble and suppresses the insert, matching iOS. Mouse pointers skip the
-/// preview so a desktop click never raises a bubble.
+/// bubble, and releasing the held emoji inserts it (exactly once) — a
+/// cancelled long-press dismisses the preview and inserts nothing, matching
+/// iOS. Mouse pointers skip the preview so a desktop click never raises a
+/// bubble.
 class EmojiPanelCell extends StatefulWidget {
   const EmojiPanelCell({
     super.key,
@@ -618,38 +621,35 @@ class _EmojiPreviewCard extends StatelessWidget {
     final c = context.colors;
     return Semantics(
       label: label,
-      child: Material(
-        type: MaterialType.transparency,
-        child: Container(
-          key: const ValueKey('emojiLongPressPreview'),
-          width: _EmojiPanelCellState._previewWidth,
-          height: _EmojiPanelCellState._previewHeight,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: c.card,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: c.divider, width: 0.7),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: customItem != null
-              ? CustomEmojiView(
-                  id: customItem!.customEmojiId,
-                  size: size * 1.9,
-                  color: c.textPrimary,
-                )
-              : Text(
-                  emoji,
-                  maxLines: 1,
-                  textScaler: TextScaler.noScaling,
-                  style: TextStyle(fontSize: size * 1.9),
-                ),
+      child: Container(
+        key: const ValueKey('emojiLongPressPreview'),
+        width: _EmojiPanelCellState._previewWidth,
+        height: _EmojiPanelCellState._previewHeight,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: c.card,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: c.divider, width: 0.7),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
+        child: customItem != null
+            ? CustomEmojiView(
+                id: customItem!.customEmojiId,
+                size: size * 1.9,
+                color: c.textPrimary,
+              )
+            : Text(
+                emoji,
+                maxLines: 1,
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(fontSize: size * 1.9),
+              ),
       ),
     );
   }

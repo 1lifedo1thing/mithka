@@ -7435,7 +7435,7 @@ class _ChatInputBarState extends State<ChatInputBar>
         height: 30,
         decoration: BoxDecoration(
           color: selected ? c.card : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           boxShadow: selected
               ? [
                   BoxShadow(
