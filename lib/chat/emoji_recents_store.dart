@@ -14,6 +14,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -96,6 +97,15 @@ class EmojiRecentsStore extends ChangeNotifier {
   bool _loaded = false;
   Future<void>? _loading;
 
+  /// The persisted history has not been read back yet, so a write now would
+  /// replace it with the partial in-flight list. The load merges everything
+  /// and writes once at the end.
+  bool _persistAfterLoad = false;
+
+  /// A clear issued while the load was in flight must survive the persisted
+  /// history arriving.
+  bool _clearedWhileLoading = false;
+
   /// Ranked recents, best first. Custom emoji are included regardless of the
   /// caller's entitlement; the panel filters what it can render.
   List<EmojiRecentEntry> get entries => _entries;
@@ -115,15 +125,52 @@ class EmojiRecentsStore extends ChangeNotifier {
   }
 
   Future<void> _load() async {
+    List<EmojiRecentEntry>? persisted;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _entries = decodeEntries(prefs.getString(storageKey));
+      persisted = decodeEntries(prefs.getString(storageKey));
     } catch (_) {
+      persisted = const [];
+    }
+    // A clear that raced the read wins: the user meant to drop the history,
+    // not to resurrect it.
+    if (_clearedWhileLoading) {
       _entries = const [];
+    } else {
+      // Mutations made while the read was in flight are the newer half of
+      // the truth; merge them with the history instead of replacing either.
+      _entries = _mergeEntries(persisted, _entries);
     }
     _loaded = true;
     _loading = null;
+    final persist = _persistAfterLoad;
+    _persistAfterLoad = false;
+    _clearedWhileLoading = false;
     notifyListeners();
+    if (persist) _persist();
+  }
+
+  /// Newest-wins merge of a late read with entries already in memory: counts
+  /// add, the fresher `lastUsed` wins, and ranking re-sorts the union.
+  static List<EmojiRecentEntry> _mergeEntries(
+    List<EmojiRecentEntry> older,
+    List<EmojiRecentEntry> newer,
+  ) {
+    if (older.isEmpty) return newer;
+    if (newer.isEmpty) return older;
+    final byIdentity = <String, EmojiRecentEntry>{
+      for (final entry in older) entry.identity: entry,
+    };
+    for (final entry in newer) {
+      final existing = byIdentity[entry.identity];
+      byIdentity[entry.identity] = existing == null
+          ? entry
+          : entry.copyWith(
+              count: existing.count + entry.count,
+              lastUsed: math.max(existing.lastUsed, entry.lastUsed),
+            );
+    }
+    return rankEntries(byIdentity.values.toList());
   }
 
   /// Records a standard Unicode emoji insert.
@@ -156,13 +203,28 @@ class EmojiRecentsStore extends ChangeNotifier {
     }
     _entries = rankEntries(next);
     notifyListeners();
-    _persist();
+    _schedulePersist();
   }
 
   void clear() {
-    if (_entries.isEmpty) return;
+    // While the load is in flight the visible list can be empty even though
+    // persisted history is about to arrive; the clear must still register.
+    if (_entries.isEmpty && _loading == null) return;
     _entries = const [];
     notifyListeners();
+    _schedulePersist();
+  }
+
+  /// Defers the disk write until the load settles: overwriting the persisted
+  /// history with the partial in-flight list is exactly the data loss the
+  /// race produced before.
+  void _schedulePersist() {
+    if (_loading != null) {
+      _persistAfterLoad = true;
+      // An empty visible list here is a clear, not a fresh install.
+      if (_entries.isEmpty) _clearedWhileLoading = true;
+      return;
+    }
     _persist();
   }
 

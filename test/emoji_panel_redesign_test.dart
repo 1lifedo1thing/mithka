@@ -170,6 +170,75 @@ void main() {
       ]);
     });
 
+    test(
+      'a record during an in-flight load keeps the persisted history',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'emojiPanelRecents.v1': '[{"e":"😀","c":3,"t":9}]',
+        });
+        EmojiRecentsStore.shared.resetForTesting();
+        final store = EmojiRecentsStore.shared;
+        final loading = store.loadIfNeeded();
+        // The user taps before the persisted history arrives: the insert must
+        // neither erase the history in memory nor overwrite it on disk.
+        store.record('😎');
+        await loading;
+        await Future<void>.delayed(Duration.zero);
+        final entries = store.entries;
+        expect(entries.map((e) => e.emoji).toSet(), {'😀', '😎'});
+        final grinned = entries.singleWhere((e) => e.emoji == '😀');
+        final sunglasses = entries.singleWhere((e) => e.emoji == '😎');
+        expect(grinned.count, 3);
+        expect(sunglasses.count, 1);
+        // The merged state is what lands on disk.
+        final prefs = await SharedPreferences.getInstance();
+        final stored = decodeEntries(
+          prefs.getString(EmojiRecentsStore.storageKey),
+        );
+        expect(stored.map((e) => e.emoji).toSet(), {'😀', '😎'});
+        expect(
+          stored.singleWhere((e) => e.emoji == '😀').count,
+          3,
+          reason: 'the persisted history was overwritten by the partial list',
+        );
+      },
+    );
+
+    test(
+      'a clear during an in-flight load drops the arriving history',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'emojiPanelRecents.v1': '[{"e":"😀","c":3,"t":9}]',
+        });
+        EmojiRecentsStore.shared.resetForTesting();
+        final store = EmojiRecentsStore.shared;
+        final loading = store.loadIfNeeded();
+        store.clear();
+        await loading;
+        await Future<void>.delayed(Duration.zero);
+        expect(store.entries, isEmpty);
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getString(EmojiRecentsStore.storageKey),
+          isNull,
+          reason: 'the cleared state was overwritten by the arriving history',
+        );
+      },
+    );
+
+    test('a re-pick during an in-flight load merges counts', () async {
+      SharedPreferences.setMockInitialValues({
+        'emojiPanelRecents.v1': '[{"e":"😀","c":3,"t":9}]',
+      });
+      EmojiRecentsStore.shared.resetForTesting();
+      final store = EmojiRecentsStore.shared;
+      final loading = store.loadIfNeeded();
+      store.record('😀');
+      await loading;
+      expect(store.entries.single.emoji, '😀');
+      expect(store.entries.single.count, 4);
+    });
+
     test('decodeEntries ignores malformed and duplicate records', () {
       final encoded = encodeEntries([
         const EmojiRecentEntry(emoji: '😀', count: 2, lastUsed: 5),
