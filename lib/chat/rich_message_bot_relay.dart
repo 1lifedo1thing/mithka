@@ -253,18 +253,7 @@ class RichMessageBotRelay {
       );
     }
 
-    final botChat = await tdClient.query({
-      '@type': 'createPrivateChat',
-      'user_id': bot.id,
-      'force': true,
-    });
-    final fromChatId = botChat.int64('id');
-    if (fromChatId == null) {
-      throw const RichMessageRelayException(
-        'missing_bot_chat',
-        'The relay bot chat could not be opened.',
-      );
-    }
+    final fromChatId = await _openBotChat(tdClient, bot.id);
 
     onProgress?.call(
       RichMessageRelayProgress(
@@ -378,18 +367,7 @@ class RichMessageBotRelay {
         mediaCount: 1,
       ),
     );
-    final botChat = await tdClient.query({
-      '@type': 'createPrivateChat',
-      'user_id': bot.id,
-      'force': true,
-    });
-    final fromChatId = botChat.int64('id');
-    if (fromChatId == null) {
-      throw const RichMessageRelayException(
-        'missing_bot_chat',
-        'The relay bot chat could not be opened.',
-      );
-    }
+    final fromChatId = await _openBotChat(tdClient, bot.id);
     final sourceMessageId = await _waitForTdMessage(
       tdClient,
       fromChatId,
@@ -443,18 +421,7 @@ class RichMessageBotRelay {
       if (error.code != 'bot_not_started') rethrow;
     }
 
-    final botChat = await tdClient.query({
-      '@type': 'createPrivateChat',
-      'user_id': botUserId,
-      'force': true,
-    });
-    final botChatId = botChat.int64('id');
-    if (botChatId == null) {
-      throw const RichMessageRelayException(
-        'missing_bot_chat',
-        'The relay bot chat could not be opened.',
-      );
-    }
+    final botChatId = await _openBotChat(tdClient, botUserId);
     await tdClient.query({
       '@type': 'sendMessage',
       'chat_id': botChatId,
@@ -653,6 +620,23 @@ class RichMessageBotRelay {
     }
     final response = await client.query(request);
     parseRelayForwardResponse(response);
+  }
+
+  /// The id of this account's private chat with the relay bot.
+  Future<int> _openBotChat(TdClient tdClient, int botUserId) async {
+    final botChat = await tdClient.query({
+      '@type': 'createPrivateChat',
+      'user_id': botUserId,
+      'force': true,
+    });
+    final chatId = botChat.int64('id');
+    if (chatId == null) {
+      throw const RichMessageRelayException(
+        'missing_bot_chat',
+        'The relay bot chat could not be opened.',
+      );
+    }
+    return chatId;
   }
 
   Uri _endpoint(String token, String method) {

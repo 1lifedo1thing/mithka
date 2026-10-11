@@ -1206,6 +1206,30 @@ const _restrictDurations = <int>[0, 3600, 86400, 604800, 2592000];
 /// Bottom sheet for per-user restrictions: pick a duration and toggle the
 /// permissions the member keeps. Returns the raw payload for
 /// chatMemberStatusRestricted, or null when cancelled.
+/// The member permissions a restriction can toggle, keyed by their
+/// `chatPermissions` field, with the label each one is shown under.
+const chatPermissionLabelKeys = <String, String>{
+  'can_send_basic_messages':
+      AppStringKeys.groupManagementPermissionSendMessages,
+  'can_send_photos': AppStringKeys.groupManagementPermissionSendPhotos,
+  'can_send_videos': AppStringKeys.groupManagementPermissionSendVideos,
+  'can_send_documents': AppStringKeys.groupManagementPermissionSendFiles,
+  'can_send_voice_notes': AppStringKeys.groupManagementPermissionSendVoice,
+  'can_send_video_notes':
+      AppStringKeys.groupManagementPermissionSendVideoMessages,
+  'can_send_audios': AppStringKeys.groupManagementPermissionSendMusic,
+  'can_send_polls': AppStringKeys.groupManagementPermissionSendPolls,
+  'can_send_other_messages':
+      AppStringKeys.groupManagementPermissionSendStickersAndGifs,
+  'can_add_link_previews': AppStringKeys.groupManagementPermissionLinkPreviews,
+  'can_react_to_messages': AppStringKeys.groupManagementPermissionSendReactions,
+  'can_edit_tag': AppStringKeys.groupManagementPermissionEditOwnTag,
+  'can_invite_users': AppStringKeys.addMembersInviteMembersTitle,
+  'can_pin_messages': AppStringKeys.groupManagementPermissionPinMessages,
+  'can_change_info': AppStringKeys.groupManagementPermissionEditGroupInfo,
+  'can_create_topics': AppStringKeys.groupManagementPermissionCreateTopics,
+};
+
 class _MemberRestrictSheet extends StatefulWidget {
   const _MemberRestrictSheet({required this.name, required this.status});
 
@@ -1217,30 +1241,6 @@ class _MemberRestrictSheet extends StatefulWidget {
 }
 
 class _MemberRestrictSheetState extends State<_MemberRestrictSheet> {
-  static const _permKeys = <String, String>{
-    'can_send_basic_messages':
-        AppStringKeys.groupManagementPermissionSendMessages,
-    'can_send_photos': AppStringKeys.groupManagementPermissionSendPhotos,
-    'can_send_videos': AppStringKeys.groupManagementPermissionSendVideos,
-    'can_send_documents': AppStringKeys.groupManagementPermissionSendFiles,
-    'can_send_voice_notes': AppStringKeys.groupManagementPermissionSendVoice,
-    'can_send_video_notes':
-        AppStringKeys.groupManagementPermissionSendVideoMessages,
-    'can_send_audios': AppStringKeys.groupManagementPermissionSendMusic,
-    'can_send_polls': AppStringKeys.groupManagementPermissionSendPolls,
-    'can_send_other_messages':
-        AppStringKeys.groupManagementPermissionSendStickersAndGifs,
-    'can_add_link_previews':
-        AppStringKeys.groupManagementPermissionLinkPreviews,
-    'can_react_to_messages':
-        AppStringKeys.groupManagementPermissionSendReactions,
-    'can_edit_tag': AppStringKeys.groupManagementPermissionEditOwnTag,
-    'can_invite_users': AppStringKeys.addMembersInviteMembersTitle,
-    'can_pin_messages': AppStringKeys.groupManagementPermissionPinMessages,
-    'can_change_info': AppStringKeys.groupManagementPermissionEditGroupInfo,
-    'can_create_topics': AppStringKeys.groupManagementPermissionCreateTopics,
-  };
-
   late int _duration;
   late Map<String, bool> _permissions;
   late bool _isMember;
@@ -1261,7 +1261,8 @@ class _MemberRestrictSheetState extends State<_MemberRestrictSheet> {
         : until - DateTime.now().millisecondsSinceEpoch ~/ 1000;
     _duration = _restrictDurations.contains(remaining) ? remaining : 0;
     _permissions = {
-      for (final key in _permKeys.keys) key: existing?.boolean(key) ?? false,
+      for (final key in chatPermissionLabelKeys.keys)
+        key: existing?.boolean(key) ?? false,
     };
   }
 
@@ -1331,7 +1332,7 @@ class _MemberRestrictSheetState extends State<_MemberRestrictSheet> {
             style: TextStyle(fontSize: 13, color: c.textTertiary),
           ),
           const SizedBox(height: 6),
-          for (final entry in _permKeys.entries)
+          for (final entry in chatPermissionLabelKeys.entries)
             SettingsSwitchRow(
               title: entry.value,
               value: _permissions[entry.key] ?? false,

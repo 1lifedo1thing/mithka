@@ -3643,6 +3643,31 @@ abstract final class TDParse {
     );
   }
 
+  static MediaAttachment _messageStickerMedia(
+    Map<String, dynamic> sticker, {
+    bool isAnimatedEmoji = false,
+  }) {
+    final thumb = fileRef(sticker.obj('thumbnail')?.obj('file'));
+    final stickerFile = fileRef(sticker.obj('sticker'));
+    final fmt = sticker.obj('format')?.type;
+    final isTgs = fmt == 'stickerFormatTgs';
+    final isWebm = fmt == 'stickerFormatWebm';
+    return MediaAttachment(
+      // Static (.webp) stickers are shown directly via `image`, so point at
+      // the full sticker file — the thumbnail is low-res and looks blurry
+      // scaled up. Animated (.tgs) / video (.webm) keep the thumb only as a
+      // placeholder behind the rendered animation.
+      image: (isTgs || isWebm) ? thumb : (stickerFile ?? thumb),
+      width: sticker.integer('width'),
+      height: sticker.integer('height'),
+      animated: isTgs ? stickerFile : null,
+      videoSticker: isWebm ? stickerFile : null,
+      stickerFileId: stickerFile?.id,
+      stickerSetId: sticker.int64('set_id'),
+      isAnimatedEmoji: isAnimatedEmoji,
+    );
+  }
+
   static MediaAttachment _paidMediaAttachment(Map<String, dynamic> media) {
     return switch (media.type) {
       'paidMediaPhoto' => photoAttachment(media.obj('photo')),
@@ -3675,48 +3700,13 @@ abstract final class TDParse {
         }
       case 'messageSticker':
         final sticker = content.obj('sticker');
-        if (sticker != null) {
-          final thumb = fileRef(sticker.obj('thumbnail')?.obj('file'));
-          final stickerFile = fileRef(sticker.obj('sticker'));
-          final w = sticker.integer('width'), h = sticker.integer('height');
-          final fmt = sticker.obj('format')?.type;
-          final isTgs = fmt == 'stickerFormatTgs';
-          final isWebm = fmt == 'stickerFormatWebm';
-          return MediaAttachment(
-            // Static (.webp) stickers are shown directly via `image`, so point at
-            // the full sticker file — the thumbnail is low-res and looks blurry
-            // scaled up. Animated (.tgs) / video (.webm) keep the thumb only as a
-            // placeholder behind the rendered animation.
-            image: (isTgs || isWebm) ? thumb : (stickerFile ?? thumb),
-            width: w,
-            height: h,
-            animated: isTgs ? stickerFile : null,
-            videoSticker: isWebm ? stickerFile : null,
-            stickerFileId: stickerFile?.id,
-            stickerSetId: sticker.int64('set_id'),
-          );
-        }
+        if (sticker != null) return _messageStickerMedia(sticker);
       case 'messageAnimatedEmoji':
         // A lone emoji → TDLib sends its animated sticker (usually .tgs); render
         // it like a sticker so single emoji animate instead of "[动画表情]" text.
         final sticker = content.obj('animated_emoji')?.obj('sticker');
         if (sticker != null) {
-          final thumb = fileRef(sticker.obj('thumbnail')?.obj('file'));
-          final stickerFile = fileRef(sticker.obj('sticker'));
-          final w = sticker.integer('width'), h = sticker.integer('height');
-          final fmt = sticker.obj('format')?.type;
-          final isTgs = fmt == 'stickerFormatTgs';
-          final isWebm = fmt == 'stickerFormatWebm';
-          return MediaAttachment(
-            image: (isTgs || isWebm) ? thumb : (stickerFile ?? thumb),
-            width: w,
-            height: h,
-            animated: isTgs ? stickerFile : null,
-            videoSticker: isWebm ? stickerFile : null,
-            stickerFileId: stickerFile?.id,
-            stickerSetId: sticker.int64('set_id'),
-            isAnimatedEmoji: true,
-          );
+          return _messageStickerMedia(sticker, isAnimatedEmoji: true);
         }
       case 'messageAnimation':
         final anim = content.obj('animation');

@@ -1181,19 +1181,30 @@ class TdClient {
       setActive(newSlot);
       _persist();
       return newSlot;
-    } catch (error) {
-      await _closeAndForgetSlot(newSlot);
-      await _deleteDirectoryIfPresent(dbDir);
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      await _deleteDirectoryIfPresent(dbDir);
-      if (kDebugMode) unawaited(_persistDebugLiveClientIds());
-      if (_isRequestAborted(error)) {
-        throw const TdSessionRestoreException(
-          'Saved account session is invalid or has been revoked',
-        );
-      }
-      rethrow;
+    } catch (error, stackTrace) {
+      await _abandonNewSessionSlot(newSlot, dbDir, error, stackTrace);
     }
+  }
+
+  /// Tears down a session slot whose setup failed with [error], then rethrows
+  /// it; an aborted request means the saved session was rejected.
+  Future<Never> _abandonNewSessionSlot(
+    int slot,
+    Directory dbDir,
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    await _closeAndForgetSlot(slot);
+    await _deleteDirectoryIfPresent(dbDir);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await _deleteDirectoryIfPresent(dbDir);
+    if (kDebugMode) unawaited(_persistDebugLiveClientIds());
+    if (_isRequestAborted(error)) {
+      throw const TdSessionRestoreException(
+        'Saved account session is invalid or has been revoked',
+      );
+    }
+    Error.throwWithStackTrace(error, stackTrace);
   }
 
   Future<TdFreshSessionResult> _createFreshSessionWithQrLogin({
@@ -1233,18 +1244,8 @@ class TdClient {
       setActive(newSlot);
       _persist();
       return TdFreshSessionResult(slot: newSlot, needsInteractiveLogin: !ready);
-    } catch (error) {
-      await _closeAndForgetSlot(newSlot);
-      await _deleteDirectoryIfPresent(dbDir);
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      await _deleteDirectoryIfPresent(dbDir);
-      if (kDebugMode) unawaited(_persistDebugLiveClientIds());
-      if (_isRequestAborted(error)) {
-        throw const TdSessionRestoreException(
-          'Saved account session is invalid or has been revoked',
-        );
-      }
-      rethrow;
+    } catch (error, stackTrace) {
+      await _abandonNewSessionSlot(newSlot, dbDir, error, stackTrace);
     }
   }
 

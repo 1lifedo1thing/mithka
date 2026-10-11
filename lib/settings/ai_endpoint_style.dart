@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../tdlib/json_helpers.dart' show jsonInt;
+
 bool isDeepSeekAiModel(String model) =>
     RegExp(r'(^|[/_.-])deepseek([/_.-]|$)').hasMatch(model.toLowerCase());
 
@@ -1182,8 +1184,8 @@ void _mergeStreamingToolCalls(
     if (rawCall is! Map) continue;
     final function = rawCall['function'];
     final index =
-        _intValue(rawCall['index']) ??
-        (function is Map ? _intValue(function['index']) : null) ??
+        jsonInt(rawCall['index']) ??
+        (function is Map ? jsonInt(function['index']) : null) ??
         position;
     target
         .putIfAbsent(index, _StreamingToolCall.new)
@@ -1198,13 +1200,7 @@ String _mergeStable(String current, String next) {
 }
 
 int? _eventIndex(Map<dynamic, dynamic> event, String key) =>
-    _intValue(event[key]);
-
-int? _intValue(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  return value is String ? int.tryParse(value) : null;
-}
+    jsonInt(event[key]);
 
 Map<String, Object?> _jsonMap(Map<dynamic, dynamic> value) => {
   for (final entry in value.entries) '${entry.key}': _jsonValue(entry.value),

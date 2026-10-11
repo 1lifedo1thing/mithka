@@ -1897,7 +1897,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       final server = _streamServer;
       final shouldCancelOnStop =
           !_openedCompletedLocalFile && _progress?.isCompleted != true;
-      var restoreAccepted = false;
+      final handlers = _fVideoPictureInPictureSessionHandlers(
+        c,
+        id: handoffId,
+        server: server,
+        shouldCancelOnStop: shouldCancelOnStop,
+      );
       started = await FVideoPictureInPicture.start(
         id: handoffId,
         uri: uri,
@@ -1914,33 +1919,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         onEntered: _handleFVideoPictureInPictureEntered,
         onRestored: _handleFVideoPictureInPictureRestored,
         onActionRequested: _handleFVideoPictureInPictureAction,
-        onRestoreRequested: (position) async {
-          final accepted = await _restoreFVideoPictureInPicture(position);
-          restoreAccepted = accepted;
-          return accepted;
-        },
-        onStop: (finalPosition) async {
-          if (_usesAndroidFVideoPictureInPicture && mounted) {
-            _systemPiPPrepared = false;
-            _systemPiPId = null;
-            _systemPiPActive = false;
-            _streamServer = null;
-            try {
-              await c.pause();
-            } catch (_) {}
-            if (mounted) _close();
-          }
-          if (finalPosition != null) {
-            await _storeResumePosition(finalPosition, c.value.duration);
-          }
-          if (FVideoPictureInPicture.usesActivePlayer(handoffId)) {
-            await c.dispose();
-          }
-          await server?.close();
-          if (shouldCancelOnStop && !restoreAccepted) {
-            await _cancelIncompleteDownload();
-          }
-        },
+        onRestoreRequested: handlers.onRestoreRequested,
+        onStop: handlers.onStop,
       );
       if (!mounted) {
         await FVideoPictureInPicture.cancelPrepared(id);
@@ -1975,6 +1955,51 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     if (!_systemPiPUsesActivePlayer) unawaited(c.pause());
     _close();
     return true;
+  }
+
+  /// Restore and stop handlers for one system PiP session, shared by the
+  /// prepared and the on-demand start. A stop after an accepted restore keeps
+  /// the download, which the restored in-app player goes on using.
+  ({
+    FVideoPictureInPictureRestoreRequested onRestoreRequested,
+    FVideoPictureInPictureStopped onStop,
+  })
+  _fVideoPictureInPictureSessionHandlers(
+    VideoPlayerController c, {
+    required String id,
+    required TdVideoStreamServer? server,
+    required bool shouldCancelOnStop,
+  }) {
+    var restoreAccepted = false;
+    return (
+      onRestoreRequested: (position) async {
+        final accepted = await _restoreFVideoPictureInPicture(position);
+        restoreAccepted = accepted;
+        return accepted;
+      },
+      onStop: (finalPosition) async {
+        if (_usesAndroidFVideoPictureInPicture && mounted) {
+          _systemPiPPrepared = false;
+          _systemPiPId = null;
+          _systemPiPActive = false;
+          _streamServer = null;
+          try {
+            await c.pause();
+          } catch (_) {}
+          if (mounted) _close();
+        }
+        if (finalPosition != null) {
+          await _storeResumePosition(finalPosition, c.value.duration);
+        }
+        if (FVideoPictureInPicture.usesActivePlayer(id)) {
+          await c.dispose();
+        }
+        await server?.close();
+        if (shouldCancelOnStop && !restoreAccepted) {
+          await _cancelIncompleteDownload();
+        }
+      },
+    );
   }
 
   Uri? _systemPiPSourceUri() {
@@ -2015,7 +2040,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     _systemPiPId = id;
     final sourceRect = _systemPictureInPictureSourceRect(c);
     if (sourceRect != null) _lastSystemPiPSourceRect = sourceRect;
-    var restoreAccepted = false;
+    final handlers = _fVideoPictureInPictureSessionHandlers(
+      c,
+      id: id,
+      server: server,
+      shouldCancelOnStop: shouldCancelOnStop,
+    );
     final prepared = await FVideoPictureInPicture.prepare(
       id: id,
       uri: uri,
@@ -2032,33 +2062,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       onEntered: _handleFVideoPictureInPictureEntered,
       onRestored: _handleFVideoPictureInPictureRestored,
       onActionRequested: _handleFVideoPictureInPictureAction,
-      onRestoreRequested: (position) async {
-        final accepted = await _restoreFVideoPictureInPicture(position);
-        restoreAccepted = accepted;
-        return accepted;
-      },
-      onStop: (finalPosition) async {
-        if (_usesAndroidFVideoPictureInPicture && mounted) {
-          _systemPiPPrepared = false;
-          _systemPiPId = null;
-          _systemPiPActive = false;
-          _streamServer = null;
-          try {
-            await c.pause();
-          } catch (_) {}
-          if (mounted) _close();
-        }
-        if (finalPosition != null) {
-          await _storeResumePosition(finalPosition, c.value.duration);
-        }
-        if (FVideoPictureInPicture.usesActivePlayer(id)) {
-          await c.dispose();
-        }
-        await server?.close();
-        if (shouldCancelOnStop && !restoreAccepted) {
-          await _cancelIncompleteDownload();
-        }
-      },
+      onRestoreRequested: handlers.onRestoreRequested,
+      onStop: handlers.onStop,
     );
     if (!mounted || _systemPiPId != id) {
       if (prepared) unawaited(FVideoPictureInPicture.cancelPrepared(id));

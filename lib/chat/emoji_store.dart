@@ -74,29 +74,32 @@ class EmojiStore extends ChangeNotifier {
         'sticker_type': {'@type': 'stickerTypeCustomEmoji'},
       });
       final infos = sets.objects('sets') ?? const <Map<String, dynamic>>[];
-      final result = <CustomEmojiPack>[];
-      for (final info in infos) {
-        final setId = info.int64('id');
-        final title = info.str('title');
-        if (setId == null || title == null) continue;
-        try {
-          final set = await TdClient.shared.query({
-            '@type': 'getStickerSet',
-            'set_id': setId,
-          });
-          final emoji = parseStickers(set.objects('stickers'));
-          if (emoji.isEmpty) continue;
-          result.add(
-            CustomEmojiPack(
+      // Fetched concurrently: one getStickerSet round trip per installed pack
+      // otherwise delays the picker by the sum of them all.
+      final packs = await Future.wait(
+        infos.map((info) async {
+          final setId = info.int64('id');
+          final title = info.str('title');
+          if (setId == null || title == null) return null;
+          try {
+            final set = await TdClient.shared.query({
+              '@type': 'getStickerSet',
+              'set_id': setId,
+            });
+            final emoji = parseStickers(set.objects('stickers'));
+            if (emoji.isEmpty) return null;
+            return CustomEmojiPack(
               id: setId,
               title: title,
               cover: _coverRef(info) ?? emoji.first.thumb,
               emoji: emoji,
-            ),
-          );
-        } catch (_) {}
-      }
-      customPacks = result;
+            );
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      customPacks = packs.nonNulls.toList();
       notifyListeners();
     } catch (_) {
       _loaded = false; // allow retry on next loadIfNeeded()

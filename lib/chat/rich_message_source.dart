@@ -572,44 +572,11 @@ Map<String, dynamic> formattedTextToRichText(
   int sourceOffset = 0,
 }) {
   if (text.isEmpty) return {'@type': 'richTextPlain', 'text': ''};
-  final endOffset = sourceOffset + text.length;
-  final valid = entities.where((entity) {
-    final offset = entity['offset'];
-    final length = entity['length'];
-    return offset is int &&
-        length is int &&
-        length > 0 &&
-        offset < endOffset &&
-        offset + length > sourceOffset;
-  }).toList();
-  final cuts = <int>{sourceOffset, endOffset};
-  for (final entity in valid) {
-    final start = (entity['offset'] as int).clamp(sourceOffset, endOffset);
-    final end = ((entity['offset'] as int) + (entity['length'] as int)).clamp(
-      sourceOffset,
-      endOffset,
-    );
-    cuts
-      ..add(start)
-      ..add(end);
-  }
-  final ordered = cuts.toList()..sort();
   final nodes = <Map<String, dynamic>>[];
-  for (var index = 0; index < ordered.length - 1; index++) {
-    final start = ordered[index];
-    final end = ordered[index + 1];
-    if (start >= end) continue;
-    final active =
-        valid.where((entity) {
-            final entityStart = entity['offset'] as int;
-            final entityEnd = entityStart + (entity['length'] as int);
-            return entityStart < end && entityEnd > start;
-          }).toList()
-          ..sort((a, b) => _entityPriority(a).compareTo(_entityPriority(b)));
-    final value = text.substring(start - sourceOffset, end - sourceOffset);
-    Map<String, dynamic> node = {'@type': 'richTextPlain', 'text': value};
-    for (final entity in active.reversed) {
-      node = _wrapRichTextNode(node, value, entity);
+  for (final run in _entityRuns(text, entities, sourceOffset)) {
+    Map<String, dynamic> node = {'@type': 'richTextPlain', 'text': run.text};
+    for (final entity in run.active.reversed) {
+      node = _wrapRichTextNode(node, run.text, entity);
     }
     nodes.add(node);
   }
@@ -880,6 +847,25 @@ String _inlineHtml(
   int sourceOffset,
 ) {
   if (text.isEmpty) return '';
+  final buffer = StringBuffer();
+  for (final run in _entityRuns(text, entities, sourceOffset)) {
+    var segment = _escapeHtml(run.text);
+    for (final entity in run.active.reversed) {
+      segment = _wrapEntity(segment, entity);
+    }
+    buffer.write(segment);
+  }
+  return buffer.toString();
+}
+
+/// Splits [text], which starts at [sourceOffset] in the message, at every
+/// entity boundary. Each run carries the entities covering it, lowest
+/// [_entityPriority] first.
+Iterable<({String text, List<Map<String, dynamic>> active})> _entityRuns(
+  String text,
+  List<Map<String, dynamic>> entities,
+  int sourceOffset,
+) sync* {
   final endOffset = sourceOffset + text.length;
   final valid = entities.where((entity) {
     final offset = entity['offset'];
@@ -902,7 +888,6 @@ String _inlineHtml(
       ..add(end);
   }
   final ordered = cuts.toList()..sort();
-  final buffer = StringBuffer();
   for (var index = 0; index < ordered.length - 1; index++) {
     final start = ordered[index];
     final end = ordered[index + 1];
@@ -914,15 +899,11 @@ String _inlineHtml(
             return entityStart < end && entityEnd > start;
           }).toList()
           ..sort((a, b) => _entityPriority(a).compareTo(_entityPriority(b)));
-    var segment = _escapeHtml(
-      text.substring(start - sourceOffset, end - sourceOffset),
+    yield (
+      text: text.substring(start - sourceOffset, end - sourceOffset),
+      active: active,
     );
-    for (final entity in active.reversed) {
-      segment = _wrapEntity(segment, entity);
-    }
-    buffer.write(segment);
   }
-  return buffer.toString();
 }
 
 int _entityPriority(Map<String, dynamic> entity) {

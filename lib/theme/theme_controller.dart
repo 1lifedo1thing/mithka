@@ -976,24 +976,7 @@ class ThemeController extends ChangeNotifier {
     // the retired opt-out preference so an older `false` value cannot keep a
     // selected theme from applying to the interface.
     _prefs.remove(_scopedThemeKey(_legacyUseTelegramThemeForUiKey));
-    _customMessageBubbleBackground = _decodeCustomMessageBubbleBackground(
-      _scopedThemeKey(_customMessageBubbleBackgroundKey),
-    );
-    _messageBubblesEnabled =
-        _prefs.getBool(_scopedThemeKey(_messageBubblesEnabledKey)) ?? true;
-    _messageBubbleBackground = MessageBubbleBackground.fromStorage(
-      _prefs.getString(_scopedThemeKey(_messageBubbleBackgroundKey)),
-    );
-    _messageBubbleApplicationScope = MessageBubbleApplicationScope.values
-        .firstWhere(
-          (scope) =>
-              scope.name ==
-              _prefs.getString(
-                _scopedThemeKey(_messageBubbleApplicationScopeKey),
-              ),
-          orElse: () => MessageBubbleApplicationScope.allMessages,
-        );
-    _repairMissingCustomMessageBubble();
+    _loadScopedMessageBubbleSettings();
     if (hasCloudTheme &&
         (_prefs.containsKey(_preCloudThemeModeKey) ||
             _prefs.containsKey(_preCloudThemeBrandKey))) {
@@ -1596,6 +1579,27 @@ class ThemeController extends ChangeNotifier {
     }
   }
 
+  void _loadScopedMessageBubbleSettings() {
+    _customMessageBubbleBackground = _decodeCustomMessageBubbleBackground(
+      _scopedThemeKey(_customMessageBubbleBackgroundKey),
+    );
+    _messageBubblesEnabled =
+        _prefs.getBool(_scopedThemeKey(_messageBubblesEnabledKey)) ?? true;
+    _messageBubbleBackground = MessageBubbleBackground.fromStorage(
+      _prefs.getString(_scopedThemeKey(_messageBubbleBackgroundKey)),
+    );
+    _messageBubbleApplicationScope = MessageBubbleApplicationScope.values
+        .firstWhere(
+          (scope) =>
+              scope.name ==
+              _prefs.getString(
+                _scopedThemeKey(_messageBubbleApplicationScopeKey),
+              ),
+          orElse: () => MessageBubbleApplicationScope.allMessages,
+        );
+    _repairMissingCustomMessageBubble();
+  }
+
   void _repairMissingCustomMessageBubble() {
     final custom = _customMessageBubbleBackground;
     if (custom == null) {
@@ -1626,24 +1630,7 @@ class ThemeController extends ChangeNotifier {
     _lightCloudTheme = _decodeTheme(_scopedThemeKey(_lightCloudThemeKey));
     _darkCloudTheme = _decodeTheme(_scopedThemeKey(_darkCloudThemeKey));
     _prefs.remove(_scopedThemeKey(_legacyUseTelegramThemeForUiKey));
-    _customMessageBubbleBackground = _decodeCustomMessageBubbleBackground(
-      _scopedThemeKey(_customMessageBubbleBackgroundKey),
-    );
-    _messageBubblesEnabled =
-        _prefs.getBool(_scopedThemeKey(_messageBubblesEnabledKey)) ?? true;
-    _messageBubbleBackground = MessageBubbleBackground.fromStorage(
-      _prefs.getString(_scopedThemeKey(_messageBubbleBackgroundKey)),
-    );
-    _messageBubbleApplicationScope = MessageBubbleApplicationScope.values
-        .firstWhere(
-          (scope) =>
-              scope.name ==
-              _prefs.getString(
-                _scopedThemeKey(_messageBubbleApplicationScopeKey),
-              ),
-          orElse: () => MessageBubbleApplicationScope.allMessages,
-        );
-    _repairMissingCustomMessageBubble();
+    _loadScopedMessageBubbleSettings();
     AppTheme.applyBrand(_brandColor);
   }
 

@@ -24,6 +24,7 @@ import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
 import '../theme/date_text.dart';
 import '../theme/theme_controller.dart';
+import 'forum_topic_fields.dart';
 import 'topic_chat_view.dart';
 
 typedef ForumTopicBrowserQuery =
@@ -155,7 +156,7 @@ class _ForumTopicBrowserViewState extends State<ForumTopicBrowserView> {
         final info = topic.obj('info') ?? topic;
         final last = topic.obj('last_message');
         final message = last == null ? null : TDParse.message(last);
-        final id = _topicId(topic, info);
+        final id = forumTopicId(topic, info);
         if (id == null || id == 0) continue;
         topics.add(
           _ForumTopicEntry(
@@ -165,12 +166,12 @@ class _ForumTopicBrowserViewState extends State<ForumTopicBrowserView> {
                 topic.str('name') ??
                 AppStrings.t(AppStringKeys.topicChatTopicTitle),
             lastMessage: message,
-            unreadCount: _topicUnreadCount(topic, info),
+            unreadCount: forumTopicUnreadCount(topic, info),
             isMuted:
                 (topic.obj('notification_settings')?.integer('mute_for') ?? 0) >
                 0,
-            iconCustomEmojiId: _topicCustomEmojiId(topic, info),
-            iconColor: _topicIconColor(topic, info),
+            iconCustomEmojiId: forumTopicCustomEmojiId(topic, info),
+            iconColor: forumTopicIconColor(topic, info),
             order: topic.int64('order') ?? 0,
           ),
         );
@@ -190,47 +191,6 @@ class _ForumTopicBrowserViewState extends State<ForumTopicBrowserView> {
         setState(() => _topicsByChat[chat.id] = const []);
       }
     }
-  }
-
-  int _topicUnreadCount(Map<String, dynamic> topic, Map<String, dynamic> info) {
-    final count =
-        topic.integer('unread_count') ??
-        info.integer('unread_count') ??
-        topic.integer('unread_mention_count') ??
-        info.integer('unread_mention_count') ??
-        0;
-    return count < 0 ? 0 : count;
-  }
-
-  int? _topicId(Map<String, dynamic> topic, Map<String, dynamic> info) {
-    return info.integer('forum_topic_id') ??
-        topic.integer('forum_topic_id') ??
-        info.int64('message_thread_id') ??
-        topic.int64('message_thread_id');
-  }
-
-  int _topicCustomEmojiId(
-    Map<String, dynamic> topic,
-    Map<String, dynamic> info,
-  ) {
-    return info.obj('icon')?.int64('custom_emoji_id') ??
-        topic.obj('icon')?.int64('custom_emoji_id') ??
-        info.int64('icon_custom_emoji_id') ??
-        topic.int64('icon_custom_emoji_id') ??
-        0;
-  }
-
-  Color? _topicIconColor(
-    Map<String, dynamic> topic,
-    Map<String, dynamic> info,
-  ) {
-    final raw =
-        info.obj('icon')?.integer('color') ??
-        topic.obj('icon')?.integer('color') ??
-        info.integer('icon_color') ??
-        topic.integer('icon_color');
-    if (raw == null || raw == 0) return null;
-    return Color(0xFF000000 | (raw & 0xFFFFFF));
   }
 
   void _resolveTopicSenders(List<_ForumTopicEntry> topics) {

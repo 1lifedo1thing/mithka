@@ -21,6 +21,7 @@ import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart'; // PhotoAvatar + TDImage
 import '../theme/app_theme.dart';
+import 'call_elapsed_text.dart';
 import 'call_manager.dart';
 
 class CallScreen extends StatefulWidget {
@@ -403,7 +404,7 @@ class _CallScreenState extends State<CallScreen> {
       CallPhase.ending => AppStrings.t(AppStringKeys.callEnded),
     };
     if (text == null) {
-      return _CallDuration(startedAt: call.startedAt, style: style);
+      return CallElapsedText(startedAt: call.startedAt, style: style);
     }
     return Text(text, style: style);
   }
@@ -586,63 +587,6 @@ class _CallScreenState extends State<CallScreen> {
         const SizedBox(height: 30),
         buildHangUp(compact: false),
       ],
-    );
-  }
-}
-
-/// Elapsed call time, ticking on its own. Keeping the timer here instead of on
-/// the screen state is what stops the 1 Hz tick from rebuilding the video
-/// platform views, the scrim and every control once a second for the whole call.
-class _CallDuration extends StatefulWidget {
-  const _CallDuration({required this.startedAt, required this.style});
-
-  final DateTime? startedAt;
-  final TextStyle style;
-
-  @override
-  State<_CallDuration> createState() => _CallDurationState();
-}
-
-class _CallDurationState extends State<_CallDuration> {
-  Timer? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _syncTicker();
-  }
-
-  @override
-  void didUpdateWidget(covariant _CallDuration oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.startedAt != widget.startedAt) _syncTicker();
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  void _syncTicker() {
-    _ticker?.cancel();
-    _ticker = null;
-    if (widget.startedAt == null) return;
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final startedAt = widget.startedAt;
-    final elapsed = startedAt == null
-        ? 0
-        : DateTime.now().difference(startedAt).inSeconds;
-    final s = elapsed < 0 ? 0 : elapsed;
-    return Text(
-      '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}',
-      style: widget.style,
     );
   }
 }

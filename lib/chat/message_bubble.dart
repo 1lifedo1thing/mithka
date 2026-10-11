@@ -20,6 +20,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 
+import '../call/call_elapsed_text.dart';
 import '../components/app_icons.dart';
 import '../components/document_file_icon.dart';
 import '../components/photo_avatar.dart';
@@ -1520,7 +1521,7 @@ class _MessageBubbleState extends State<MessageBubble>
                           ),
                         ),
                         child: Text(
-                          _formatCallDuration(duration),
+                          formatCallDuration(duration),
                           style: const TextStyle(
                             fontSize: 11,
                             color: Colors.white,
@@ -3901,7 +3902,7 @@ class _MessageBubbleState extends State<MessageBubble>
     bool missed = false;
     if (connected) {
       label = AppStrings.t(AppStringKeys.messageBubbleCallDuration, {
-        'value1': _formatCallDuration(message.callDuration),
+        'value1': formatCallDuration(message.callDuration),
       });
     } else {
       switch (message.callDiscardReason) {
@@ -3947,15 +3948,6 @@ class _MessageBubbleState extends State<MessageBubble>
         ),
       ),
     );
-  }
-
-  String _formatCallDuration(int seconds) {
-    final s = seconds < 0 ? 0 : seconds;
-    String two(int v) => v.toString().padLeft(2, '0');
-    final h = s ~/ 3600;
-    final m = (s % 3600) ~/ 60;
-    final sec = s % 60;
-    return h > 0 ? '${two(h)}:${two(m)}:${two(sec)}' : '${two(m)}:${two(sec)}';
   }
 
   /// 转发 attribution shown above forwarded content: `转发自 …`.
