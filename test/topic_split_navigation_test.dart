@@ -29,7 +29,7 @@ void main() {
   var hasForumTabs = false;
   var failTopics = false;
   final requests = <Map<String, dynamic>>[];
-  setUpAll(() {
+  setUpAll(() async {
     updates = StreamController<Map<String, dynamic>>.broadcast();
     TdClient.shared.configureProxy(
       TdClientProxyTransport(
@@ -45,6 +45,14 @@ void main() {
         updates: updates.stream,
       ),
     );
+    // Real TDLib reports the connection state as soon as a client exists and
+    // then only when it changes; the chat-list header reads that report rather
+    // than asking, so the fake has to say it once here.
+    updates.add({
+      '@type': 'updateConnectionState',
+      'state': {'@type': 'connectionStateReady'},
+    });
+    await Future<void>.delayed(Duration.zero);
   });
   setUp(() {
     hasForumTabs = false;
@@ -694,7 +702,6 @@ Map<String, dynamic> _response(
     },
   },
   'getSupergroup' => _supergroup(hasForumTabs),
-  'getConnectionState' => {'@type': 'connectionStateReady'},
   'getForumTopics' => {
     '@type': 'forumTopics',
     'topics': [

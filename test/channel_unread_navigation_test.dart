@@ -32,7 +32,7 @@ double? _savedReadingTop;
 void main() {
   late StreamController<Map<String, dynamic>> updates;
   final requests = <Map<String, dynamic>>[];
-  setUpAll(() {
+  setUpAll(() async {
     updates = StreamController<Map<String, dynamic>>.broadcast();
     TdClient.shared.configureProxy(
       TdClientProxyTransport(
@@ -45,6 +45,14 @@ void main() {
         updates: updates.stream,
       ),
     );
+    // Real TDLib reports the connection state as soon as a client exists and
+    // then only when it changes; the chat-list header reads that report rather
+    // than asking, so the fake has to say it once here.
+    updates.add({
+      '@type': 'updateConnectionState',
+      'state': {'@type': 'connectionStateReady'},
+    });
+    await Future<void>.delayed(Duration.zero);
   });
   setUp(() {
     _singleUnread = false;
@@ -507,8 +515,6 @@ Map<String, dynamic> _response(Map<String, dynamic> request) {
         'is_channel': !_tallGroupUnread,
         'status': {'@type': 'chatMemberStatusMember'},
       };
-    case 'getConnectionState':
-      return {'@type': 'connectionStateReady'};
     case 'getChatHistory':
       final from = request['from_message_id'] as int;
       if (_pagedUnread && from != 0) {
