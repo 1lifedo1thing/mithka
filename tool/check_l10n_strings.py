@@ -99,6 +99,7 @@ CONTENT_RENDER_EXPRESSIONS = {
 # the unread-summary short-reply corpus and the AI editor's native language
 # names (each language written in itself, like the appLocale* keys).
 RAW_SCRIPT_EXEMPT_PATHS = {
+    "lib/chat/pangu_url_tlds.dart",
     "lib/chat/telegram_ai_editor_view.dart",
     "lib/chat/unread_chat_summary_service.dart",
 }

@@ -1829,6 +1829,7 @@ class ThemeController extends ChangeNotifier {
 
   /// Shows the metadata row in the photo and video viewers' menus.
   bool get mediaMetadataEnabled => _mediaMetadataEnabled;
+
   /// Whether received messages render with 盘古之白: a display-only space
   /// between CJK and half-width text. The stored message never changes.
   bool get panguOnReceive => _panguOnReceive;
@@ -2735,6 +2736,9 @@ class ThemeController extends ChangeNotifier {
     if (_mediaMetadataEnabled == value) return;
     _mediaMetadataEnabled = value;
     _prefs.setBool(_mediaMetadataEnabledKey, value);
+    notifyListeners();
+  }
+
   set panguOnReceive(bool value) {
     if (_panguOnReceive == value) return;
     _panguOnReceive = value;

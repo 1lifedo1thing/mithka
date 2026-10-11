@@ -173,6 +173,21 @@ void main() {
     expect(outgoingText(sent()), caption);
   });
 
+  // TDLib's is_common_tld match is case-insensitive: the pinned tdjson
+  // reports `例子.COM/中文abc` as one Url (offset 0, length 12), so an
+  // uppercase TLD must protect the whole link, not just its ASCII suffix.
+  test('a caption keeps an uppercase-TLD unicode host in one piece', () async {
+    final vm = model(send: true);
+    const caption = '例子.COM/中文abc';
+    await vm.sendAttachments(const [
+      OutgoingAttachment(
+        path: '/synthetic/a.jpg',
+        kind: OutgoingAttachmentKind.photo,
+      ),
+    ], caption: caption);
+    expect(outgoingText(sent()), caption);
+  });
+
   test('an ordinary sentence keeps its spacing and nothing more', () async {
     final vm = model(send: true)..setDraft('今天用iPhone很开心.明天继续');
     expect(await vm.send(), isTrue);

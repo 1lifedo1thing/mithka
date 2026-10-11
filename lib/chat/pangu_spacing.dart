@@ -565,6 +565,10 @@ class PanguSpacing {
         return false;
       }
     }
+    // TDLib's is_common_tld is case-insensitive for the ASCII TLDs
+    // (`例子.COM/中文abc` is one Url, offset 0, probed against the pinned
+    // tdjson), while a punycode TLD keeps its lowercase `xn--` prefix
+    // (`例子.XN--ABC` is not a link; `例子.xn--abc` is).
     final tld = labels.last;
     if (tld.startsWith('xn--')) {
       // fix_url: the punycode TLD as a whole must exceed five bytes and hold
@@ -580,7 +584,7 @@ class PanguSpacing {
       );
     }
     if (tld.contains('-') || tld.contains('_')) return false;
-    return panguCommonTlds.contains(tld);
+    return panguCommonTlds.contains(tld.toLowerCase());
   }
 
   /// Sentence punctuation TDLib hands back from the end of a link.

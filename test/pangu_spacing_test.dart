@@ -498,6 +498,17 @@ void main() {
     test('a bare host with unicode labels is one token', () {
       expect(spans('例子.com/中文abc'), ['例子.com/中文abc']);
       expect(spans('例子a.com/文本abc'), ['例子a.com/文本abc']);
+      // is_common_tld is case-insensitive (probed against the pinned tdjson:
+      // `例子.COM/中文abc` is one Url, offset 0, length 12).
+      expect(spans('例子.COM/中文abc'), ['例子.COM/中文abc']);
+      expect(spans('Example.CoM/文本abc'), ['Example.CoM/文本abc']);
+    });
+
+    test('an uppercase punycode prefix is not a TLD, lowercase is', () {
+      // `xn--` keeps its lowercase spelling in TDLib: `例子.XN--ABC` yields
+      // no entity, `例子.xn--abc` is one Url (probed).
+      expect(spans('例子.XN--ABC'), isEmpty);
+      expect(spans('例子.xn--abc'), ['例子.xn--abc']);
     });
 
     test('CJK text directly before a host joins it, as TDLib reads it', () {
