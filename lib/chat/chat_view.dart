@@ -32,6 +32,7 @@ import '../auth/telegram_country_names.dart';
 import '../call/call_manager.dart';
 import '../channels/topic_list_actions.dart';
 import '../channels/topic_list_host.dart';
+import '../channels/topic_list_row.dart';
 import '../channels/topic_navigation.dart';
 import '../chats/search_token_views.dart';
 import '../communities/community_models.dart';
@@ -102,6 +103,7 @@ import 'chat_wallpaper.dart';
 import 'checklist_composer_view.dart';
 import 'custom_emoji.dart';
 import 'emoji_store.dart';
+import 'forum_topic_transcript.dart';
 import 'forward_markdown.dart';
 import 'forward_options.dart';
 import 'group_remark_controller.dart';
@@ -4324,6 +4326,71 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
+  /// The section marker above the first message of a topic run, in the forum
+  /// transcript that mixes every topic together.
+  ///
+  /// Telegram iOS renders this as a tappable header naming the topic the
+  /// messages below belong to, so the list stays attributable without opening
+  /// each topic. Tapping it opens that topic's own transcript, matching the
+  /// topic list's navigation.
+  Widget _topicSectionHeader(int topicId) {
+    final c = context.colors;
+    final display = _topicSectionDisplay(topicId);
+    final plate = servicePlateBackground(c);
+    final foreground = servicePlateForeground(plate);
+    return Padding(
+      key: ValueKey('forum-topic-section-$topicId'),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Center(
+        child: GestureDetector(
+          key: ValueKey('forum-topic-section-tap-$topicId'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openTopicTranscript(topicId),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: plate,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (display.isGeneral && _vm.peerTitle.isNotEmpty)
+                  PhotoAvatar(
+                    title: _vm.peerTitle,
+                    photo: _vm.peerPhoto,
+                    size: 16,
+                    square: true,
+                    allowAnimation: false,
+                  )
+                else
+                  TopicIconSurface(
+                    size: 16,
+                    iconCustomEmojiId: display.iconCustomEmojiId,
+                    tint: display.iconColor == 0
+                        ? foreground
+                        : Color(0xFF000000 | (display.iconColor & 0xFFFFFF)),
+                  ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    display.name,
+                    key: ValueKey('forum-topic-section-label-$topicId'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyle.caption(foreground),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                AppIcon(HeroAppIcons.chevronRight, size: 11, color: foreground),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _blockedMessagePlaceholder(
     BuildContext context,
     _TranscriptEntry entry,
@@ -4785,6 +4852,86 @@ class _ChatViewState extends State<ChatView> {
     if (index < 0 || index >= messages.length) return false;
     if (index == 0) return true;
     return messages[index].date - messages[index - 1].date > _separatorGap;
+  }
+
+  /// Whether the transcript mixes every topic into one list: a forum opened
+  /// without a specific topic. Telegram iOS sections that list by topic so
+  /// each message stays attributable; a single-topic transcript is already
+  /// scoped and needs no sections. Bot-topic chats are deliberately out: they
+  /// are not forums, and their unscoped transcript is an ordinary bot chat
+  /// whose messages would all fall back to General.
+  bool get _showsForumTopicSections =>
+      _vm.isForum && !_vm.isForumTopicTranscript;
+
+  /// The topic [message] belongs to. TDLib omits `topic_id` on General
+  /// messages, which is why the fallback is the General topic id and not null.
+  int _topicSectionId(ChatMessage message) =>
+      message.forumTopicId ?? generalForumTopicId;
+
+  /// The display data for a topic section header.
+  ///
+  /// The loaded topic page carries the name and icon; a topic outside that
+  /// page still resolves through the shared index, which live topic traffic
+  /// keeps current. Both can miss for a topic this session never listed, so
+  /// the label falls back to a generic one — the icon and the tap target keep
+  /// the message attributable either way.
+  ({String name, int iconCustomEmojiId, int iconColor, bool isGeneral})
+  _topicSectionDisplay(int topicId) {
+    final isGeneral = topicId == generalForumTopicId;
+    final topic = _topicById(topicId);
+    if (topic != null) {
+      return (
+        name: topic.name,
+        iconCustomEmojiId: topic.iconCustomEmojiId,
+        iconColor: topic.iconColor,
+        isGeneral: isGeneral,
+      );
+    }
+    final indexed = ForumTopicIndex.shared.entryFor(
+      _sessionKey.accountSlot,
+      widget.chatId,
+      topicId,
+    );
+    if (indexed != null) {
+      return (
+        name: indexed.name,
+        iconCustomEmojiId: indexed.iconCustomEmojiId,
+        iconColor: indexed.iconColor,
+        isGeneral: isGeneral,
+      );
+    }
+    return (
+      name: isGeneral
+          ? AppStringKeys.generalTitle.l10n(context)
+          : AppStringKeys.topicChatTopicTitle.l10n(context),
+      iconCustomEmojiId: 0,
+      iconColor: 0,
+      isGeneral: isGeneral,
+    );
+  }
+
+  /// Whether a topic section header belongs above [index].
+  ///
+  /// Mirrors Telegram iOS: the header marks the boundary where the topic
+  /// changes, so a run of same-topic messages carries exactly one header.
+  /// Service messages never carry one — a join/pin event is not attributable
+  /// to a topic — and they do not break a run either: the comparison skips
+  /// back over them, because TDLib reports them without a topic and a naive
+  /// read would file them under General and repeat the header after them.
+  /// The very first attributable message starts a section, since nothing
+  /// above it can carry one.
+  bool _needsTopicSeparator(int index, {List<ChatMessage>? messages}) {
+    if (!_showsForumTopicSections) return false;
+    messages ??= _vm.messages;
+    if (index < 0 || index >= messages.length) return false;
+    final message = messages[index];
+    if (message.isService) return false;
+    var previous = index - 1;
+    while (previous >= 0 && messages[previous].isService) {
+      previous--;
+    }
+    if (previous < 0) return true;
+    return _topicSectionId(message) != _topicSectionId(messages[previous]);
   }
 
   bool _isRepeatTail(int index) {
@@ -9595,6 +9742,8 @@ class _ChatViewState extends State<ChatView> {
             KeyedSubtree(key: _unreadKey, child: _unreadDivider()),
           if (_needsSeparator(messageIndex, messages: messages))
             TimeSeparator(unix: message.date),
+          if (_needsTopicSeparator(messageIndex, messages: messages))
+            _topicSectionHeader(_topicSectionId(message)),
           // Anchor the message itself: unread/date separators can disappear
           // between visits and must not shift the restored reading position.
           TranscriptEntryBoundary(
@@ -10022,7 +10171,8 @@ class _ChatViewState extends State<ChatView> {
         startsNewSection: (index) =>
             _startsTranscriptPivotSection(messages, index) ||
             _needsSeparator(index, messages: messages) ||
-            _needsUnreadDivider(index, messages: messages),
+            _needsUnreadDivider(index, messages: messages) ||
+            _needsTopicSeparator(index, messages: messages),
       );
       run.addAll(messages.sublist(i + 1, j));
       entries.add(_TranscriptEntry(run, i));
@@ -10045,7 +10195,8 @@ class _ChatViewState extends State<ChatView> {
           startsNewSection: (index) =>
               _startsTranscriptPivotSection(messages, index) ||
               _needsSeparator(index, messages: messages) ||
-              _needsUnreadDivider(index, messages: messages),
+              _needsUnreadDivider(index, messages: messages) ||
+              _needsTopicSeparator(index, messages: messages),
         );
         run.addAll(messages.sublist(i + 1, j));
         entries.add(_TranscriptEntry(run, i));
@@ -10064,7 +10215,8 @@ class _ChatViewState extends State<ChatView> {
         final next = messages[j];
         if (_startsTranscriptPivotSection(messages, j) ||
             _needsSeparator(j, messages: messages) ||
-            _needsUnreadDivider(j, messages: messages)) {
+            _needsUnreadDivider(j, messages: messages) ||
+            _needsTopicSeparator(j, messages: messages)) {
           break;
         }
         if (!areMessagesInSameMediaAlbum(group.last, next)) break;
