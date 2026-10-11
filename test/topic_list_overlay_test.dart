@@ -32,6 +32,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   late StreamController<Map<String, dynamic>> updates;
   final requests = <Map<String, dynamic>>[];
+  // When set, the next getChat blocks until completed: the in-flight
+  // metadata state a fresh pane opens with.
+  Completer<void>? gateGetChat;
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -44,6 +47,11 @@ void main() {
         accountSlot: 0,
         query: (request) async {
           requests.add(request);
+          if (request['@type'] == 'getChat' && gateGetChat != null) {
+            final gate = gateGetChat;
+            gateGetChat = null;
+            await gate!.future;
+          }
           return _response(request);
         },
         send: (_) async {},
@@ -56,6 +64,7 @@ void main() {
     clearChatMemoryCaches();
     ForumTopicIndex.shared.clear();
     topicCount = 12;
+    gateGetChat = null;
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
@@ -188,6 +197,107 @@ void main() {
       expect(tester.widget<ChatView>(find.byType(ChatView)).forumTopicId, 95);
       // The shell owns the pane, so swapping the transcript underneath
       // keeps the overlay's scroll exactly where the user left it.
+      expect(overlayList().position.pixels, before);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('topic switch keeps the overlay while its getChat is in flight', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      topicCount = 12;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      // The first visit fills the shared topic index.
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
+
+      // A topic transcript opens a fresh pane whose own getChat is still on
+      // the wire; its view model cannot know isForum yet. The shared index
+      // keeps the list overlaid so no in-pane rail flashes during the wait.
+      final gate = Completer<void>();
+      gateGetChat = gate;
+      await tester.tap(find.byKey(const ValueKey('topic-navigation-item-78')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        find.byKey(const ValueKey('topic-list-back')),
+        findsOneWidget,
+        reason: 'the overlay owns the topic list, not an in-pane rail',
+      );
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+        reason: 'exactly one topic list exists while metadata loads',
+      );
+
+      gate.complete();
+      await _settle(tester);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('overlay re-show keeps the scroll position', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      topicCount = 40;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      ScrollableState overlayList() => tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('topic-navigation-left')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+
+      await tester.drag(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        const Offset(0, -600),
+      );
+      await _settle(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('topic-navigation-item-95')),
+      );
+      await _settle(tester);
+      final before = overlayList().position.pixels;
+      expect(before, greaterThan(300));
+
+      // Dismiss to the chat list, then bring the overlay back: the host owns
+      // the offset, so the list re-enters where the user left it.
+      await tester.tap(find.byKey(const ValueKey('topic-list-back')));
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
+      await tester.pump();
+      await _settle(tester);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
       expect(overlayList().position.pixels, before);
       expect(tester.takeException(), isNull);
       await _disposeShell(tester);

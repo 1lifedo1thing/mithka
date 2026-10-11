@@ -102,6 +102,30 @@ class TopicListHost extends ChangeNotifier {
   /// The user dismissed the overlay to reach the chat list underneath.
   bool get listHidden => _listHidden;
 
+  /// Overlay scroll offsets by chat, so a pane swap or an overlay re-show
+  /// re-enters the list where the user left it instead of at the top. The
+  /// overlay pane is torn down whenever the shell drops it, so its scroll
+  /// position has to live here — the host outlives every pane.
+  final Map<int, double> _topicListOffsets = {};
+
+  /// The recorded overlay scroll offset for [chatId]; 0 when none.
+  double topicListOffset(int chatId) => _topicListOffsets[chatId] ?? 0;
+
+  /// Records the overlay's current scroll offset for [chatId].
+  void storeTopicListOffset(int chatId, double offset) {
+    if (_topicListOffsets[chatId] == offset) return;
+    _topicListOffsets[chatId] = offset;
+  }
+
+  /// Bounds the retained offsets: a session visits a handful of forums.
+  static const _topicListOffsetCapacity = 16;
+
+  void _evictTopicListOffsets() {
+    while (_topicListOffsets.length > _topicListOffsetCapacity) {
+      _topicListOffsets.remove(_topicListOffsets.keys.first);
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -112,7 +136,10 @@ class TopicListHost extends ChangeNotifier {
     if (_disposed) return;
     final fresh = _attachment?.chatId != attachment.chatId;
     _attachment = attachment;
-    if (fresh) _listHidden = false;
+    if (fresh) {
+      _listHidden = false;
+      _evictTopicListOffsets();
+    }
     notifyListeners();
   }
 
@@ -139,15 +166,54 @@ class TopicListHost extends ChangeNotifier {
 }
 
 /// The chat-list overlay: the group's topic list with live unread counters.
-class ForumTopicListPane extends StatelessWidget {
+class ForumTopicListPane extends StatefulWidget {
   const ForumTopicListPane({super.key, required this.host});
 
   final TopicListHost host;
 
   @override
+  State<ForumTopicListPane> createState() => _ForumTopicListPaneState();
+}
+
+class _ForumTopicListPaneState extends State<ForumTopicListPane> {
+  late final ScrollController _scroll = ScrollController();
+  var _restoredOffset = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_storeOffset);
+  }
+
+  void _storeOffset() {
+    final chatId = widget.host.attachment?.chatId;
+    if (chatId == null || !_scroll.hasClients) return;
+    widget.host.storeTopicListOffset(chatId, _scroll.position.pixels);
+  }
+
+  @override
+  void dispose() {
+    _storeOffset();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final attachment = host.attachment;
+    final attachment = widget.host.attachment;
     if (attachment == null) return const SizedBox.shrink();
+    if (!_restoredOffset) {
+      // Restore once the list has attached; a later frame cannot be 0-frame.
+      _restoredOffset = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scroll.hasClients) return;
+        _scroll.jumpTo(
+          widget.host
+              .topicListOffset(attachment.chatId)
+              .clamp(0.0, _scroll.position.maxScrollExtent),
+        );
+      });
+    }
     final c = context.colors;
     return Container(
       key: const ValueKey('topic-navigation-left'),
@@ -167,7 +233,7 @@ class ForumTopicListPane extends StatelessWidget {
                   GestureDetector(
                     key: const ValueKey('topic-list-back'),
                     behavior: HitTestBehavior.opaque,
-                    onTap: host.hideList,
+                    onTap: widget.host.hideList,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm,
@@ -239,6 +305,7 @@ class ForumTopicListPane extends StatelessWidget {
           ),
           Expanded(
             child: ListView.builder(
+              controller: _scroll,
               padding: const EdgeInsets.symmetric(vertical: 6),
               itemCount: attachment.topics.length + 1,
               itemBuilder: (context, index) {
@@ -246,7 +313,7 @@ class ForumTopicListPane extends StatelessWidget {
                 return TopicListRowView(
                   topic: topic,
                   selected: topic?.id == attachment.selectedTopicId,
-                  onTap: () => host.select(topic?.id),
+                  onTap: () => widget.host.select(topic?.id),
                   onLongPress: topic == null || attachment.onTopicMenu == null
                       ? null
                       : () => attachment.onTopicMenu!(topic, null),

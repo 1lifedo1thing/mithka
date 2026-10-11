@@ -36,6 +36,12 @@ void main() {
   final requests = <Map<String, dynamic>>[];
   var adminRights = false;
   var canCreateTopics = false;
+  var adminCanDeleteMessages = false;
+  // Per-topic message count the fake getForumTopicHistory returns, for the
+  // creator deletion probe (limit 11 messages, none from another user).
+  final topicMessageCounts = <int, int>{};
+  // Per-topic flag: does the fake history contain another user's message?
+  final topicHasOtherSender = <int, bool>{};
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -48,7 +54,14 @@ void main() {
         accountSlot: 0,
         query: (request) async {
           requests.add(request);
-          return _response(request, adminRights, canCreateTopics);
+          return _response(
+            request,
+            adminRights,
+            canCreateTopics,
+            adminCanDeleteMessages,
+            topicMessageCounts,
+            topicHasOtherSender,
+          );
         },
         send: (_) async {},
         updates: updates.stream,
@@ -61,6 +74,9 @@ void main() {
     ForumTopicIndex.shared.clear();
     adminRights = false;
     canCreateTopics = false;
+    adminCanDeleteMessages = false;
+    topicMessageCounts.clear();
+    topicHasOtherSender.clear();
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
@@ -113,6 +129,197 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('manage-only admin: another user topic offers no delete', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      adminRights = true;
+      adminCanDeleteMessages = false;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      // can_manage_topics grants pin/edit, never deletion; topic 79 was
+      // created by another user, so the creator carve-out cannot apply.
+      await tester.longPress(
+        find.byKey(const ValueKey('topic-navigation-item-79')),
+      );
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('topic-menu-pin')), findsOneWidget);
+      expect(find.byKey(const ValueKey('topic-menu-edit')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('topic-menu-delete')),
+        findsNothing,
+        reason: 'can_manage_topics is not permission to delete a topic',
+      );
+      expect(
+        requests.any((request) => request['@type'] == 'deleteForumTopic'),
+        isFalse,
+      );
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets(
+    'creator carve-out: probed history limits gate the delete affordance',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        // Plain member who created topic 88.
+        await _setSurfaceSize(tester, const Size(1180, 820));
+        await _pumpMainShell(tester);
+        tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+          ChatListSelection.fromChat(_chat()),
+        );
+        await _settle(tester);
+
+        // 12 messages: over TDLib's at-most-11 limit for the carve-out.
+        topicMessageCounts[88] = 12;
+        await tester.longPress(
+          find.byKey(const ValueKey('topic-navigation-item-88')),
+        );
+        await _settle(tester);
+        expect(
+          find.byKey(const ValueKey('topic-menu-delete')),
+          findsNothing,
+          reason: 'a 12th message disqualifies the creator carve-out',
+        );
+        await tester.tap(find.byKey(const ValueKey('topic-menu-mute')));
+        await _settle(tester);
+
+        // Another user's message among 5: also disqualified. The history
+        // changed, so real traffic arrives first and drops the cached probe.
+        updates.add({
+          '@type': 'updateNewMessage',
+          'message': {
+            '@type': 'message',
+            'id': 200,
+            'chat_id': -42,
+            'date': 200,
+            'is_outgoing': false,
+            'sender_id': {'@type': 'messageSenderUser', 'user_id': 2},
+            'topic_id': {'@type': 'messageTopicForum', 'forum_topic_id': 88},
+            'content': {
+              '@type': 'messageText',
+              'text': {'@type': 'formattedText', 'text': 'Foreign'},
+            },
+          },
+        });
+        topicMessageCounts[88] = 5;
+        topicHasOtherSender[88] = true;
+        await tester.longPress(
+          find.byKey(const ValueKey('topic-navigation-item-88')),
+        );
+        await _settle(tester);
+        expect(
+          find.byKey(const ValueKey('topic-menu-delete')),
+          findsNothing,
+          reason: "another user's message disqualifies the carve-out",
+        );
+        await tester.tap(find.byKey(const ValueKey('topic-menu-mute')));
+        await _settle(tester);
+
+        // Five own messages: the carve-out applies and deletion fires after
+        // the confirmation. A deletion elsewhere drops the cached probe.
+        updates.add({
+          '@type': 'updateDeleteMessages',
+          'chat_id': -42,
+          'message_ids': [200],
+          'is_permanent': true,
+        });
+        topicMessageCounts[88] = 5;
+        topicHasOtherSender[88] = false;
+        await tester.longPress(
+          find.byKey(const ValueKey('topic-navigation-item-88')),
+        );
+        await _settle(tester);
+        expect(find.byKey(const ValueKey('topic-menu-delete')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('topic-menu-delete')));
+        await _settle(tester);
+        await tester.tap(find.text('Delete').last);
+        await _settle(tester);
+        expect(
+          requests.any(
+            (request) =>
+                request['@type'] == 'deleteForumTopic' &&
+                request['forum_topic_id'] == 88,
+          ),
+          isTrue,
+        );
+        expect(tester.takeException(), isNull);
+        await _disposeShell(tester);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets(
+    'rights revoked while the delete confirmation is open block the request',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        // Creator of topic 88 with an eligible carve-out: the confirmation
+        // opens, then foreign traffic arrives, then the user confirms.
+        await _setSurfaceSize(tester, const Size(1180, 820));
+        await _pumpMainShell(tester);
+        tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+          ChatListSelection.fromChat(_chat()),
+        );
+        await _settle(tester);
+
+        topicMessageCounts[88] = 3;
+        await tester.longPress(
+          find.byKey(const ValueKey('topic-navigation-item-88')),
+        );
+        await _settle(tester);
+        expect(find.byKey(const ValueKey('topic-menu-delete')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('topic-menu-delete')));
+        await _settle(tester);
+
+        // Another user posts in the topic while the dialog is open: the
+        // carve-out dies and the cached probe is dropped.
+        updates.add({
+          '@type': 'updateNewMessage',
+          'message': {
+            '@type': 'message',
+            'id': 300,
+            'chat_id': -42,
+            'date': 300,
+            'is_outgoing': false,
+            'sender_id': {'@type': 'messageSenderUser', 'user_id': 2},
+            'topic_id': {'@type': 'messageTopicForum', 'forum_topic_id': 88},
+            'content': {
+              '@type': 'messageText',
+              'text': {'@type': 'formattedText', 'text': 'Foreign reply'},
+            },
+          },
+        });
+        await _settle(tester);
+
+        // Confirming anyway must not send anything destructive.
+        await tester.tap(find.text('Delete').last);
+        await _settle(tester);
+        expect(
+          requests.any((request) => request['@type'] == 'deleteForumTopic'),
+          isFalse,
+          reason: 'eligibility is re-checked after the confirmation closes',
+        );
+        expect(tester.takeException(), isNull);
+        await _disposeShell(tester);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   testWidgets('admin: pin and create fire their TDLib requests', (
     tester,
@@ -186,22 +393,47 @@ ChatSummary _chat() => ChatSummary(
   isForum: true,
 );
 
-Map<String, dynamic> _message(int id, {String? text}) => <String, dynamic>{
-  '@type': 'message',
-  'id': id,
-  'chat_id': -42,
-  'date': id,
-  'is_outgoing': false,
-  'content': {
-    '@type': 'messageText',
-    'text': {'@type': 'formattedText', 'text': text ?? 'Post $id'},
-  },
-};
+Map<String, dynamic> _message(int id, {bool outgoing = true}) =>
+    <String, dynamic>{
+      '@type': 'message',
+      'id': id,
+      'chat_id': -42,
+      'date': id,
+      'is_outgoing': outgoing,
+      'content': {
+        '@type': 'messageText',
+        'text': {'@type': 'formattedText', 'text': 'Post $id'},
+      },
+    };
+
+/// The fake topic history for the creator deletion probe: the requested
+/// topic's message count (default 1), with an incoming message when the test
+/// asks for another user's message.
+List<Map<String, dynamic>> _topicHistoryMessages(
+  Map<String, dynamic> request,
+  Map<int, int> topicMessageCounts,
+  Map<int, bool> topicHasOtherSender,
+) {
+  final topicId =
+      (request['forum_topic_id'] ?? request['message_id']) as int? ?? 77;
+  final count = topicMessageCounts[topicId] ?? 1;
+  final hasOtherSender = topicHasOtherSender[topicId] ?? false;
+  return [
+    for (var index = 0; index < count; index++)
+      if (hasOtherSender && index == count - 1)
+        _message(100 - index, outgoing: false)
+      else
+        _message(100 - index),
+  ];
+}
 
 Map<String, dynamic> _response(
   Map<String, dynamic> request,
   bool adminRights,
   bool canCreateTopics,
+  bool adminCanDeleteMessages,
+  Map<int, int> topicMessageCounts,
+  Map<int, bool> topicHasOtherSender,
 ) => switch (request['@type']) {
   'getChat' => {
     '@type': 'chat',
@@ -230,7 +462,7 @@ Map<String, dynamic> _response(
             'rights': {
               '@type': 'chatAdministratorRights',
               'can_manage_topics': true,
-              'can_delete_messages': true,
+              'can_delete_messages': adminCanDeleteMessages,
             },
           }
         : {'@type': 'chatMemberStatusMember'},
@@ -253,6 +485,9 @@ Map<String, dynamic> _response(
             'chat_id': -42,
             'forum_topic_id': 77 + index,
             'name': 'Topic $index',
+            'creator_id': index == 11
+                ? {'@type': 'messageSenderUser', 'user_id': 1}
+                : null,
           },
           'last_message': _message(70 - index),
           'unread_count': index == 2 ? 4 : 0, // topic 79 is unread
@@ -261,11 +496,11 @@ Map<String, dynamic> _response(
   },
   'getForumTopicHistory' || 'getMessageThreadHistory' => {
     '@type': 'messages',
-    'messages': [
-      _message(
-        70 - ((request['forum_topic_id'] ?? request['message_id']) as int) + 77,
-      ),
-    ],
+    'messages': _topicHistoryMessages(
+      request,
+      topicMessageCounts,
+      topicHasOtherSender,
+    ),
   },
   'getMessage' => _message(request['message_id'] as int),
   'getChatHistory' => {

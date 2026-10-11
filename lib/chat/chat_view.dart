@@ -1593,12 +1593,19 @@ class _ChatViewState extends State<ChatView> {
     // for another topic of the same forum inherits the outgoing attachment's
     // verdict, because its fresh view model only learns isForum after an
     // async getChat — without the handoff the shell would drop the overlay
-    // mid-switch and lose the pane's scroll.
+    // mid-switch and lose the pane's scroll. A fresh pane for a chat whose
+    // topics the shared index already knows is equally a forum: the index
+    // only fills from forum topic traffic, so it is evidence enough to keep
+    // the list on the chat list column while getChat is still in flight.
     final prior = host?.attachment;
     final takesOverForumList = prior?.chatId == widget.chatId;
+    final indexKnowsTopics = ForumTopicIndex.shared.knowsTopics(
+      _vm.accountSlot,
+      widget.chatId,
+    );
     final overlaid =
         host != null &&
-        (takesOverForumList || _vm.isForum) &&
+        (takesOverForumList || _vm.isForum || indexKnowsTopics) &&
         !_vm.hasForumTabs;
     _topicListOverlaid = overlaid;
     final attachment = overlaid ? _topicListAttachment() : null;
@@ -8243,8 +8250,13 @@ class _ChatViewState extends State<ChatView> {
       destructive: true,
     );
     if (!ok || !mounted) return;
+    // The dialog can stay open across a rights change, a revocation or an
+    // account switch; re-verify the current state before anything
+    // destructive is sent.
+    final current = _topicById(topic.id);
+    if (current == null || !_vm.canDeleteTopic(current)) return;
     try {
-      await _vm.deleteForumTopic(topic.id);
+      await _vm.deleteForumTopic(current.id);
       if (widget.forumTopicId == topic.id) {
         _openTopicTranscript(null);
       }
@@ -8316,6 +8328,15 @@ class _ChatViewState extends State<ChatView> {
   ) async {
     final topic = _topicById(item.id);
     if (topic == null) return;
+    // The creator deletion carve-out depends on the topic's live history
+    // (at most 11 messages, none from other users), so probe before the menu
+    // is offered. Rights-based eligibility is already known synchronously.
+    if (!topic.isGeneral &&
+        _vm.canDeleteForumTopics != true &&
+        _vm.creatorOfTopic(topic)) {
+      await _vm.ensureTopicCreatorDeletable(topic.id);
+      if (!mounted) return;
+    }
     await showTopicRowMenuSheet(
       context: context,
       topic: item,

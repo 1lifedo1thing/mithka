@@ -714,14 +714,70 @@ class ChatViewModel extends ChangeNotifier {
   bool canDeleteForumTopics = false;
   bool get canCreateForumTopics => _chatCanCreateTopics || canManageTopics;
 
-  /// Whether this account may delete [topic]: topic creators may delete
-  /// their own topic, and admins need can_delete_messages or
-  /// can_manage_topics.
+  /// Per-topic creator deletion eligibility, verified against the topic's
+  /// actual message history. TDLib's deleteForumTopic allows a non-admin
+  /// creator to delete only while the topic holds at most 11 messages and
+  /// none of them are from other users; creator identity alone is not
+  /// sufficient. Cleared on topic traffic so the next menu open re-probes.
+  final Map<int, bool> _creatorDeletableTopicIds = {};
+
+  /// Whether this account may delete [topic] through the rights model, and —
+  /// for the creator carve-out — the probed history limits. can_manage_topics
+  /// grants management, not deletion; only can_delete_messages does.
   bool canDeleteTopic(ForumTopicOption topic) =>
       !topic.isGeneral &&
-      (canManageTopics ||
-          canDeleteForumTopics ||
-          (meId != null && topic.creatorId == meId));
+      (canDeleteForumTopics ||
+          (meId != null &&
+              topic.creatorId == meId &&
+              (_creatorDeletableTopicIds[topic.id] ?? false)));
+
+  /// Whether [topic] was created by this account.
+  bool creatorOfTopic(ForumTopicOption topic) =>
+      meId != null && topic.creatorId == meId;
+
+  /// Probes whether the creator carve-out applies to [topicId]: at most 11
+  /// messages and none from another user. The 12th message proves the limit
+  /// is exceeded without paging further.
+  Future<bool> ensureTopicCreatorDeletable(int topicId) async {
+    if (!isForum || topicId == generalForumTopicId) return false;
+    if (_creatorDeletableTopicIds.containsKey(topicId)) {
+      return _creatorDeletableTopicIds[topicId]!;
+    }
+    bool eligible = false;
+    try {
+      final response = await _topicAccountQuery({
+        '@type': 'getForumTopicHistory',
+        'chat_id': chatId,
+        'forum_topic_id': topicId,
+        'from_message_id': 0,
+        'offset': 0,
+        'limit': 12,
+      });
+      final messages = response.objects('messages') ?? const [];
+      eligible =
+          messages.length <= 11 &&
+          messages.every((raw) {
+            if (raw.boolean('is_outgoing') ?? false) return true;
+            final sender = raw.obj('sender_id');
+            return sender?.type == 'messageSenderUser' &&
+                sender?.int64('user_id') == meId;
+          });
+    } catch (_) {
+      eligible = false;
+    }
+    _creatorDeletableTopicIds[topicId] = eligible;
+    return eligible;
+  }
+
+  /// Drops the probed creator carve-out for any topic new traffic reached, so
+  /// a topic that gained a 12th message or another user's message stops
+  /// offering Delete on the next menu open.
+  void _invalidateCreatorDeletionForTopic(int topicId) {
+    if (_creatorDeletableTopicIds.remove(topicId) != null) {
+      notifyListeners();
+    }
+  }
+
   bool peerIsBot = false;
   bool isBotApiAccount = false;
   bool botApiCanReadAllGroupMessages = false;
@@ -764,6 +820,9 @@ class ChatViewModel extends ChangeNotifier {
   final TdClient _client = TdClient.shared;
   final int _accountClientId;
   final int _accountSlot;
+
+  /// The account slot whose ids this transcript's data is scoped to.
+  int get accountSlot => _accountSlot;
   int _groupBotCommandsGeneration = 0;
   Future<Set<String>>? _aiReplyBlockedSenderKeysFuture;
   int _aiReplyBlockedSenderRevision = 0;
@@ -4467,13 +4526,23 @@ class ChatViewModel extends ChangeNotifier {
 
   // MARK: - Topic moderation (Telegram iOS parity)
 
+  /// Sends a topic request to the client that owns this pane's account.
+  ///
+  /// Chat and topic ids are account-scoped. A moderation request awaiting a
+  /// dialog confirmation must not follow a later account switch onto another
+  /// account's client, so every destructive topic call routes through the
+  /// client id captured when this view model was created.
+  Future<Map<String, dynamic>> _topicAccountQuery(
+    Map<String, dynamic> request,
+  ) => _client.queryTo(request, _accountClientId);
+
   /// Creates a topic; returns its id, or throws the request error.
   Future<int?> createForumTopic({
     required String name,
     required int iconColor,
     required int iconCustomEmojiId,
   }) async {
-    final created = await _client.query(
+    final created = await _topicAccountQuery(
       createForumTopicRequest(
         chatId: chatId,
         name: name,
@@ -4490,7 +4559,7 @@ class ChatViewModel extends ChangeNotifier {
     required String name,
     required int iconCustomEmojiId,
   }) async {
-    await _client.query(
+    await _topicAccountQuery(
       editForumTopicRequest(
         chatId: chatId,
         forumTopicId: forumTopicId,
@@ -4502,7 +4571,7 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   Future<void> deleteForumTopic(int forumTopicId) async {
-    await _client.query(
+    await _topicAccountQuery(
       deleteForumTopicRequest(chatId: chatId, forumTopicId: forumTopicId),
     );
     await loadForumTopics();
@@ -4512,7 +4581,7 @@ class ChatViewModel extends ChangeNotifier {
     int forumTopicId, {
     required bool pinned,
   }) async {
-    await _client.query(
+    await _topicAccountQuery(
       toggleForumTopicPinnedRequest(
         chatId: chatId,
         forumTopicId: forumTopicId,
@@ -4526,7 +4595,7 @@ class ChatViewModel extends ChangeNotifier {
     int forumTopicId, {
     required bool muted,
   }) async {
-    await _client.query(
+    await _topicAccountQuery(
       setForumTopicMutedRequest(
         chatId: chatId,
         forumTopicId: forumTopicId,
@@ -4540,7 +4609,7 @@ class ChatViewModel extends ChangeNotifier {
     int forumTopicId, {
     required bool closed,
   }) async {
-    await _client.query(
+    await _topicAccountQuery(
       toggleForumTopicClosedRequest(
         chatId: chatId,
         forumTopicId: forumTopicId,
@@ -4555,7 +4624,7 @@ class ChatViewModel extends ChangeNotifier {
   Future<void> markForumTopicRead(ForumTopicOption topic) async {
     if (topic.lastMessageId == 0 || topic.unreadCount == 0) return;
     try {
-      await _client.query(
+      await _topicAccountQuery(
         forumTopicViewMessagesRequest(
           chatId: chatId,
           messageIds: [topic.lastMessageId],
@@ -4609,6 +4678,9 @@ class ChatViewModel extends ChangeNotifier {
         );
         notifyListeners();
         unawaited(_resolveTopicPreviewSenders([message]));
+        // New traffic can cross the 12-message or other-user boundary of the
+        // creator deletion carve-out.
+        _invalidateCreatorDeletionForTopic(topicId);
 
       case 'updateForumTopic':
         if (update.int64('chat_id') != chatId) return;
@@ -4669,7 +4741,13 @@ class ChatViewModel extends ChangeNotifier {
       case 'updateDeleteMessages':
         if (update.int64('chat_id') != chatId) return;
         // A deleted last message leaves a stale preview; a refresh is cheap
-        // enough here because deletions in forum lists are rare.
+        // enough here because deletions in forum lists are rare. The deleted
+        // message's topic is not part of the update, so every probed creator
+        // carve-out is dropped and re-probed on the next menu open.
+        if (_creatorDeletableTopicIds.isNotEmpty) {
+          _creatorDeletableTopicIds.clear();
+          notifyListeners();
+        }
         unawaited(loadForumTopics());
     }
   }
@@ -4895,17 +4973,34 @@ class ChatViewModel extends ChangeNotifier {
         'filter': {'@type': 'searchMessagesFilterPinned'},
       });
       final list = res.objects('messages');
-      if (list == null || list.isEmpty) return;
-      final parsed = list
+      final parsed = (list ?? const [])
           .map(TDParse.message)
           .whereType<ChatMessage>()
           .toList();
-      if (parsed.isEmpty) return;
-      pinnedMessages = parsed;
-      pinnedMessageIndex = pinnedMessageIndex.clamp(0, parsed.length - 1);
-      pinnedMessage = parsed[pinnedMessageIndex];
-      notifyListeners();
+      _applyPinnedMessages(parsed);
     } catch (_) {}
+  }
+
+  /// Re-runs the pinned search after a pin/unpin update: the bar must reflect
+  /// both new pins and unpins, including the list becoming empty.
+  Future<void> _reloadPinnedMessages() async {
+    pinnedDismissed = false;
+    await _loadPinnedMessage();
+  }
+
+  void _applyPinnedMessages(List<ChatMessage> parsed) {
+    if (parsed.isEmpty) {
+      if (pinnedMessage == null) return;
+      pinnedMessages = const [];
+      pinnedMessageIndex = 0;
+      pinnedMessage = null;
+      notifyListeners();
+      return;
+    }
+    pinnedMessages = parsed;
+    pinnedMessageIndex = pinnedMessageIndex.clamp(0, parsed.length - 1);
+    pinnedMessage = parsed[pinnedMessageIndex];
+    notifyListeners();
   }
 
   bool get hasPreviousPinnedMessage => pinnedMessageIndex > 0;
@@ -4936,7 +5031,7 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   Future<void> pinTodo(ChatMessage message) async {
-    await _client.query({
+    await _topicAccountQuery({
       '@type': 'pinChatMessage',
       'chat_id': chatId,
       'message_id': message.id,
@@ -4954,7 +5049,7 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   Future<void> unpinTodo(ChatMessage message) async {
-    await _client.query({
+    await _topicAccountQuery({
       '@type': 'unpinChatMessage',
       'chat_id': chatId,
       'message_id': message.id,
@@ -5693,6 +5788,7 @@ class ChatViewModel extends ChangeNotifier {
     'updateUserStatus',
     'updateMessageEdited',
     'updateMessageInteractionInfo',
+    'updateMessageIsPinned',
     'updateAvailableMessageEffects',
     'updateBlockMessageSender',
   ];
@@ -6049,6 +6145,14 @@ class ChatViewModel extends ChangeNotifier {
               update.int64('star_count') ??
               0,
         );
+
+      case 'updateMessageIsPinned':
+        if (update.int64('chat_id') != chatId) return;
+        // The pinned bar is a topic-scoped search's snapshot; a pin or unpin
+        // elsewhere in the chat invalidates it. Re-running the scoped search
+        // also keeps the topic's own pinned message current, which the update
+        // alone cannot tell because it carries no topic reference.
+        unawaited(_reloadPinnedMessages());
 
       case 'updateDeleteMessages':
         if (update.int64('chat_id') != chatId) return;

@@ -33,6 +33,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   final requests = <Map<String, dynamic>>[];
   late StreamController<Map<String, dynamic>> updates;
+  // When set, the fake pinned search returns nothing for the topic — the
+  // 'unpinned elsewhere' state.
+  var topicPinnedRemoved = false;
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -45,7 +48,7 @@ void main() {
         accountSlot: 0,
         query: (request) async {
           requests.add(request);
-          return _response(request);
+          return _response(request, topicPinnedRemoved);
         },
         send: (_) async {},
         updates: updates.stream,
@@ -55,6 +58,7 @@ void main() {
   setUp(() {
     requests.clear();
     clearChatMemoryCaches();
+    topicPinnedRemoved = false;
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
@@ -123,6 +127,44 @@ void main() {
     }
   });
 
+  testWidgets('updateMessageIsPinned refreshes the topic pinned bar', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1180, 820);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('topic-navigation-item-78')));
+      await _settle(tester);
+      expect(find.text('Pinned in 78'), findsOneWidget);
+
+      // Someone pins a different message while the transcript is open: the
+      // bar swaps to it without a transcript re-entry.
+      topicPinnedRemoved = true;
+      updates.add({
+        '@type': 'updateMessageIsPinned',
+        'chat_id': -42,
+        'message_id': 61,
+        'is_pinned': true,
+      });
+      await _settle(tester);
+      expect(find.text('Pinned in 78'), findsNothing);
+      expect(find.text('Pinned in 61'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('tablet topic transcript shows the topic pinned message', (
     tester,
   ) async {
@@ -177,6 +219,7 @@ Map<String, dynamic> _message(int id, {String? text}) => <String, dynamic>{
 
 Map<String, dynamic> _response(
   Map<String, dynamic> request,
+  bool topicPinnedRemoved,
 ) => switch (request['@type']) {
   'getChat' => {
     '@type': 'chat',
@@ -235,6 +278,8 @@ Map<String, dynamic> _response(
       'messages': [
         if (request['topic_id'] == null)
           _message(50, text: 'Pinned General')
+        else if (topicPinnedRemoved)
+          _message(61, text: 'Pinned in 61')
         else
           _message(
             60,

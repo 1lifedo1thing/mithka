@@ -17,6 +17,7 @@ import '../app/ipad_window_chrome.dart';
 import '../chat/chat_members_view.dart';
 import '../chat/chat_picker_view.dart';
 import '../chat/chat_view.dart';
+import '../chat/forum_topic_transcript.dart';
 import '../chat/forward_options.dart';
 import '../chat/group_remark_controller.dart';
 import '../chat/message_replies_sheet.dart';
@@ -447,13 +448,48 @@ class _TopicChatViewState extends State<TopicChatView> {
     }
   }
 
-  /// Whether this account may delete [topic]: topic creators may delete
-  /// their own topic, and admins need can_delete_messages or can_manage_topics.
+  /// Whether this account may delete [topic]. Deletion needs the
+  /// can_delete_messages administrator right; the creator carve-out applies
+  /// only while the topic holds at most 11 messages and none from another
+  /// user, so it is verified against the topic's live history.
   bool _canDeleteTopic(_ForumTopic topic) =>
       !topic.isGeneral &&
-      (_canManageTopics ||
-          _canDeleteMessages ||
-          (_meUserId != null && topic.creatorId == _meUserId));
+      (_canDeleteMessages ||
+          (_meUserId != null &&
+              topic.creatorId == _meUserId &&
+              (_creatorDeletableTopicIds[topic.id] ?? false)));
+
+  /// Probed creator deletion eligibility per topic; see [_canDeleteTopic].
+  /// Cleared on topic traffic so the next menu open re-probes.
+  final Map<int, bool> _creatorDeletableTopicIds = {};
+
+  Future<bool> _ensureTopicCreatorDeletable(int topicId) async {
+    if (topicId == generalForumTopicId) return false;
+    if (_creatorDeletableTopicIds.containsKey(topicId)) {
+      return _creatorDeletableTopicIds[topicId]!;
+    }
+    bool eligible = false;
+    try {
+      final response = await _queryForumTopicHistory(topicId, 12);
+      final messages = response.objects('messages') ?? const [];
+      eligible =
+          messages.length <= 11 &&
+          messages.every((raw) {
+            if (raw.boolean('is_outgoing') ?? false) return true;
+            final sender = raw.obj('sender_id');
+            return sender?.type == 'messageSenderUser' &&
+                sender?.int64('user_id') == _meUserId;
+          });
+    } catch (_) {
+      eligible = false;
+    }
+    _creatorDeletableTopicIds[topicId] = eligible;
+    return eligible;
+  }
+
+  void _invalidateCreatorDeletionForTopic(int topicId) {
+    if (_creatorDeletableTopicIds.remove(topicId) != null) setState(() {});
+  }
 
   /// Folds live updates into the topic list so previews, badges, pins and
   /// renames move without a full getForumTopics round-trip.
@@ -496,6 +532,9 @@ class _TopicChatViewState extends State<TopicChatView> {
           _topicMessages[topicId] = [message];
         }
         unawaited(_resolvePreviewSenders([message]));
+        // New traffic can cross the 12-message or other-user boundary of the
+        // creator deletion carve-out.
+        _invalidateCreatorDeletionForTopic(topicId);
         _rebuildPosts();
         setState(() {});
         _syncTopicListHost();
@@ -539,7 +578,13 @@ class _TopicChatViewState extends State<TopicChatView> {
       case 'updateDeleteMessages':
         if (update.int64('chat_id') != chatId) return;
         // A deleted last message leaves a stale preview; a refresh is cheap
-        // enough here because deletions in forum lists are rare.
+        // enough here because deletions in forum lists are rare. The deleted
+        // message's topic is not part of the update, so every probed creator
+        // carve-out is dropped and re-probed on the next menu open.
+        if (_creatorDeletableTopicIds.isNotEmpty) {
+          _creatorDeletableTopicIds.clear();
+          setState(() {});
+        }
         unawaited(_loadTopics());
     }
   }
@@ -1002,9 +1047,16 @@ class _TopicChatViewState extends State<TopicChatView> {
       destructive: true,
     );
     if (!ok || !mounted) return;
+    // The dialog can outlive a rights change or a topic deletion elsewhere;
+    // re-verify before anything destructive is sent.
+    final current = _topicById(topic.id);
+    if (current == null || !_canDeleteTopic(current)) return;
     try {
       await _query(
-        deleteForumTopicRequest(chatId: widget.chat.id, forumTopicId: topic.id),
+        deleteForumTopicRequest(
+          chatId: widget.chat.id,
+          forumTopicId: current.id,
+        ),
       );
       if (_selectedThreadId == topic.id) {
         _selectTopic(null);
@@ -1111,6 +1163,12 @@ class _TopicChatViewState extends State<TopicChatView> {
   ) async {
     final topic = _topicById(item.id);
     if (topic == null) return;
+    // The creator deletion carve-out depends on the topic's live history, so
+    // probe before the menu is offered.
+    if (!topic.isGeneral && !_canDeleteMessages && _meUserId != null) {
+      await _ensureTopicCreatorDeletable(topic.id);
+      if (!mounted) return;
+    }
     await showTopicRowMenuSheet(
       context: context,
       topic: item,

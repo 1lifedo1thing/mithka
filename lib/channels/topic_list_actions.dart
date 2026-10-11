@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 
 import '../chat/custom_emoji.dart';
+import '../components/app_dialog.dart';
 import '../components/app_icons.dart';
 import '../l10n/app_localizations.dart';
 import '../notifications/notification_settings_payload.dart';
@@ -91,161 +92,114 @@ class _TopicDraftDialogState extends State<TopicDraftDialog> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Material(
-            type: MaterialType.transparency,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: c.card,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(color: c.divider, width: 0.5),
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title.l10n(context),
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: c.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      key: const ValueKey('topic-draft-name'),
-                      controller: _controller,
-                      autofocus: true,
-                      maxLength: 128,
-                      onSubmitted: (_) => _submit(),
-                      decoration: InputDecoration(
-                        hintText: AppStrings.t(
-                          AppStringKeys.chatInputBarTopicName,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (widget.canChangeColor) ...[
-                      Text(
-                        AppStrings.t(
-                          AppStringKeys.groupAdministrationIconColor,
-                        ),
-                        style: TextStyle(fontSize: 13, color: c.textSecondary),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 10,
-                        children: [
-                          for (final candidate in topicIconColors)
-                            GestureDetector(
-                              key: ValueKey('topic-draft-color-$candidate'),
-                              onTap: () => setState(() => _color = candidate),
-                              child: Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Color(0xFF000000 | candidate),
-                                  border: _color == candidate
-                                      ? Border.all(
-                                          color: AppTheme.brand,
-                                          width: 3,
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                    GestureDetector(
-                      key: const ValueKey('topic-draft-emoji'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () async {
-                        final id = await Navigator.of(context).push<int>(
-                          MaterialPageRoute(
-                            builder: (_) => ProfileIconPickerView(
-                              selectedId: _customEmojiId,
-                              title: AppStrings.t(
-                                AppStringKeys.groupAdministrationTopicIcon,
-                              ),
-                              source: ProfileIconSource.status,
-                            ),
-                          ),
-                        );
-                        if (id != null && mounted) {
-                          setState(() => _customEmojiId = id);
-                        }
-                      },
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              AppStrings.t(
-                                AppStringKeys
-                                    .groupAdministrationCustomEmojiIcon,
-                              ),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: c.textPrimary,
-                              ),
-                            ),
-                          ),
-                          if (_customEmojiId == 0)
-                            Text(
-                              AppStrings.t(AppStringKeys.groupAppearanceNone),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: c.textSecondary,
-                              ),
-                            )
-                          else
-                            CustomEmojiView(id: _customEmojiId, size: 26),
-                          const SizedBox(width: 8),
-                          AppIcon(
-                            HeroAppIcons.chevronRight,
-                            size: 15,
-                            color: c.textTertiary,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: Text(
-                            AppStrings.t(AppStringKeys.confirmCancel),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          key: const ValueKey('topic-draft-save'),
-                          onPressed: _submit,
-                          child: Text(
-                            AppStrings.t(AppStringKeys.accentColorPickerSave),
-                            style: TextStyle(color: AppTheme.brand),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+    // Built on the project's owned dialog surface: it carries the Material
+    // ancestor a TextField needs, so this dialog draws no Material of its own.
+    return AppDialogSurface(
+      maxWidth: 360,
+      title: widget.title.l10n(context),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            key: const ValueKey('topic-draft-name'),
+            controller: _controller,
+            autofocus: true,
+            maxLength: 128,
+            onSubmitted: (_) => _submit(),
+            decoration: InputDecoration(
+              hintText: AppStrings.t(AppStringKeys.chatInputBarTopicName),
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          if (widget.canChangeColor) ...[
+            Text(
+              AppStrings.t(AppStringKeys.groupAdministrationIconColor),
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              children: [
+                for (final candidate in topicIconColors)
+                  GestureDetector(
+                    key: ValueKey('topic-draft-color-$candidate'),
+                    onTap: () => setState(() => _color = candidate),
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFF000000 | candidate),
+                        border: _color == candidate
+                            ? Border.all(color: AppTheme.brand, width: 3)
+                            : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          GestureDetector(
+            key: const ValueKey('topic-draft-emoji'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
+              final id = await Navigator.of(context).push<int>(
+                MaterialPageRoute(
+                  builder: (_) => ProfileIconPickerView(
+                    selectedId: _customEmojiId,
+                    title: AppStrings.t(
+                      AppStringKeys.groupAdministrationTopicIcon,
+                    ),
+                    source: ProfileIconSource.status,
+                  ),
+                ),
+              );
+              if (id != null && mounted) {
+                setState(() => _customEmojiId = id);
+              }
+            },
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    AppStrings.t(
+                      AppStringKeys.groupAdministrationCustomEmojiIcon,
+                    ),
+                    style: TextStyle(fontSize: 14, color: c.textPrimary),
+                  ),
+                ),
+                if (_customEmojiId == 0)
+                  Text(
+                    AppStrings.t(AppStringKeys.groupAppearanceNone),
+                    style: TextStyle(fontSize: 14, color: c.textSecondary),
+                  )
+                else
+                  CustomEmojiView(id: _customEmojiId, size: 26),
+                const SizedBox(width: 8),
+                AppIcon(
+                  HeroAppIcons.chevronRight,
+                  size: 15,
+                  color: c.textTertiary,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
+      actions: [
+        AppDialogAction(
+          label: AppStrings.t(AppStringKeys.confirmCancel),
+          onTap: () => Navigator.of(context).pop(),
+        ),
+        AppDialogAction(
+          key: const ValueKey('topic-draft-save'),
+          label: AppStrings.t(AppStringKeys.accentColorPickerSave),
+          primary: true,
+          onTap: _submit,
+        ),
+      ],
     );
   }
 }
