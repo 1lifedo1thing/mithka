@@ -7,6 +7,12 @@
 //  and an 添加代理 row that opens a full-page custom editor. SOCKS5 / HTTP /
 //  MTProto. No Material dialogs.
 //
+//  Reached from the sidebar AND from the login screen's own 代理 shortcut, so
+//  the client behind it may still be opening its database (a fresh add-account
+//  slot): until the first getProxies answers, the page keeps its waiting state
+//  and re-reads on the client's first pushed update instead of rendering an
+//  empty list that would read as "nothing saved".
+//
 
 import 'dart:async';
 
@@ -36,13 +42,41 @@ class ProxyView extends StatefulWidget {
 
 class _ProxyViewState extends State<ProxyView> {
   final TdClient _client = TdClient.shared;
+  StreamSubscription<Map<String, dynamic>>? _clientWakeSub;
   List<Map<String, dynamic>> _proxies = [];
   bool _loading = true;
+
+  /// False until a getProxies read actually answered. The list lives inside
+  /// the TDLib client, and a client still opening its database — the fresh
+  /// slot behind the login screen's add-account flow — cannot answer yet:
+  /// TDLib 1.8.67 queues a pre-parameters read with no reply at all, so
+  /// "no answer" must never render as "no proxy".
+  bool _clientReady = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _listenForClientWake();
+  }
+
+  @override
+  void dispose() {
+    unawaited(_clientWakeSub?.cancel());
+    super.dispose();
+  }
+
+  /// Re-reads on the first pushed authorization/connection state while the
+  /// page is still waiting on its read. The parameters bootstrap runs before
+  /// these updates fan out, so the re-read lands past TDLib's queue and gets
+  /// answered once the database is open. Event-driven: nothing polls.
+  void _listenForClientWake() {
+    _clientWakeSub = _client
+        .updatesOfAny(const [
+          'updateAuthorizationState',
+          'updateConnectionState',
+        ])
+        .listen((_) => unawaited(_load()));
   }
 
   Future<void> _load() async {
@@ -56,11 +90,19 @@ class _ProxyViewState extends State<ProxyView> {
       if (mounted) {
         setState(() {
           _proxies = list;
+          _clientReady = true;
           _loading = false;
         });
       }
+      // The client answers: nothing can still be pending behind the wake
+      // listener, so it stops loading the page on every pushed state.
+      await _clientWakeSub?.cancel();
+      _clientWakeSub = null;
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // A client that has not answered yet must keep its waiting state: the
+      // wake listener re-reads the moment the client reports in, and showing
+      // "no proxies" here would be a lie about a list nobody has read.
+      if (mounted && _clientReady) setState(() => _loading = false);
     }
   }
 
@@ -109,9 +151,15 @@ class _ProxyViewState extends State<ProxyView> {
   }
 
   Future<void> _add() async {
-    final added = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const ProxyEditView()));
+    // While the client is still opening (login flow), the editor must save
+    // offline first — a live addProxy would sit in the same pre-parameters
+    // queue as the page's own initial read. The saved config is applied to
+    // the client as soon as its parameters land.
+    final added = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ProxyEditView(allowOfflineSave: !_clientReady),
+      ),
+    );
     if (added == true) unawaited(_load());
   }
 

@@ -288,13 +288,18 @@ class HandoffService {
       var slot = await TdClient.shared.readySlotForUserId(
         activity.accountUserId,
       );
+      // AuthReloading is a re-read of a running client (account switch, add
+      // account) — the gate below must wait it out exactly like a cold start,
+      // or a Handoff activity landing mid-switch would bind to the old client.
       if (slot == null &&
           (TdClient.shared.configuredSlots.isEmpty ||
-              auth.step is AuthInitializing)) {
+              auth.step is AuthInitializing ||
+              auth.step is AuthReloading)) {
         await waitForHandoffStartup(
           isReady: () =>
               TdClient.shared.configuredSlots.isNotEmpty &&
-              auth.step is! AuthInitializing,
+              auth.step is! AuthInitializing &&
+              auth.step is! AuthReloading,
           isActive: () => _started,
         );
         if (!_started) return;

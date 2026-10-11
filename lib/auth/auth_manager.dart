@@ -29,6 +29,14 @@ class AuthInitializing extends AuthStep {
   const AuthInitializing();
 }
 
+/// A reload of an already-started client is in flight (account switch, add
+/// account, session replacement). Unlike [AuthInitializing] this is NOT a
+/// cold-start: the login surface is already what the user asked for, so the
+/// auth gate must keep showing it instead of the full-screen splash.
+class AuthReloading extends AuthStep {
+  const AuthReloading();
+}
+
 class AuthWaitPhoneNumber extends AuthStep {
   const AuthWaitPhoneNumber();
 }
@@ -396,13 +404,18 @@ class AuthManager extends ChangeNotifier {
 
   /// Re-reads the active account's authorization state (after an account
   /// switch) and updates `step` so the UI gates on the right account.
+  ///
+  /// The read takes real time (a fresh add-account slot reaches its first
+  /// authorization state only hundreds of milliseconds after setTdlibParameters),
+  /// so the intermediate frame is [AuthReloading] — mapped to the login surface,
+  /// not the cold-start splash. Startup keeps [AuthInitializing] for the splash.
   void reloadAuthState() {
     final action = ++_actionSerial;
     final clientId = _client.activeClientId;
     _isWorking = false;
     _errorMessage = null;
     _canUseLoginPasskey = false;
-    _set(const AuthInitializing());
+    _set(const AuthReloading());
     unawaited(_loadPasskeyAvailability());
     unawaited(_reloadAuthState(action: action, clientId: clientId));
   }
