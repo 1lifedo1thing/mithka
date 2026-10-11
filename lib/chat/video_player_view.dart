@@ -4867,10 +4867,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       children: [
         _loadingPlaceholder(),
         PositionedDirectional(
-          top:
-              MediaQuery.paddingOf(context).top +
-              iPadWindowChromeInsetOf(context) +
-              6,
+          top: topChromeInsetOf(context) + 6,
           start: 8,
           child: _roundIconButton(
             HeroAppIcons.chevronLeft,
@@ -6915,15 +6912,8 @@ double _nextPlaybackSpeed(double speed) {
 }
 
 @visibleForTesting
-String formatVideoPlayerDuration(Duration value) {
-  final seconds = math.max(0, value.inSeconds);
-  final hours = seconds ~/ 3600;
-  final minutes = (seconds ~/ 60) % 60;
-  final remainder = seconds % 60;
-  return hours > 0
-      ? '$hours:${minutes.toString().padLeft(2, '0')}:${remainder.toString().padLeft(2, '0')}'
-      : '$minutes:${remainder.toString().padLeft(2, '0')}';
-}
+String formatVideoPlayerDuration(Duration value) =>
+    formatMediaDuration(value.inSeconds);
 
 class _VideoLoadingRing extends StatefulWidget {
   const _VideoLoadingRing({required this.size});

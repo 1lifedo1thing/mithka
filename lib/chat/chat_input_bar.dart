@@ -37,6 +37,7 @@ import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../media/app_asset_picker.dart';
 import '../media/camera_capture.dart';
+import '../media/media_metadata.dart';
 import '../platform/desktop_clipboard_images.dart';
 import '../platform/desktop_screenshot.dart';
 import '../platform/keyboard_modifiers.dart';
@@ -2238,11 +2239,6 @@ class _ChatInputBarState extends State<ChatInputBar>
     } catch (_) {
       return null;
     }
-  }
-
-  static String _recTime(double seconds) {
-    final s = seconds.floor();
-    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
   }
 
   void _toggle(_Panel panel) {
@@ -7804,7 +7800,7 @@ class _ChatInputBarState extends State<ChatInputBar>
                               ValueListenableBuilder<_RecTick>(
                                 valueListenable: _recTick,
                                 builder: (context, tick, _) => Text(
-                                  _recTime(tick.elapsed),
+                                  formatMediaDuration(tick.elapsed.floor()),
                                   style: TextStyle(
                                     color: c.textSecondary,
                                     fontSize: 14,
@@ -7993,7 +7989,7 @@ class _ChatInputBarState extends State<ChatInputBar>
             child: ValueListenableBuilder<_RecTick>(
               valueListenable: _recTick,
               builder: (context, tick, _) => Text(
-                _recTime(tick.elapsed),
+                formatMediaDuration(tick.elapsed.floor()),
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,

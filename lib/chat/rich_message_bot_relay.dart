@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../bot_api/bot_api_account.dart' show isTelegramBotTokenShape;
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import 'forward_options.dart';
@@ -654,21 +655,25 @@ class RichMessageBotRelay {
     parseRelayForwardResponse(response);
   }
 
-  Future<Map<String, dynamic>> _call(
-    String token,
-    String method, [
-    Map<String, dynamic>? parameters,
-  ]) async {
+  Uri _endpoint(String token, String method) {
     final normalizedToken = token.trim();
-    if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(normalizedToken)) {
+    if (!isTelegramBotTokenShape(normalizedToken)) {
       throw const RichMessageRelayException(
         'invalid_token',
         'The bot token format is invalid.',
       );
     }
-    final endpoint = _apiBase.replace(
+    return _apiBase.replace(
       path: '${_apiBase.path}/bot$normalizedToken/$method',
     );
+  }
+
+  Future<Map<String, dynamic>> _call(
+    String token,
+    String method, [
+    Map<String, dynamic>? parameters,
+  ]) async {
+    final endpoint = _endpoint(token, method);
     http.Response response;
     try {
       response = await _http
@@ -699,16 +704,7 @@ class RichMessageBotRelay {
     required String field,
     required String path,
   }) async {
-    final normalizedToken = token.trim();
-    if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(normalizedToken)) {
-      throw const RichMessageRelayException(
-        'invalid_token',
-        'The bot token format is invalid.',
-      );
-    }
-    final endpoint = _apiBase.replace(
-      path: '${_apiBase.path}/bot$normalizedToken/$method',
-    );
+    final endpoint = _endpoint(token, method);
     try {
       final request = http.MultipartRequest('POST', endpoint)
         ..fields.addAll(fields)
@@ -739,16 +735,7 @@ class RichMessageBotRelay {
     required Map<String, String> fields,
     required List<({String field, String path})> files,
   }) async {
-    final normalizedToken = token.trim();
-    if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(normalizedToken)) {
-      throw const RichMessageRelayException(
-        'invalid_token',
-        'The bot token format is invalid.',
-      );
-    }
-    final endpoint = _apiBase.replace(
-      path: '${_apiBase.path}/bot$normalizedToken/$method',
-    );
+    final endpoint = _endpoint(token, method);
     try {
       final request = http.MultipartRequest('POST', endpoint)
         ..fields.addAll(fields);

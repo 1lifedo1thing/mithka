@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import '../tdlib/json_helpers.dart' show jsonDouble, jsonInt;
 import 'bot_api_account.dart';
 import 'bot_api_client.dart';
 import 'bot_api_store.dart';
@@ -82,13 +83,13 @@ class BotApiTdBackend {
     _emit(_authorizationUpdate('authorizationStateReady'));
     _emitConnection('connectionStateConnecting');
     for (final user in _store.users()) {
-      if (_int(user['id']) == account.botId) continue;
+      if (jsonInt(user['id']) == account.botId) continue;
       _emit({'@type': 'updateUser', 'user': user});
-      _scheduleUserAvatar(_int(user['id']) ?? 0);
+      _scheduleUserAvatar(jsonInt(user['id']) ?? 0);
     }
     for (final chat in _store.chats(limit: 1000)) {
       _emit({'@type': 'updateNewChat', 'chat': chat});
-      _scheduleChatAvatar(_int(chat['id']) ?? 0);
+      _scheduleChatAvatar(jsonInt(chat['id']) ?? 0);
     }
     _scheduleUserAvatar(account.botId);
     unawaited(_refreshBotIdentity());
@@ -182,16 +183,18 @@ class BotApiTdBackend {
         await resume();
         return _ok;
       case 'loadChats':
-        for (final chat in _store.chats(limit: _int(request['limit']) ?? 100)) {
+        for (final chat in _store.chats(
+          limit: jsonInt(request['limit']) ?? 100,
+        )) {
           _emit({'@type': 'updateNewChat', 'chat': chat});
         }
         return _ok;
       case 'getChats':
-        final chats = _store.chats(limit: _int(request['limit']) ?? 100);
+        final chats = _store.chats(limit: jsonInt(request['limit']) ?? 100);
         return {
           '@type': 'chats',
           'total_count': chats.length,
-          'chat_ids': [for (final chat in chats) _int(chat['id']) ?? 0],
+          'chat_ids': [for (final chat in chats) jsonInt(chat['id']) ?? 0],
         };
       case 'getChat':
       case 'createPrivateChat':
@@ -403,7 +406,7 @@ class BotApiTdBackend {
   }
 
   void _ingestUpdate(Map<String, dynamic> update) {
-    final updateId = _int(update['update_id']);
+    final updateId = jsonInt(update['update_id']);
     if (updateId == null) return;
     final emitted = _store.transaction(() {
       if (_store.hasRawUpdate(updateId)) {
@@ -420,11 +423,11 @@ class BotApiTdBackend {
     });
     for (final event in emitted) {
       _emit(event);
-      final userId = _int((_map(event['user']))?['id']);
+      final userId = jsonInt((_map(event['user']))?['id']);
       if (event['@type'] == 'updateUser' && userId != null) {
         _scheduleUserAvatar(userId);
       }
-      final chatId = _int((_map(event['chat']))?['id']);
+      final chatId = jsonInt((_map(event['chat']))?['id']);
       if (event['@type'] == 'updateNewChat' && chatId != null) {
         _scheduleChatAvatar(chatId);
       }
@@ -456,7 +459,7 @@ class BotApiTdBackend {
     Map<String, dynamic> source, {
     required bool edited,
   }) {
-    final chatId = _int((_map(source['chat']))?['id']) ?? 0;
+    final chatId = jsonInt((_map(source['chat']))?['id']) ?? 0;
     final previous = _store.chat(chatId);
     final converted = _converter.message(
       source,
@@ -465,7 +468,7 @@ class BotApiTdBackend {
     );
     final sourceSender = _map(source['from']);
     if (sourceSender?['is_bot'] == true &&
-        _int(sourceSender?['id']) != account.botId) {
+        jsonInt(sourceSender?['id']) != account.botId) {
       _store.setMetadata('bot_to_bot_message_observed', '1');
     }
     for (final user in converted.users) {
@@ -534,10 +537,10 @@ class BotApiTdBackend {
   List<Map<String, dynamic>> _persistDeletedMessages(
     Map<String, dynamic> deleted,
   ) {
-    final chatId = _int((_map(deleted['chat']))?['id']) ?? 0;
+    final chatId = jsonInt((_map(deleted['chat']))?['id']) ?? 0;
     final ids = _list(
       deleted['message_ids'],
-    ).map(_int).whereType<int>().toList();
+    ).map(jsonInt).whereType<int>().toList();
     _store.deleteMessages(chatId, ids);
     return [
       {
@@ -553,8 +556,8 @@ class BotApiTdBackend {
   List<Map<String, dynamic>> _persistReactionCounts(
     Map<String, dynamic> update,
   ) {
-    final chatId = _int((_map(update['chat']))?['id']) ?? 0;
-    final messageId = _int(update['message_id']) ?? 0;
+    final chatId = jsonInt((_map(update['chat']))?['id']) ?? 0;
+    final messageId = jsonInt(update['message_id']) ?? 0;
     final message = _store.message(chatId, messageId);
     if (message == null) return const [];
     final reactions = {
@@ -565,7 +568,7 @@ class BotApiTdBackend {
             {
               '@type': 'messageReaction',
               'type': _botReactionToTd(_map(reaction['type'])),
-              'total_count': _int(reaction['total_count']) ?? 0,
+              'total_count': jsonInt(reaction['total_count']) ?? 0,
               'is_chosen': false,
               'used_sender_id': null,
               'recent_sender_ids': const <Map<String, dynamic>>[],
@@ -609,12 +612,12 @@ class BotApiTdBackend {
       events.add({'@type': 'updateUser', 'user': user});
     }
     if (sourceChat != null) {
-      final chatId = _int(sourceChat['id']) ?? 0;
+      final chatId = jsonInt(sourceChat['id']) ?? 0;
       final previous = _store.chat(chatId);
       final chat = _converter.chat(
         sourceChat,
         lastMessage: _map(previous?['last_message']),
-        unreadCount: _int(previous?['unread_count']) ?? 0,
+        unreadCount: jsonInt(previous?['unread_count']) ?? 0,
       );
       _preserveObservedChatPhoto(chat);
       _store.upsertChat(chat);
@@ -672,8 +675,8 @@ class BotApiTdBackend {
   }
 
   void _migrateLegacyStoredMessage(Map<String, dynamic> source) {
-    final chatId = _int((_map(source['chat']))?['id']);
-    final messageId = _int(source['message_id']);
+    final chatId = jsonInt((_map(source['chat']))?['id']);
+    final messageId = jsonInt(source['message_id']);
     if (chatId == null || messageId == null) return;
     final stored = _store.message(chatId, messageId);
     final content = _map(stored?['content']);
@@ -707,7 +710,7 @@ class BotApiTdBackend {
 
     final chat = _store.chat(chatId);
     final lastMessage = _map(chat?['last_message']);
-    if (chat != null && _int(lastMessage?['id']) == messageId) {
+    if (chat != null && jsonInt(lastMessage?['id']) == messageId) {
       chat['last_message'] = stored;
       _store.upsertChat(chat);
     }
@@ -718,7 +721,7 @@ class BotApiTdBackend {
 
   void _preserveObservedUserPhoto(Map<String, dynamic> user) {
     if (user['profile_photo'] != null) return;
-    final userId = _int(user['id']);
+    final userId = jsonInt(user['id']);
     if (userId == null) return;
     final previousPhoto = _store.user(userId)?['profile_photo'];
     if (previousPhoto != null) user['profile_photo'] = previousPhoto;
@@ -729,7 +732,7 @@ class BotApiTdBackend {
     bool clearPhoto = false,
   }) {
     if (clearPhoto || chat['photo'] != null) return;
-    final chatId = _int(chat['id']);
+    final chatId = jsonInt(chat['id']);
     if (chatId == null) return;
     final previousPhoto = _store.chat(chatId)?['photo'];
     if (previousPhoto != null) chat['photo'] = previousPhoto;
@@ -784,7 +787,7 @@ class BotApiTdBackend {
       final chat = _converter.chat(
         source,
         lastMessage: _map(existing['last_message']),
-        unreadCount: _int(existing['unread_count']) ?? 0,
+        unreadCount: jsonInt(existing['unread_count']) ?? 0,
       );
       _store.upsertChat(chat);
       _store.setMetadata(_avatarResolvedKey(key), '1');
@@ -821,8 +824,8 @@ class BotApiTdBackend {
     final userId = _requiredInt(request, 'user_id');
     final result = await _client.call('getUserProfilePhotos', {
       'user_id': userId,
-      'offset': _int(request['offset']) ?? 0,
-      'limit': (_int(request['limit']) ?? 100).clamp(1, 100),
+      'offset': jsonInt(request['offset']) ?? 0,
+      'limit': (jsonInt(request['limit']) ?? 100).clamp(1, 100),
     });
     final photos = _converter.userProfilePhotos(result);
     final user = _store.user(userId);
@@ -849,13 +852,12 @@ class BotApiTdBackend {
     ).map(_map).whereType<Map<String, dynamic>>().toList();
     if (sizes.isEmpty) return null;
     sizes.sort(
-      (a, b) => ((_int(a['width']) ?? 0) * (_int(a['height']) ?? 0)).compareTo(
-        (_int(b['width']) ?? 0) * (_int(b['height']) ?? 0),
-      ),
+      (a, b) => ((jsonInt(a['width']) ?? 0) * (jsonInt(a['height']) ?? 0))
+          .compareTo((jsonInt(b['width']) ?? 0) * (jsonInt(b['height']) ?? 0)),
     );
     return {
       '@type': 'profilePhoto',
-      'id': _int(photo?['id']) ?? 0,
+      'id': jsonInt(photo?['id']) ?? 0,
       'small': _map(sizes.first['photo']),
       'big': _map(sizes.last['photo']),
       'minithumbnail': null,
@@ -931,7 +933,7 @@ class BotApiTdBackend {
         ? {
             'type': 'animated',
             'animation': 'attach://$field',
-            if ((_double(photo['main_frame_timestamp']) ?? 0) > 0)
+            if ((jsonDouble(photo['main_frame_timestamp']) ?? 0) > 0)
               'main_frame_timestamp': photo['main_frame_timestamp'],
           }
         : {'type': 'static', 'photo': 'attach://$field'};
@@ -1007,7 +1009,7 @@ class BotApiTdBackend {
 
     final grouped = <int, List<Map<String, dynamic>>>{};
     for (final sticker in stickers) {
-      final setId = _int(sticker['set_id']) ?? 0;
+      final setId = jsonInt(sticker['set_id']) ?? 0;
       if (setId != 0) grouped.putIfAbsent(setId, () => []).add(sticker);
     }
     return {
@@ -1084,7 +1086,7 @@ class BotApiTdBackend {
   ) async {
     final ids = <String>[];
     for (final raw in _list(request['custom_emoji_ids'])) {
-      final stableId = _int(raw);
+      final stableId = jsonInt(raw);
       final external = stableId == null
           ? null
           : _converter.externalId('custom_emoji', stableId);
@@ -1109,7 +1111,7 @@ class BotApiTdBackend {
       if (map['@type'] == 'textEntityTypeCustomEmoji' ||
           map['@type'] == 'reactionTypeCustomEmoji' ||
           map['@type'] == 'stickerFullTypeCustomEmoji') {
-        final id = _int(map['custom_emoji_id']);
+        final id = jsonInt(map['custom_emoji_id']);
         if (id != null && id != 0) target.add(id);
       }
       for (final child in map.values) {
@@ -1140,7 +1142,7 @@ class BotApiTdBackend {
       _preserveObservedUserPhoto(user);
       _store.upsertUser(user);
       _emit({'@type': 'updateUser', 'user': user});
-      _scheduleUserAvatar(_int(user['id']) ?? 0);
+      _scheduleUserAvatar(jsonInt(user['id']) ?? 0);
     }
     _emit({'@type': 'updateNewChat', 'chat': chat});
     _scheduleChatAvatar(chatId);
@@ -1151,9 +1153,9 @@ class BotApiTdBackend {
     final chatId = _requiredInt(request, 'chat_id');
     final messages = _store.history(
       chatId: chatId,
-      fromMessageId: _int(request['from_message_id']) ?? 0,
-      offset: _int(request['offset']) ?? 0,
-      limit: _int(request['limit']) ?? 50,
+      fromMessageId: jsonInt(request['from_message_id']) ?? 0,
+      offset: jsonInt(request['offset']) ?? 0,
+      limit: jsonInt(request['limit']) ?? 50,
     );
     return {
       '@type': 'messages',
@@ -1166,9 +1168,9 @@ class BotApiTdBackend {
     final chatId = _requiredInt(request, 'chat_id');
     final message = _store.message(chatId, _requiredInt(request, 'message_id'));
     final reply = _map(message?['reply_to']);
-    final replyId = _int(reply?['message_id']);
+    final replyId = jsonInt(reply?['message_id']);
     if (replyId == null) return _error(404, 'Replied message is unavailable.');
-    return _store.message(_int(reply?['chat_id']) ?? chatId, replyId) ??
+    return _store.message(jsonInt(reply?['chat_id']) ?? chatId, replyId) ??
         _error(404, 'Replied message is not in on-device history.');
   }
 
@@ -1178,9 +1180,9 @@ class BotApiTdBackend {
     final messages = _store.searchMessages(
       chatId: chatId,
       query: request['query'] as String? ?? '',
-      senderId: _int(sender?['user_id']) ?? _int(sender?['chat_id']),
-      fromMessageId: _int(request['from_message_id']) ?? 0,
-      limit: _int(request['limit']) ?? 50,
+      senderId: jsonInt(sender?['user_id']) ?? jsonInt(sender?['chat_id']),
+      fromMessageId: jsonInt(request['from_message_id']) ?? 0,
+      limit: jsonInt(request['limit']) ?? 50,
       contentTypes: _contentTypesForFilter(_map(request['filter'])),
     );
     return {
@@ -1189,15 +1191,15 @@ class BotApiTdBackend {
       'messages': messages,
       'next_from_message_id': messages.isEmpty
           ? 0
-          : _int(messages.last['id']) ?? 0,
+          : jsonInt(messages.last['id']) ?? 0,
     };
   }
 
   Map<String, dynamic> _searchMessages(Map<String, dynamic> request) {
     final messages = _store.searchMessages(
       query: request['query'] as String? ?? '',
-      fromMessageId: _int(request['offset_message_id']) ?? 0,
-      limit: _int(request['limit']) ?? 50,
+      fromMessageId: jsonInt(request['offset_message_id']) ?? 0,
+      limit: jsonInt(request['limit']) ?? 50,
       contentTypes: _contentTypesForFilter(_map(request['filter'])),
     );
     return {
@@ -1233,7 +1235,7 @@ class BotApiTdBackend {
     );
     final stored = _chatForPeer(peerId, supergroup: supergroup);
     if (stored == null) return _error(404, 'Chat is unavailable.');
-    final chatId = _int(stored['id']) ?? 0;
+    final chatId = jsonInt(stored['id']) ?? 0;
     Map<String, dynamic> source = const {};
     try {
       source =
@@ -1296,7 +1298,7 @@ class BotApiTdBackend {
     Map<String, dynamic> request,
   ) async {
     final memberId = _map(request['member_id']);
-    final userId = _int(memberId?['user_id']);
+    final userId = jsonInt(memberId?['user_id']);
     if (userId == null) {
       return _error(400, 'Only user chat members are supported.');
     }
@@ -1310,12 +1312,12 @@ class BotApiTdBackend {
   Future<Map<String, dynamic>> _getChatAdministrators(
     Map<String, dynamic> request,
   ) async {
-    int? chatId = _int(request['chat_id']);
+    int? chatId = jsonInt(request['chat_id']);
     if (chatId == null) {
-      final peerId = _int(request['supergroup_id']);
+      final peerId = jsonInt(request['supergroup_id']);
       chatId = peerId == null
           ? null
-          : _int(_chatForPeer(peerId, supergroup: true)?['id']);
+          : jsonInt(_chatForPeer(peerId, supergroup: true)?['id']);
     }
     if (chatId == null) return _error(404, 'Chat is unavailable.');
     final value = await _client.call('getChatAdministrators', {
@@ -1344,7 +1346,7 @@ class BotApiTdBackend {
     _preserveObservedUserPhoto(user);
     _store.upsertUser(user);
     _emit({'@type': 'updateUser', 'user': user});
-    _scheduleUserAvatar(_int(user['id']) ?? 0);
+    _scheduleUserAvatar(jsonInt(user['id']) ?? 0);
     return {
       '@type': 'chatMember',
       'member_id': {'@type': 'messageSenderUser', 'user_id': user['id']},
@@ -1361,7 +1363,7 @@ class BotApiTdBackend {
     chat['unread_count'] = 0;
     final ids = _list(
       request['message_ids'],
-    ).map(_int).whereType<int>().toList();
+    ).map(jsonInt).whereType<int>().toList();
     final lastRead = ids.isEmpty ? 0 : ids.reduce(math.max);
     chat['last_read_inbox_message_id'] = lastRead;
     _store.upsertChat(chat);
@@ -1395,7 +1397,7 @@ class BotApiTdBackend {
     await _client.call('sendChatAction', {
       'chat_id': _requiredInt(request, 'chat_id'),
       'action': botAction,
-      'message_thread_id': ?_int(request['message_thread_id']),
+      'message_thread_id': ?jsonInt(request['message_thread_id']),
     });
     return _ok;
   }
@@ -1509,15 +1511,15 @@ class BotApiTdBackend {
         method = 'sendLocation';
         parameters = {
           ...common,
-          'latitude': _double(location?['latitude']) ?? 0,
-          'longitude': _double(location?['longitude']) ?? 0,
-          if ((_double(location?['horizontal_accuracy']) ?? 0) > 0)
+          'latitude': jsonDouble(location?['latitude']) ?? 0,
+          'longitude': jsonDouble(location?['longitude']) ?? 0,
+          if ((jsonDouble(location?['horizontal_accuracy']) ?? 0) > 0)
             'horizontal_accuracy': location?['horizontal_accuracy'],
-          if ((_int(content['live_period']) ?? 0) > 0)
+          if ((jsonInt(content['live_period']) ?? 0) > 0)
             'live_period': content['live_period'],
-          if ((_int(content['heading']) ?? 0) > 0)
+          if ((jsonInt(content['heading']) ?? 0) > 0)
             'heading': content['heading'],
-          if ((_int(content['proximity_alert_radius']) ?? 0) > 0)
+          if ((jsonInt(content['proximity_alert_radius']) ?? 0) > 0)
             'proximity_alert_radius': content['proximity_alert_radius'],
         };
       case 'inputMessageVenue':
@@ -1526,8 +1528,8 @@ class BotApiTdBackend {
         method = 'sendVenue';
         parameters = {
           ...common,
-          'latitude': _double(location?['latitude']) ?? 0,
-          'longitude': _double(location?['longitude']) ?? 0,
+          'latitude': jsonDouble(location?['latitude']) ?? 0,
+          'longitude': jsonDouble(location?['longitude']) ?? 0,
           'title': _string(venue?['title']),
           'address': _string(venue?['address']),
           if (_string(venue?['provider']) == 'foursquare') ...{
@@ -1577,13 +1579,15 @@ class BotApiTdBackend {
           'type': type?['@type'] == 'inputPollTypeQuiz' ? 'quiz' : 'regular',
           if (type?['@type'] == 'inputPollTypeQuiz' &&
               _list(type?['correct_option_ids']).isNotEmpty)
-            'correct_option_id': _int(_list(type?['correct_option_ids']).first),
+            'correct_option_id': jsonInt(
+              _list(type?['correct_option_ids']).first,
+            ),
           if (type?['@type'] == 'inputPollTypeQuiz' &&
               _string((_map(type?['explanation']))?['text']).isNotEmpty)
             'explanation': _string((_map(type?['explanation']))?['text']),
-          if ((_int(content['open_period']) ?? 0) > 0)
+          if ((jsonInt(content['open_period']) ?? 0) > 0)
             'open_period': content['open_period'],
-          if ((_int(content['close_date']) ?? 0) > 0)
+          if ((jsonInt(content['close_date']) ?? 0) > 0)
             'close_date': content['close_date'],
           'is_closed': content['is_closed'] == true,
         };
@@ -1756,7 +1760,7 @@ class BotApiTdBackend {
     final chatId = _requiredInt(request, 'chat_id');
     final ids = _list(
       request['message_ids'],
-    ).map(_int).whereType<int>().toList();
+    ).map(jsonInt).whereType<int>().toList();
     if (ids.isEmpty) return _ok;
     try {
       await _client.call('deleteMessages', {
@@ -1815,7 +1819,7 @@ class BotApiTdBackend {
   ) async {
     final parameters = <String, dynamic>{
       'chat_id': _requiredInt(request, 'chat_id'),
-      'message_id': ?_int(request['message_id']),
+      'message_id': ?jsonInt(request['message_id']),
       if (method == 'pinChatMessage')
         'disable_notification': request['disable_notification'] == true,
     };
@@ -1829,7 +1833,7 @@ class BotApiTdBackend {
   }) async {
     final ids = _list(
       request['message_ids'],
-    ).map(_int).whereType<int>().toList();
+    ).map(jsonInt).whereType<int>().toList();
     if (ids.isEmpty) {
       return const {
         '@type': 'messages',
@@ -1880,7 +1884,7 @@ class BotApiTdBackend {
       id: fileId,
       remotePath: remotePath,
       localPath: destination.path,
-      size: _int(source?['file_size']) ?? destination.lengthSync(),
+      size: jsonInt(source?['file_size']) ?? destination.lengthSync(),
     );
     record = _store.file(fileId)!;
     final file = _converter.fileFromRecord(record);
@@ -1911,8 +1915,8 @@ class BotApiTdBackend {
         if (source == null || source['message_id'] == null) continue;
         final currentEvents = _persistMessage(source, edited: false);
         updates.addAll(currentEvents);
-        final chatId = _int((_map(source['chat']))?['id']) ?? 0;
-        final messageId = _int(source['message_id']) ?? 0;
+        final chatId = jsonInt((_map(source['chat']))?['id']) ?? 0;
+        final messageId = jsonInt(source['message_id']) ?? 0;
         final stored = _store.message(chatId, messageId);
         if (stored != null) messages.add(stored);
       }
@@ -1941,16 +1945,16 @@ class BotApiTdBackend {
     final quoteText = _map(quote?['text']);
     return {
       'chat_id': chatId,
-      'message_thread_id': ?_int(request['message_thread_id']),
+      'message_thread_id': ?jsonInt(request['message_thread_id']),
       if (reply?['@type'] == 'inputMessageReplyToMessage')
         'reply_parameters': {
-          'message_id': _int(reply?['message_id']) ?? 0,
-          'chat_id': ?_int(reply?['chat_id']),
+          'message_id': jsonInt(reply?['message_id']) ?? 0,
+          'chat_id': ?jsonInt(reply?['chat_id']),
           'allow_sending_without_reply': true,
           if (quoteText != null) ...{
             'quote': _string(quoteText['text']),
             'quote_entities': _botEntities(quoteText['entities']),
-            'quote_position': _int(quote?['position']) ?? 0,
+            'quote_position': jsonInt(quote?['position']) ?? 0,
           },
         },
       'disable_notification': options?['disable_notification'] == true,
@@ -1971,8 +1975,8 @@ class BotApiTdBackend {
     for (final raw in _list(source))
       if (_map(raw) case final entity?)
         {
-          'offset': _int(entity['offset']) ?? 0,
-          'length': _int(entity['length']) ?? 0,
+          'offset': jsonInt(entity['offset']) ?? 0,
+          'length': jsonInt(entity['length']) ?? 0,
           ..._botEntityType(_map(entity['type'])),
         },
   ];
@@ -2009,7 +2013,7 @@ class BotApiTdBackend {
       'textEntityTypeMentionName' => {
         'type': 'text_mention',
         'user': {
-          'id': _int(type?['user_id']) ?? 0,
+          'id': jsonInt(type?['user_id']) ?? 0,
           'is_bot': false,
           'first_name': '',
         },
@@ -2019,7 +2023,7 @@ class BotApiTdBackend {
         'custom_emoji_id':
             _converter.externalId(
               'custom_emoji',
-              _int(type?['custom_emoji_id']) ?? 0,
+              jsonInt(type?['custom_emoji_id']) ?? 0,
             ) ??
             '${type?['custom_emoji_id'] ?? ''}',
       },
@@ -2054,7 +2058,7 @@ class BotApiTdBackend {
         }
         return _Upload(field: field, remote: id);
       case 'inputFileId':
-        final record = _store.file(_int(input['id']) ?? 0);
+        final record = _store.file(jsonInt(input['id']) ?? 0);
         if (record == null || record.botFileId.isEmpty) {
           throw const FormatException('The attachment file is unavailable.');
         }
@@ -2093,12 +2097,12 @@ class BotApiTdBackend {
       final type = _map(chat['type']);
       if (supergroup &&
           type?['@type'] == 'chatTypeSupergroup' &&
-          _int(type?['supergroup_id']) == peerId) {
+          jsonInt(type?['supergroup_id']) == peerId) {
         return chat;
       }
       if (!supergroup &&
           type?['@type'] == 'chatTypeBasicGroup' &&
-          _int(type?['basic_group_id']) == peerId) {
+          jsonInt(type?['basic_group_id']) == peerId) {
         return chat;
       }
     }
@@ -2139,7 +2143,7 @@ class BotApiTdBackend {
       'restricted' => {
         '@type': 'chatMemberStatusRestricted',
         'is_member': source['is_member'] == true,
-        'restricted_until_date': _int(source['until_date']) ?? 0,
+        'restricted_until_date': jsonInt(source['until_date']) ?? 0,
         'permissions': const {
           '@type': 'chatPermissions',
           'can_send_basic_messages': false,
@@ -2161,7 +2165,7 @@ class BotApiTdBackend {
       'left' => const {'@type': 'chatMemberStatusLeft'},
       'kicked' => {
         '@type': 'chatMemberStatusBanned',
-        'banned_until_date': _int(source['until_date']) ?? 0,
+        'banned_until_date': jsonInt(source['until_date']) ?? 0,
       },
       _ => const {'@type': 'chatMemberStatusMember'},
     };
@@ -2188,7 +2192,7 @@ class BotApiTdBackend {
         'custom_emoji_id':
             _converter.externalId(
               'custom_emoji',
-              _int(source['custom_emoji_id']) ?? 0,
+              jsonInt(source['custom_emoji_id']) ?? 0,
             ) ??
             '${source['custom_emoji_id'] ?? ''}',
       },
@@ -2213,7 +2217,7 @@ class BotApiTdBackend {
   }
 
   List<Map<String, dynamic>> _chatPositionEvents(Map<String, dynamic> chat) {
-    final chatId = _int(chat['id']) ?? 0;
+    final chatId = jsonInt(chat['id']) ?? 0;
     final positions = _list(
       chat['positions'],
     ).map(_map).whereType<Map<String, dynamic>>().toList();
@@ -2352,29 +2356,15 @@ List<Object?> _list(Object? value) => value is List ? value : const [];
 
 String _string(Object? value) => value is String ? value : '';
 
-int? _int(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value);
-  return null;
-}
-
-double? _double(Object? value) {
-  if (value is double) return value;
-  if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value);
-  return null;
-}
-
 int _requiredInt(Map<String, dynamic> source, String key) {
-  final value = _int(source[key]);
+  final value = jsonInt(source[key]);
   if (value == null) throw FormatException('$key is required.');
   return value;
 }
 
 int? _nestedInt(Object? source, String key) {
   final map = _map(source);
-  return _int(map?[key]);
+  return jsonInt(map?[key]);
 }
 
 String _nestedString(Object? source, String key) {

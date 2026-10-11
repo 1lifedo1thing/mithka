@@ -263,10 +263,7 @@ class _LoginViewState extends State<LoginView> {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, viewport) {
-                      final topInset =
-                          MediaQuery.of(context).padding.top +
-                          iPadWindowChromeInsetOf(context) +
-                          56;
+                      final topInset = topChromeInsetOf(context) + 56;
                       return SingleChildScrollView(
                         padding: EdgeInsets.fromLTRB(24, topInset, 24, 24),
                         child: ConstrainedBox(
@@ -354,10 +351,7 @@ class _LoginViewState extends State<LoginView> {
             ),
             if (canGoBack)
               Positioned(
-                top:
-                    MediaQuery.of(context).padding.top +
-                    iPadWindowChromeInsetOf(context) +
-                    6,
+                top: topChromeInsetOf(context) + 6,
                 left: 6,
                 child: AppInteractiveSurface(
                   semanticLabel: AppStringKeys.navigationBack.l10n(context),
@@ -382,10 +376,7 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ),
             Positioned(
-              top:
-                  MediaQuery.of(context).padding.top +
-                  iPadWindowChromeInsetOf(context) +
-                  6,
+              top: topChromeInsetOf(context) + 6,
               right: 6,
               child: _topRightActions(auth, showingPhone),
             ),

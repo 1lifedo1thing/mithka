@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'desktop_window_argument_normalizers.dart';
+
 const desktopImagePreviewWindowType = 'mithka.image-preview';
 const _desktopImagePreviewProtocolVersion = 4;
 const _maximumEncodedArgumentsLength = 512 * 1024;
@@ -117,19 +119,15 @@ class DesktopImagePreviewWindowArguments {
   }
 }
 
-String normalizeDesktopImagePreviewTitle(String? source) {
-  final value = source?.replaceAll(RegExp(r'[\r\n]+'), ' ').trim() ?? '';
-  if (value.isEmpty) return 'Image preview';
-  return value.length <= 128 ? value : value.substring(0, 128);
-}
+String normalizeDesktopImagePreviewTitle(String? source) =>
+    normalizeDesktopWindowTitle(
+      source,
+      fallback: 'Image preview',
+      maxLength: 128,
+    );
 
-String normalizeDesktopImagePreviewLocaleTag(String? source) {
-  final value = source?.trim().replaceAll('_', '-') ?? '';
-  if (value.isEmpty || value.length > 32) return 'en';
-  return RegExp(r'^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$').hasMatch(value)
-      ? value
-      : 'en';
-}
+String normalizeDesktopImagePreviewLocaleTag(String? source) =>
+    normalizeDesktopWindowLocaleTag(source?.replaceAll('_', '-'));
 
 @immutable
 class DesktopImagePreviewPathUpdate {

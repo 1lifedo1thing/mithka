@@ -579,8 +579,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
 
   @override
   Widget build(BuildContext context) {
-    final top =
-        MediaQuery.of(context).padding.top + iPadWindowChromeInsetOf(context);
+    final top = topChromeInsetOf(context);
     final desktop = storyViewerUsesDesktopControls(Theme.of(context).platform);
     final viewer = Scaffold(
       backgroundColor: Colors.black,
@@ -739,7 +738,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
                 ),
               SizedBox(
                 height:
-                    MediaQuery.of(context).padding.bottom +
+                    MediaQuery.paddingOf(context).bottom +
                     (_current?.canBeReplied ?? false ? 68 : 58),
               ),
             ],
@@ -793,7 +792,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
             Positioned(
               left: 18,
               top: top + 96,
-              bottom: MediaQuery.of(context).padding.bottom + 72,
+              bottom: MediaQuery.paddingOf(context).bottom + 72,
               child: Center(
                 child: _desktopNavigationButton(
                   key: const ValueKey('storyDesktopPrevious'),
@@ -806,7 +805,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
             Positioned(
               right: 18,
               top: top + 96,
-              bottom: MediaQuery.of(context).padding.bottom + 72,
+              bottom: MediaQuery.paddingOf(context).bottom + 72,
               child: Center(
                 child: _desktopNavigationButton(
                   key: const ValueKey('storyDesktopNext'),
@@ -820,7 +819,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
           if (_current?.areas.isNotEmpty ?? false)
             Positioned.fill(
               top: top + 96,
-              bottom: MediaQuery.of(context).padding.bottom + 88,
+              bottom: MediaQuery.paddingOf(context).bottom + 88,
               child: _storyAreas(),
             ),
           if ((_current?.isVideo ?? false) && _volumePanelVisible)
@@ -829,7 +828,7 @@ class _StoryViewerViewState extends State<StoryViewerView>
             Positioned(
               left: 12,
               right: 12,
-              bottom: MediaQuery.of(context).padding.bottom + 8,
+              bottom: MediaQuery.paddingOf(context).bottom + 8,
               child: _actionBar(),
             ),
         ],

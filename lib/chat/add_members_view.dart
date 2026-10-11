@@ -115,11 +115,7 @@ class _AddMembersViewState extends State<AddMembersView> {
     final c = context.colors;
     final canAdd = _selected.isNotEmpty && !_adding;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),

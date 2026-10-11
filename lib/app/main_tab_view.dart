@@ -1182,7 +1182,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
     bool compact = false,
   }) {
     final theme = context.watch<ThemeController>();
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
     return ValueListenableBuilder<double?>(
       valueListenable: _splitSidebarWidth,
       builder: (context, requestedWidth, _) {
@@ -1682,7 +1682,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
   }
 
   bool _usesTabletSplit(BuildContext context) {
-    return usesAdaptiveSplitLayout(MediaQuery.of(context).size);
+    return usesAdaptiveSplitLayout(MediaQuery.sizeOf(context));
   }
 
   // `usesDesktopShellLayout` ignores the size it is handed, so reading

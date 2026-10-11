@@ -23,6 +23,7 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../settings/data_storage_service.dart';
 import '../settings/downloads_view.dart';
 import '../settings/retain_download_button.dart';
@@ -1143,11 +1144,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final c = context.colors;
     return Container(
       key: const ValueKey('shared-media-inner-header'),
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),
@@ -1781,7 +1778,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                     ),
                     child: Text(
-                      _duration(message.videoDuration!),
+                      formatMediaDuration(message.videoDuration!),
                       style: const TextStyle(fontSize: 11, color: Colors.white),
                     ),
                   ),
@@ -1860,7 +1857,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final status = _downloadLabel(message, state, multiline: true);
     final semanticsLabel = [
       title,
-      if (duration > 0) _duration(duration),
+      if (duration > 0) formatMediaDuration(duration),
       status,
       source,
     ].where((value) => value.isNotEmpty).join(', ');
@@ -1934,7 +1931,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                         Positioned(
                           left: 9,
                           bottom: 9,
-                          child: _overlayPill(_duration(duration)),
+                          child: _overlayPill(formatMediaDuration(duration)),
                         ),
                       if (state?.completed == true)
                         Positioned(
@@ -2107,8 +2104,8 @@ class _SharedMediaViewState extends State<SharedMediaView> {
             ? (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0)
             : 0.0;
         final durationText = active && position > Duration.zero
-            ? '${_duration(position.inSeconds)} / ${_duration(voice.duration)}'
-            : _duration(voice.duration);
+            ? '${formatMediaDuration(position.inSeconds)} / ${formatMediaDuration(voice.duration)}'
+            : formatMediaDuration(voice.duration);
         final sender = _voiceSenderLabel(message);
         final source = _sourceTitleFor(message);
         final subtitle = [
@@ -2276,7 +2273,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                 const SizedBox(width: 8),
                 _musicPlaylistButton(message),
                 Text(
-                  _duration(music.duration),
+                  formatMediaDuration(music.duration),
                   style: TextStyle(
                     fontSize: 12,
                     color: active ? musicPlayerAccent : c.textTertiary,
@@ -2326,7 +2323,8 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final title = _videoTitle(message);
     final subtitle = [
       DateText.listLabel(message.date),
-      if ((message.videoDuration ?? 0) > 0) _duration(message.videoDuration!),
+      if ((message.videoDuration ?? 0) > 0)
+        formatMediaDuration(message.videoDuration!),
     ].join(' · ');
     final downloadLabel = _downloadLabel(message, state, multiline: true);
     final caption = message.text.trim();
@@ -2391,7 +2389,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                             right: 5,
                             bottom: 5,
                             child: _overlayPill(
-                              _duration(message.videoDuration!),
+                              formatMediaDuration(message.videoDuration!),
                             ),
                           ),
                       ],
@@ -2900,13 +2898,5 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     if (bytes >= 1 << 20) return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
     if (bytes >= 1 << 10) return '${(bytes / (1 << 10)).toStringAsFixed(0)} KB';
     return '$bytes B';
-  }
-
-  String _duration(int seconds) {
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    final s = seconds % 60;
-    String two(int value) => value.toString().padLeft(2, '0');
-    return h > 0 ? '$h:${two(m)}:${two(s)}' : '$m:${two(s)}';
   }
 }

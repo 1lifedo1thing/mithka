@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../tdlib/json_helpers.dart' show jsonInt;
 import 'ai_stdout_logger.dart';
 
 typedef ApplePccMethodInvoker =
@@ -122,10 +123,10 @@ class ApplePccCapabilities {
         values['reason_code']?.toString() ??
         (available ? '' : 'unavailable');
     final contextSize =
-        _int(values['contextSize']) ?? _int(values['context_size']);
+        jsonInt(values['contextSize']) ?? jsonInt(values['context_size']);
     final resetMillis =
-        _int(values['quotaResetDateMillis']) ??
-        _int(values['quota_reset_date_millis']);
+        jsonInt(values['quotaResetDateMillis']) ??
+        jsonInt(values['quota_reset_date_millis']);
     return ApplePccCapabilities(
       sdkAvailable: sdkAvailable,
       available: available,
@@ -154,8 +155,8 @@ class ApplePccCapabilities {
           values['onDeviceReason']?.toString() ??
           values['on_device_reason']?.toString() ??
           'unavailable',
-      onDeviceContextSize: switch (_int(values['onDeviceContextSize']) ??
-          _int(values['on_device_context_size'])) {
+      onDeviceContextSize: switch (jsonInt(values['onDeviceContextSize']) ??
+          jsonInt(values['on_device_context_size'])) {
         final value? when value > 0 => value,
         _ => null,
       },
@@ -167,13 +168,6 @@ class ApplePccCapabilities {
     if (value is num) return value != 0;
     if (value is String && value.toLowerCase() == 'true') return true;
     if (value is String && value.toLowerCase() == 'false') return false;
-    return null;
-  }
-
-  static int? _int(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
     return null;
   }
 }
@@ -301,20 +295,14 @@ class ApplePccApi {
       return ApplePccSummaryResult(
         text: text,
         provider: values['provider']?.toString() ?? 'apple_pcc',
-        contextSize: ApplePccCapabilities._int(values['contextSize']),
-        inputTokenCount: ApplePccCapabilities._int(values['inputTokenCount']),
-        initialPromptTokenCount: ApplePccCapabilities._int(
-          values['initialPromptTokenCount'],
-        ),
-        userPromptTokenCount: ApplePccCapabilities._int(
-          values['userPromptTokenCount'],
-        ),
-        frameworkOverheadTokenCount: ApplePccCapabilities._int(
+        contextSize: jsonInt(values['contextSize']),
+        inputTokenCount: jsonInt(values['inputTokenCount']),
+        initialPromptTokenCount: jsonInt(values['initialPromptTokenCount']),
+        userPromptTokenCount: jsonInt(values['userPromptTokenCount']),
+        frameworkOverheadTokenCount: jsonInt(
           values['frameworkOverheadTokenCount'],
         ),
-        responseTokenCount: ApplePccCapabilities._int(
-          values['responseTokenCount'],
-        ),
+        responseTokenCount: jsonInt(values['responseTokenCount']),
       );
     } catch (error, stackTrace) {
       _aiLogger.error(

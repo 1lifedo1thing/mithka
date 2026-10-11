@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 
 import '../app/ipad_window_chrome.dart';
 import '../app/primary_chat_launcher.dart';
+import '../chat/telegram_link.dart';
 import '../components/app_icons.dart';
 import '../components/icon_grid.dart';
 import '../components/photo_avatar.dart';
@@ -111,7 +112,7 @@ class _AddPeopleViewState extends State<AddPeopleView> {
     } catch (_) {}
     // searchContacts only covers saved contacts; if the input is an exact public
     // username (or t.me link), resolve it so any user shows up as a candidate.
-    final handle = _usernameOf(q);
+    final handle = telegramUsernameFromQuery(q);
     if (handle != null) {
       try {
         final chat = await _client.query({
@@ -157,7 +158,7 @@ class _AddPeopleViewState extends State<AddPeopleView> {
     } catch (_) {}
     // searchPublicChats won't always surface an exact, lesser-known channel; if
     // the input is a valid public username/link, resolve it directly.
-    final handle = _usernameOf(q);
+    final handle = telegramUsernameFromQuery(q);
     if (handle != null) {
       try {
         final chat = await _client.query({
@@ -185,19 +186,6 @@ class _AddPeopleViewState extends State<AddPeopleView> {
     }
     if (q != _query.trim() || _mode != 1) return;
     _groups = hits;
-  }
-
-  /// Extracts a Telegram public username from raw input — bare handle, `@handle`,
-  /// or a t.me / telegram.me link — or null if it isn't a valid username shape.
-  String? _usernameOf(String q) {
-    var s = q.trim();
-    final link = RegExp(
-      r'(?:https?://)?(?:t\.me|telegram\.me)/(@?[A-Za-z0-9_]+)',
-      caseSensitive: false,
-    ).firstMatch(s);
-    if (link != null) s = link.group(1)!;
-    if (s.startsWith('@')) s = s.substring(1);
-    return RegExp(r'^[A-Za-z0-9_]{3,32}$').hasMatch(s) ? s : null;
   }
 
   Future<Contact?> _contact(int id) async {
@@ -280,11 +268,7 @@ class _AddPeopleViewState extends State<AddPeopleView> {
   Widget _header() {
     final c = context.colors;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),

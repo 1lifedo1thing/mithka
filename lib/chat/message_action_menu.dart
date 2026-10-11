@@ -577,7 +577,7 @@ class MessageActionMenu extends StatelessWidget {
         : secondRow.length;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = MediaQuery.of(context).size.width - 24;
+        final maxWidth = MediaQuery.sizeOf(context).width - 24;
         final availableWidth = constraints.hasBoundedWidth
             ? constraints.maxWidth.clamp(0.0, maxWidth)
             : maxWidth;

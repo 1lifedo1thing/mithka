@@ -2713,10 +2713,12 @@ abstract final class TDParse {
         _splitMarkdownTableRow(trimmed).length >= 2;
   }
 
+  static final _markdownSeparatorCell = RegExp(r'^:?-{3,}:?$');
+
   static bool _looksLikeMarkdownSeparatorRow(String line) {
     final cells = _splitMarkdownTableRow(line);
     if (cells.length < 2) return false;
-    return cells.every((cell) => RegExp(r'^:?-{3,}:?$').hasMatch(cell.trim()));
+    return cells.every((cell) => _markdownSeparatorCell.hasMatch(cell.trim()));
   }
 
   static List<RichMessageTableCell> _markdownTableCells(

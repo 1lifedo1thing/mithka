@@ -1,3 +1,22 @@
+final RegExp _usernameLink = RegExp(
+  r'(?:https?://)?(?:t\.me|telegram\.me)/(@?[A-Za-z0-9_]+)',
+  caseSensitive: false,
+);
+final RegExp _publicUsername = RegExp(r'^[A-Za-z0-9_]{3,32}$');
+
+/// Whether [value] has the shape of a public Telegram username (no `@`).
+bool isPublicTelegramUsername(String value) => _publicUsername.hasMatch(value);
+
+/// The username a search query names — `@name`, `name`, or a `t.me/name`
+/// link — or null when it does not name one.
+String? telegramUsernameFromQuery(String query) {
+  var value = query.trim();
+  final link = _usernameLink.firstMatch(value);
+  if (link != null) value = link.group(1)!;
+  if (value.startsWith('@')) value = value.substring(1);
+  return isPublicTelegramUsername(value) ? value : null;
+}
+
 /// Returns the canonical web form understood by Mithka's Telegram link
 /// handler, or null when [raw] is not a Telegram deep link.
 String? normalizeTelegramLink(String raw) {

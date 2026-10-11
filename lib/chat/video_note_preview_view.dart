@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../media/video_view_compatibility.dart';
 import '../theme/app_theme.dart';
 import 'message_send_options.dart';
@@ -239,7 +240,7 @@ class _VideoNotePreviewViewState extends State<VideoNotePreviewView> {
                     Row(
                       children: [
                         Text(
-                          _duration(value.position.inSeconds),
+                          formatMediaDuration(value.position.inSeconds),
                           style: TextStyle(
                             color: colors.textSecondary,
                             fontSize: 12,
@@ -254,9 +255,9 @@ class _VideoNotePreviewViewState extends State<VideoNotePreviewView> {
                               AppStringKeys.videoPlaybackSwipeAdjustProgress,
                             ),
                             semanticValue:
-                                '${_duration(value.position.inSeconds)} / ${_duration(value.duration.inSeconds)}',
+                                '${formatMediaDuration(value.position.inSeconds)} / ${formatMediaDuration(value.duration.inSeconds)}',
                             semanticValueFormatter: (fraction) =>
-                                '${_duration((value.duration.inSeconds * fraction).round())} / ${_duration(value.duration.inSeconds)}',
+                                '${formatMediaDuration((value.duration.inSeconds * fraction).round())} / ${formatMediaDuration(value.duration.inSeconds)}',
                             onChanged: (fraction) => _controller.seekTo(
                               Duration(
                                 milliseconds: (totalMs * fraction).round(),
@@ -265,7 +266,7 @@ class _VideoNotePreviewViewState extends State<VideoNotePreviewView> {
                           ),
                         ),
                         Text(
-                          _duration(value.duration.inSeconds),
+                          formatMediaDuration(value.duration.inSeconds),
                           style: TextStyle(
                             color: colors.textSecondary,
                             fontSize: 12,
@@ -296,7 +297,7 @@ class _VideoNotePreviewViewState extends State<VideoNotePreviewView> {
                               AppStringKeys.mediaSendPreviewVideoTrimRange,
                             ),
                             semanticValue:
-                                '${_duration((_trimRange.start / 1000).floor())}–${_duration((_trimRange.end / 1000).ceil())}',
+                                '${formatMediaDuration((_trimRange.start / 1000).floor())}–${formatMediaDuration((_trimRange.end / 1000).ceil())}',
                             onChanged: (start, end) {
                               if (!_exporting) {
                                 setState(
@@ -312,7 +313,7 @@ class _VideoNotePreviewViewState extends State<VideoNotePreviewView> {
                           ),
                         ),
                         Text(
-                          '${_duration((_trimRange.start / 1000).floor())}–${_duration((_trimRange.end / 1000).ceil())}',
+                          '${formatMediaDuration((_trimRange.start / 1000).floor())}–${formatMediaDuration((_trimRange.end / 1000).ceil())}',
                           style: TextStyle(
                             color: colors.textSecondary,
                             fontSize: 11,
@@ -328,9 +329,6 @@ class _VideoNotePreviewViewState extends State<VideoNotePreviewView> {
       ),
     );
   }
-
-  String _duration(int seconds) =>
-      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   Widget _volumeControl(AppColors colors) {
     final muted = _volume <= 0.01;

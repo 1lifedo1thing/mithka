@@ -127,8 +127,8 @@ class TelegramMiniAppRecent {
     if (value is! Map) return null;
     final title = value['title'] as String?;
     final url = value['url'] as String?;
-    final botUserId = _asInt(value['botUserId']);
-    final chatId = _asInt(value['chatId']);
+    final botUserId = jsonInt(value['botUserId']);
+    final chatId = jsonInt(value['chatId']);
     final mainWebApp = value['mainWebApp'] == true;
     final shortName = value['webAppShortName'] as String? ?? '';
     if (title == null ||
@@ -138,14 +138,14 @@ class TelegramMiniAppRecent {
         chatId == null) {
       return null;
     }
-    final photoFileId = _asInt(value['photoFileId']);
+    final photoFileId = jsonInt(value['photoFileId']);
     return TelegramMiniAppRecent(
       title: title,
       botTitle: value['botTitle'] as String? ?? '',
       url: url,
       botUserId: botUserId,
       chatId: chatId,
-      updatedAt: _asInt(value['updatedAt']) ?? 0,
+      updatedAt: jsonInt(value['updatedAt']) ?? 0,
       keyboardButtonText: value['keyboardButtonText'] as String?,
       mainWebApp: mainWebApp,
       startParameter: value['startParameter'] as String? ?? '',
@@ -153,13 +153,6 @@ class TelegramMiniAppRecent {
       allowWriteAccess: value['allowWriteAccess'] == true,
       photo: photoFileId == null ? null : TdFileRef(id: photoFileId),
     );
-  }
-
-  static int? _asInt(Object? value) {
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
   }
 }
 

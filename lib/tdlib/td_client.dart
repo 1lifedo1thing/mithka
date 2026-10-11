@@ -123,15 +123,20 @@ class _TdSessionStringInfo {
   final bool isBot;
 }
 
+/// `close`, pre-encoded: it is sent verbatim to every client being retired.
+const String _tdCloseRequest = '{"@type":"close"}';
+
+/// `getOption(version)`, the first request that activates a new TDLib client.
+const String _tdActivateRequest = '{"@type":"getOption","name":"version"}';
+
 @visibleForTesting
 List<int> closeStaleDebugTdlibClients(
   Iterable<int> clientIds,
   void Function(int clientId, String request) send,
 ) {
   final staleClientIds = clientIds.where((id) => id > 0).toSet().toList();
-  final closeRequest = jsonEncode({'@type': 'close'});
   for (final clientId in staleClientIds) {
-    send(clientId, closeRequest);
+    send(clientId, _tdCloseRequest);
   }
   return staleClientIds;
 }
@@ -610,10 +615,7 @@ class TdClient {
     // The first request "activates" each client; TDLib then emits its
     // updateAuthorizationState(authorizationStateWaitTdlibParameters).
     for (final cid in _clientForSlot.values.where((id) => id > 0)) {
-      _bindings.send(
-        cid,
-        jsonEncode({'@type': 'getOption', 'name': 'version'}),
-      );
+      _bindings.send(cid, _tdActivateRequest);
     }
 
     for (final backend in _botApiBackendForClient.values) {
@@ -880,7 +882,7 @@ class TdClient {
     _slotForClient[cid] = newSlot;
     _persist();
     if (kDebugMode) unawaited(_persistDebugLiveClientIds());
-    _bindings.send(cid, jsonEncode({'@type': 'getOption', 'name': 'version'}));
+    _bindings.send(cid, _tdActivateRequest);
     return newSlot;
   }
 
@@ -1092,7 +1094,7 @@ class TdClient {
     final closed = Completer<void>();
     _clientClosedWaiters[oldClientId] = closed;
     _activeClientId = 0;
-    _bindings.send(oldClientId, jsonEncode({'@type': 'close'}));
+    _bindings.send(oldClientId, _tdCloseRequest);
     try {
       await closed.future.timeout(const Duration(seconds: 15));
     } finally {
@@ -1130,10 +1132,7 @@ class TdClient {
               authorizationState.type == 'authorizationStateWaitPhoneNumber',
         )
         .timeout(const Duration(seconds: 20));
-    _bindings.send(
-      newClientId,
-      jsonEncode({'@type': 'getOption', 'name': 'version'}),
-    );
+    _bindings.send(newClientId, _tdActivateRequest);
     await waitForPhoneNumber;
   }
 
@@ -1176,7 +1175,7 @@ class TdClient {
     _clientForSlot[newSlot] = cid;
     _slotForClient[cid] = newSlot;
     if (kDebugMode) unawaited(_persistDebugLiveClientIds());
-    _bindings.send(cid, jsonEncode({'@type': 'getOption', 'name': 'version'}));
+    _bindings.send(cid, _tdActivateRequest);
     try {
       await _waitForRestoredSessionReady(newSlot, cid, expectedUserId);
       setActive(newSlot);
@@ -1214,7 +1213,7 @@ class TdClient {
     _clientForSlot[newSlot] = cid;
     _slotForClient[cid] = newSlot;
     if (kDebugMode) unawaited(_persistDebugLiveClientIds());
-    _bindings.send(cid, jsonEncode({'@type': 'getOption', 'name': 'version'}));
+    _bindings.send(cid, _tdActivateRequest);
     try {
       await _waitForQrLoginReady(cid);
       await queryTo({
@@ -1763,7 +1762,7 @@ class TdClient {
     final closed = existingWaiter ?? Completer<void>();
     if (existingWaiter == null) {
       _clientClosedWaiters[cid] = closed;
-      _bindings.send(cid, jsonEncode({'@type': 'close'}));
+      _bindings.send(cid, _tdCloseRequest);
     }
     var didClose = true;
     try {

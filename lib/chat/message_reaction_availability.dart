@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import 'quick_reaction_choice.dart';
 
+final RegExp _variationSelectors = RegExp('[\uFE0E\uFE0F]');
+
 String normalizedReactionEmoji(String emoji) =>
-    emoji.replaceAll(RegExp('[\uFE0E\uFE0F]'), '');
+    emoji.replaceAll(_variationSelectors, '');
 
 class MessageReactionUnavailableException implements Exception {
   const MessageReactionUnavailableException();

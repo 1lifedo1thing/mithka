@@ -265,10 +265,7 @@ class _FullImageViewerState extends State<FullImageViewer> {
             ),
           ),
           Positioned(
-            top:
-                MediaQuery.of(context).padding.top +
-                iPadWindowChromeInsetOf(context) +
-                8,
+            top: topChromeInsetOf(context) + 8,
             // The viewer covers the whole window, so on macOS the row would
             // otherwise sit under the traffic lights. Both sides move in by the
             // same clearance to keep the counter centred on the window.
@@ -347,10 +344,7 @@ class _FullImageViewerState extends State<FullImageViewer> {
             ),
           if (_menuVisible)
             Positioned(
-              top:
-                  MediaQuery.of(context).padding.top +
-                  iPadWindowChromeInsetOf(context) +
-                  56,
+              top: topChromeInsetOf(context) + 56,
               right: 16 + _chromeInset,
               child: _ViewerActionsMenu(
                 canCopy: DesktopClipboardImageService.canWriteImage,
@@ -374,7 +368,7 @@ class _FullImageViewerState extends State<FullImageViewer> {
             Positioned(
               left: 22 + _chromeInset,
               right: 22 + _chromeInset,
-              bottom: MediaQuery.of(context).padding.bottom + 18,
+              bottom: MediaQuery.paddingOf(context).bottom + 18,
               child: Opacity(
                 opacity: 1 - progress,
                 child: Semantics(

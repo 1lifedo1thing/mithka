@@ -9,6 +9,7 @@ import 'package:mithka/l10n/app_localizations.dart';
 import '../components/app_icons.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../theme/app_theme.dart';
 import 'message_send_options.dart';
 import 'voice_note_trimmer.dart';
@@ -308,8 +309,8 @@ class _VoiceNotePreviewViewState extends State<VoiceNotePreviewView> {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            '${_duration((_position.inMilliseconds / 1000 - _trimStart).clamp(0, _trimEnd - _trimStart).floor())} / '
-                            '${_duration((_trimEnd - _trimStart).ceil())}',
+                            '${formatMediaDuration((_position.inMilliseconds / 1000 - _trimStart).clamp(0, _trimEnd - _trimStart).floor())} / '
+                            '${formatMediaDuration((_trimEnd - _trimStart).ceil())}',
                             style: TextStyle(
                               fontSize: 12,
                               color: c.textSecondary,
@@ -340,7 +341,7 @@ class _VoiceNotePreviewViewState extends State<VoiceNotePreviewView> {
                       ),
                       const Spacer(),
                       Text(
-                        '${_duration(_trimStart.floor())} – ${_duration(_trimEnd.ceil())}',
+                        '${formatMediaDuration(_trimStart.floor())} – ${formatMediaDuration(_trimEnd.ceil())}',
                         style: TextStyle(color: c.textSecondary, fontSize: 12),
                       ),
                     ],
@@ -355,7 +356,7 @@ class _VoiceNotePreviewViewState extends State<VoiceNotePreviewView> {
                       AppStringKeys.mediaSendPreviewVideoTrimRange,
                     ),
                     semanticValue:
-                        '${_duration(_trimStart.floor())} – ${_duration(_trimEnd.ceil())}',
+                        '${formatMediaDuration(_trimStart.floor())} – ${formatMediaDuration(_trimEnd.ceil())}',
                     onChanged: (start, end) {
                       if (!_exporting) {
                         unawaited(_changeTrim(RangeValues(start, end)));
@@ -387,9 +388,6 @@ class _VoiceNotePreviewViewState extends State<VoiceNotePreviewView> {
       ),
     );
   }
-
-  static String _duration(int seconds) =>
-      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }
 
 class _WaveformPainter extends CustomPainter {

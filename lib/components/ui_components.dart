@@ -332,16 +332,9 @@ class NavHeader extends StatelessWidget {
       value: systemUiOverlayStyleForSurface(c.navBar),
       child: Container(
         constraints: BoxConstraints(
-          minHeight:
-              headerHeight +
-              MediaQuery.of(context).padding.top +
-              iPadWindowChromeInsetOf(context),
+          minHeight: headerHeight + topChromeInsetOf(context),
         ),
-        padding: EdgeInsets.only(
-          top:
-              MediaQuery.of(context).padding.top +
-              iPadWindowChromeInsetOf(context),
-        ),
+        padding: EdgeInsets.only(top: topChromeInsetOf(context)),
         decoration: BoxDecoration(
           color: c.navBar,
           border: Border(

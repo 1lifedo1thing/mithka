@@ -1602,7 +1602,7 @@ class _TimeZoneSheet extends StatelessWidget {
     return Align(
       alignment: Alignment.bottomCenter,
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.62,
+        height: MediaQuery.sizeOf(context).height * 0.62,
         decoration: BoxDecoration(
           color: c.card,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),

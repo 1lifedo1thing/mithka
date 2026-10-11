@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'custom_emoji.dart';
 import 'link_handler.dart';
+import 'message_text_entity_runs.dart';
 
 class TelegramRichText extends StatefulWidget {
   const TelegramRichText({
@@ -329,7 +330,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     TextStyle baseStyle,
     Color linkColor,
   ) {
-    final spoilerKey = _spoilerKey(active);
+    final spoilerKey = active.spoilerKey;
     if (spoilerKey != null && !_revealedSpoilers.contains(spoilerKey)) {
       final recognizer = TapGestureRecognizer()
         ..onTap = () {
@@ -354,7 +355,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
               .where((entity) => entity.type != 'textEntityTypeSpoiler')
               .toList(growable: false);
     final style = _entityStyle(context, effectiveActive, baseStyle, linkColor);
-    final customEmojiId = _customEmojiId(effectiveActive);
+    final customEmojiId = effectiveActive.customEmojiId;
     if (customEmojiId != null) {
       final ambientScaler = MediaQuery.textScalerOf(context);
       return [
@@ -372,10 +373,12 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         ),
       ];
     }
-    if (_hasMath(effectiveActive)) return [_mathSpan(segment, style)];
+    if (effectiveActive.hasMathematicalExpression) {
+      return [_mathSpan(segment, style)];
+    }
     if (_hasCode(effectiveActive)) return [_codeSpan(segment, style)];
 
-    final mentionUserId = _mentionUserId(effectiveActive);
+    final mentionUserId = effectiveActive.mentionUserId;
     if (mentionUserId != null) {
       if (widget.onMentionTap == null) {
         return [TextSpan(text: segment, style: style)];
@@ -400,7 +403,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         return [TextSpan(text: segment, style: style)];
       }
       final recognizer = TapGestureRecognizer()
-        ..onTap = () => widget.onHashtagTap?.call(_normalizeHashtag(segment));
+        ..onTap = () => widget.onHashtagTap?.call(normalizedHashtag(segment));
       _recognizers.add(recognizer);
       return [TextSpan(text: segment, style: style, recognizer: recognizer)];
     }
@@ -533,24 +536,6 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         : style;
   }
 
-  int? _customEmojiId(List<MessageTextEntity> active) {
-    for (final entity in active.reversed) {
-      if (entity.isCustomEmoji && entity.customEmojiId != null) {
-        return entity.customEmojiId;
-      }
-    }
-    return null;
-  }
-
-  String? _spoilerKey(List<MessageTextEntity> active) {
-    for (final entity in active) {
-      if (entity.type == 'textEntityTypeSpoiler') {
-        return '${entity.offset}:${entity.length}';
-      }
-    }
-    return null;
-  }
-
   bool _hasCode(List<MessageTextEntity> active) {
     return active.any(
       (entity) =>
@@ -558,19 +543,6 @@ class _TelegramRichTextState extends State<TelegramRichText> {
           entity.type == 'textEntityTypePre' ||
           entity.type == 'textEntityTypePreCode',
     );
-  }
-
-  bool _hasMath(List<MessageTextEntity> active) {
-    return active.any((entity) => entity.isMathematicalExpression);
-  }
-
-  int? _mentionUserId(List<MessageTextEntity> active) {
-    for (final entity in active.reversed) {
-      if (entity.type == 'textEntityTypeMentionName' && entity.userId != null) {
-        return entity.userId;
-      }
-    }
-    return null;
   }
 
   String? _entityTapTarget(String segment, List<MessageTextEntity> active) {
@@ -591,7 +563,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         case 'textEntityTypeEmailAddress':
           return 'mailto:$segment';
         case 'textEntityTypePhoneNumber':
-          return 'tel:${segment.replaceAll(RegExp(r'[^0-9+]'), '')}';
+          return telephoneUri(segment);
       }
     }
     return null;
@@ -627,7 +599,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
       final recognizer = TapGestureRecognizer()
         ..onTap = () {
           if (isHashtag) {
-            widget.onHashtagTap?.call(_normalizeHashtag(matched));
+            widget.onHashtagTap?.call(normalizedHashtag(matched));
           } else {
             openLink(context, target);
           }
@@ -659,11 +631,6 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     decorationColor: widget.underlineLinks ? link : base.decorationColor,
     decorationThickness: widget.underlineLinks ? 1.0 : base.decorationThickness,
   );
-
-  String _normalizeHashtag(String tag) {
-    final trimmed = tag.trim();
-    return trimmed.startsWith('#') ? trimmed : '#$trimmed';
-  }
 }
 
 class _LatexInline extends StatelessWidget {

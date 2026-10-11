@@ -174,7 +174,7 @@ class _LocationDetailViewState extends State<LocationDetailView> {
               16,
               14,
               16,
-              14 + MediaQuery.of(context).padding.bottom,
+              14 + MediaQuery.paddingOf(context).bottom,
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,

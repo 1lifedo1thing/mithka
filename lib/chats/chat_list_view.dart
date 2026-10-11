@@ -2174,11 +2174,7 @@ class _ChatListViewState extends State<ChatListView>
     final activeFilter = _model.selectedFilter;
     return Container(
       color: c.listHeaderTint,
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xxl,
@@ -3085,9 +3081,7 @@ class _ChatListViewState extends State<ChatListView>
   Future<void> _openChatInSeparateWindow(ChatSummary chat) async {
     final theme = context.read<ThemeController>();
     final accounts = context.read<AccountStore>();
-    final activeAccount = accounts.summaries
-        .where((account) => account.slot == accounts.activeSlot)
-        .firstOrNull;
+    final activeAccount = accounts.activeSummary;
     final opened = await DesktopChatWindowService.instance.open(
       DesktopChatWindowArguments(
         accountSlot: accounts.activeSlot,
@@ -3114,9 +3108,7 @@ class _ChatListViewState extends State<ChatListView>
     if (_openSwipeChat != null) setState(() => _openSwipeChat = null);
     final hasUnread = chat.unreadCount > 0 || chat.isMarkedUnread;
     final accounts = context.read<AccountStore>();
-    final activeAccount = accounts.summaries
-        .where((account) => account.slot == accounts.activeSlot)
-        .firstOrNull;
+    final activeAccount = accounts.activeSummary;
     final avatarPath = activeAccount?.avatarPath?.trim();
     unawaited(
       showChatListPreview(

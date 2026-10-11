@@ -723,7 +723,7 @@ Future<bool> _openTelegramFallback(
       query: query,
     );
   }
-  if (!_isPublicUsername(first)) return false;
+  if (!isPublicTelegramUsername(first)) return false;
 
   return _openPublicChat(
     nav,
@@ -2313,9 +2313,6 @@ Future<bool> _openPrivateMessageLink(
   );
   return true;
 }
-
-bool _isPublicUsername(String value) =>
-    RegExp(r'^[A-Za-z0-9_]{3,32}$').hasMatch(value);
 
 Future<void> _openChat(
   NavigatorState nav,

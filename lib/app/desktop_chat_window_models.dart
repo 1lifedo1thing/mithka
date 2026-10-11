@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'desktop_window_argument_normalizers.dart';
 
 const desktopChatWindowType = 'mithka.chat';
 const _desktopChatWindowProtocolVersion = 2;
@@ -312,11 +313,8 @@ class DesktopChatWindowArguments {
     }
   }
 
-  static String normalizeTitle(String? source) {
-    final title = source?.replaceAll(RegExp(r'[\r\n]+'), ' ').trim() ?? '';
-    if (title.isEmpty) return 'Mithka';
-    return title.length <= 256 ? title : title.substring(0, 256);
-  }
+  static String normalizeTitle(String? source) =>
+      normalizeDesktopWindowTitle(source, fallback: 'Mithka');
 
   static String? normalizePath(String? source) {
     final path = source?.trim();

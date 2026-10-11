@@ -9,6 +9,7 @@ import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../l10n/app_localizations.dart';
+import '../media/media_metadata.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -286,17 +287,11 @@ class _CallRow extends StatelessWidget {
   final VoidCallback? onVoiceCall;
   final VoidCallback? onVideoCall;
 
-  String _duration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainder = seconds % 60;
-    return '$minutes:${remainder.toString().padLeft(2, '0')}';
-  }
-
   String _status() {
     final message = entry.message;
     if (message.callDuration > 0) {
       return AppStrings.t(AppStringKeys.messageBubbleCallDuration, {
-        'value1': _duration(message.callDuration),
+        'value1': formatMediaDuration(message.callDuration),
       });
     }
     return switch (message.callDiscardReason) {

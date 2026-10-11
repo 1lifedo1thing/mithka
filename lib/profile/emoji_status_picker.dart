@@ -21,7 +21,7 @@ Future<void> showEmojiStatusPicker(
     context: context,
     builder: (sheetContext) {
       final c = sheetContext.colors;
-      final maxHeight = MediaQuery.of(sheetContext).size.height * 0.6;
+      final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.6;
 
       Future<void> pick(int id) async {
         final ok = await _setEmojiStatus(id);

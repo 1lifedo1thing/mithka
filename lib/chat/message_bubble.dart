@@ -25,6 +25,7 @@ import '../components/document_file_icon.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../platform/adaptive_platform.dart';
 import '../profile/profile_detail_view.dart';
 import '../settings/sensitive_content_controller.dart';
@@ -55,6 +56,7 @@ import 'message_action_menu.dart';
 import 'message_reply_count_badge.dart';
 import 'message_special_content.dart';
 import 'message_swipe_reply.dart';
+import 'message_text_entity_runs.dart';
 import 'mobile_message_text_selection.dart';
 import 'music_player_controller.dart';
 import 'sensitive_content_reveal_prompt.dart';
@@ -2741,7 +2743,7 @@ class _MessageBubbleState extends State<MessageBubble>
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    _durationString(voice.duration),
+                    formatMediaDuration(voice.duration),
                     style: TextStyle(
                       fontSize: 12,
                       color: _colors.textSecondary,
@@ -3795,8 +3797,8 @@ class _MessageBubbleState extends State<MessageBubble>
           SizedBox(
             width: 70,
             child: Text(
-              '${_durationString(position.inSeconds)}/'
-              '${total.inSeconds > 0 ? _durationString(total.inSeconds) : '--:--'}',
+              '${formatMediaDuration(position.inSeconds)}/'
+              '${total.inSeconds > 0 ? formatMediaDuration(total.inSeconds) : '--:--'}',
               textAlign: TextAlign.right,
               style: TextStyle(fontSize: 11, color: c.textSecondary),
             ),
@@ -4521,7 +4523,7 @@ class _MessageBubbleState extends State<MessageBubble>
     double fontSize,
     bool outgoing,
   ) {
-    final spoilerKey = _spoilerKey(active);
+    final spoilerKey = active.spoilerKey;
     final spoilerHidden =
         spoilerKey != null && !_revealedSpoilers.contains(spoilerKey);
     if (spoilerHidden) {
@@ -4558,7 +4560,7 @@ class _MessageBubbleState extends State<MessageBubble>
         ),
       ];
     }
-    final customEmojiId = _customEmojiId(effectiveActive);
+    final customEmojiId = effectiveActive.customEmojiId;
     if (customEmojiId != null) {
       return [
         WidgetSpan(
@@ -4575,13 +4577,13 @@ class _MessageBubbleState extends State<MessageBubble>
         ),
       ];
     }
-    if (_hasMath(effectiveActive)) {
+    if (effectiveActive.hasMathematicalExpression) {
       return [_inlineMathSpan(segment, style, fontSize)];
     }
     if (_hasInlineCode(effectiveActive)) {
       return [_inlineCodeSpan(segment, style, fontSize)];
     }
-    final userId = _entityMentionUserId(effectiveActive);
+    final userId = effectiveActive.mentionUserId;
     if (userId != null) {
       final recognizer = TapGestureRecognizer()
         ..onTap = () {
@@ -4606,7 +4608,7 @@ class _MessageBubbleState extends State<MessageBubble>
         return [TextSpan(text: segment, style: style)];
       }
       final recognizer = TapGestureRecognizer()
-        ..onTap = () => widget.onHashtagTap?.call(_normalizeHashtag(segment));
+        ..onTap = () => widget.onHashtagTap?.call(normalizedHashtag(segment));
       _linkRecognizers.add(recognizer);
       return [TextSpan(text: segment, style: style, recognizer: recognizer)];
     }
@@ -4664,30 +4666,10 @@ class _MessageBubbleState extends State<MessageBubble>
     return null;
   }
 
-  int? _customEmojiId(List<MessageTextEntity> active) {
-    for (final entity in active.reversed) {
-      if (entity.isCustomEmoji && entity.customEmojiId != null) {
-        return entity.customEmojiId;
-      }
-    }
-    return null;
-  }
-
-  bool _hasMath(List<MessageTextEntity> active) {
-    return active.any((e) => e.isMathematicalExpression);
-  }
-
   bool _hasPreCode(List<MessageTextEntity> active) {
     return active.any(
       (e) => e.type == 'textEntityTypePre' || e.type == 'textEntityTypePreCode',
     );
-  }
-
-  String? _spoilerKey(List<MessageTextEntity> active) {
-    for (final e in active) {
-      if (e.type == 'textEntityTypeSpoiler') return '${e.offset}:${e.length}';
-    }
-    return null;
   }
 
   TextStyle _entityStyle(
@@ -4792,20 +4774,11 @@ class _MessageBubbleState extends State<MessageBubble>
         case 'textEntityTypeEmailAddress':
           return 'mailto:$segment';
         case 'textEntityTypePhoneNumber':
-          return 'tel:${segment.replaceAll(RegExp(r'[^0-9+]'), '')}';
+          return telephoneUri(segment);
         case 'textEntityTypeBankCardNumber':
           return null;
         case 'textEntityTypeMentionName':
           return null;
-      }
-    }
-    return null;
-  }
-
-  int? _entityMentionUserId(List<MessageTextEntity> active) {
-    for (final e in active.reversed) {
-      if (e.type == 'textEntityTypeMentionName' && e.userId != null) {
-        return e.userId;
       }
     }
     return null;
@@ -4840,7 +4813,7 @@ class _MessageBubbleState extends State<MessageBubble>
       final recognizer = TapGestureRecognizer()
         ..onTap = () {
           if (isHashtag) {
-            widget.onHashtagTap?.call(_normalizeHashtag(matched));
+            widget.onHashtagTap?.call(normalizedHashtag(matched));
           } else {
             openLink(context, target);
           }
@@ -4878,11 +4851,6 @@ class _MessageBubbleState extends State<MessageBubble>
       decorationStyle: TextDecorationStyle.solid,
       decorationThickness: 1.0,
     );
-  }
-
-  String _normalizeHashtag(String tag) {
-    final trimmed = tag.trim();
-    return trimmed.startsWith('#') ? trimmed : '#$trimmed';
   }
 
   // MARK: - Image
@@ -5308,7 +5276,7 @@ class _MessageBubbleState extends State<MessageBubble>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _durationString(dur),
+                        formatMediaDuration(dur),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -5466,8 +5434,8 @@ class _MessageBubbleState extends State<MessageBubble>
             : 0.0;
         final played = _voice.isPlaying || _voice.position > Duration.zero;
         final timeText = played
-            ? _durationString(_voice.position.inSeconds)
-            : _durationString(voice.duration);
+            ? formatMediaDuration(_voice.position.inSeconds)
+            : formatMediaDuration(voice.duration);
         return _bubbleBackground(
           outgoing: outgoing,
           constraints: const BoxConstraints.tightFor(width: 210),
@@ -5623,9 +5591,6 @@ class _MessageBubbleState extends State<MessageBubble>
       },
     );
   }
-
-  static String _durationString(int seconds) =>
-      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   // MARK: - Location
 

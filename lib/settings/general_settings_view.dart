@@ -15,6 +15,7 @@ import '../components/settings_selection_row.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../l10n/app_localizations.dart';
+import '../media/media_metadata.dart';
 import '../platform/adaptive_platform.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
@@ -52,24 +53,11 @@ class _GeneralSettingsViewState extends State<GeneralSettingsView> {
       final stats = await TdClient.shared.query({
         '@type': 'getStorageStatisticsFast',
       });
-      _cacheSize = _formatBytes(stats.int64('files_size') ?? 0);
+      _cacheSize = formatMediaByteSize(stats.int64('files_size') ?? 0);
     } catch (_) {
       _cacheSize = '—';
     }
     if (mounted) setState(() => _loadingCache = false);
-  }
-
-  static String _formatBytes(int bytes) {
-    final b = bytes < 0 ? 0 : bytes;
-    if (b < 1024) return '$b B';
-    const units = ['KB', 'MB', 'GB'];
-    var size = b / 1024;
-    var i = 0;
-    while (size >= 1024 && i < units.length - 1) {
-      size /= 1024;
-      i++;
-    }
-    return '${size.toStringAsFixed(1)} ${units[i]}';
   }
 
   @override

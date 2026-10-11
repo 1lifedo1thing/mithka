@@ -229,20 +229,18 @@ class AccountStore extends ChangeNotifier {
   List<AccountSummary> get summaries => _summaries;
   bool get activeIsBotApi => TdClient.shared.isBotApiSlot(_activeSlot);
 
-  /// Whether the active account has Telegram Premium, as last seen.
-  bool get activeIsPremium {
+  /// The summary for the active slot, when one has been recorded.
+  AccountSummary? get activeSummary {
     for (final summary in _summaries) {
-      if (summary.slot == _activeSlot) return summary.isPremium;
-    }
-    return false;
-  }
-
-  int? get activeUserId {
-    for (final summary in _summaries) {
-      if (summary.slot == _activeSlot) return summary.userId;
+      if (summary.slot == _activeSlot) return summary;
     }
     return null;
   }
+
+  /// Whether the active account has Telegram Premium, as last seen.
+  bool get activeIsPremium => activeSummary?.isPremium ?? false;
+
+  int? get activeUserId => activeSummary?.userId;
 
   void _activeAccountChanged() {
     CustomEmojiCenter.shared.reset();

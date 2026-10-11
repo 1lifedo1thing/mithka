@@ -228,7 +228,7 @@ class _QrLoginScannerViewState extends State<QrLoginScannerView>
           Positioned(
             left: 28,
             right: 28,
-            bottom: MediaQuery.of(context).padding.bottom + 34,
+            bottom: MediaQuery.paddingOf(context).bottom + 34,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

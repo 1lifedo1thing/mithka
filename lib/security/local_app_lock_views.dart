@@ -359,13 +359,7 @@ class _ActiveAccountLockAvatarState extends State<_ActiveAccountLockAvatar> {
     final palette = _AppLockPalette.of(context);
     String? avatarPath;
     try {
-      final accounts = context.watch<AccountStore>();
-      for (final account in accounts.summaries) {
-        if (account.slot == accounts.activeSlot) {
-          avatarPath = account.avatarPath;
-          break;
-        }
-      }
+      avatarPath = context.watch<AccountStore>().activeSummary?.avatarPath;
     } on ProviderNotFoundException catch (_) {
       // Standalone previews can render the TDLib-backed avatar directly.
     }

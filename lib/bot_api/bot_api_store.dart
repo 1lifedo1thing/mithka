@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart';
 
+import '../tdlib/json_helpers.dart' show jsonInt;
+
 class BotApiFileRecord {
   const BotApiFileRecord({
     required this.id,
@@ -183,7 +185,7 @@ class BotApiStore {
   ];
 
   void upsertUser(Map<String, dynamic> user) {
-    final id = _int(user['id']);
+    final id = jsonInt(user['id']);
     if (id == null) return;
     _db.execute(
       '''
@@ -197,9 +199,9 @@ class BotApiStore {
   }
 
   void upsertChat(Map<String, dynamic> chat) {
-    final id = _int(chat['id']);
+    final id = jsonInt(chat['id']);
     if (id == null) return;
-    final lastDate = _int((chat['last_message'] as Map?)?['date']) ?? 0;
+    final lastDate = jsonInt((chat['last_message'] as Map?)?['date']) ?? 0;
     _db.execute(
       '''
       INSERT INTO chats(chat_id, last_message_date, updated_at, td_json)
@@ -214,8 +216,8 @@ class BotApiStore {
   }
 
   void upsertMessage(Map<String, dynamic> message) {
-    final chatId = _int(message['chat_id']);
-    final messageId = _int(message['id']);
+    final chatId = jsonInt(message['chat_id']);
+    final messageId = jsonInt(message['id']);
     if (chatId == null || messageId == null) return;
     final content = message['content'];
     final contentMap = content is Map
@@ -237,7 +239,7 @@ class BotApiStore {
       [
         chatId,
         messageId,
-        _int(message['date']) ?? 0,
+        jsonInt(message['date']) ?? 0,
         _senderId(message['sender_id']),
         contentMap?['@type'] as String? ?? '',
         _searchText(contentMap),
@@ -310,7 +312,7 @@ class BotApiStore {
         [chatId, fromMessageId],
       );
       if (rank.isEmpty) return const [];
-      start += _int(rank.first['row_index']) ?? 0;
+      start += jsonInt(rank.first['row_index']) ?? 0;
     }
     start = start.clamp(0, 1 << 31);
     return _jsonRows(
@@ -327,7 +329,7 @@ class BotApiStore {
       'SELECT COUNT(*) AS count FROM messages WHERE chat_id = ?',
       [chatId],
     );
-    return result.isEmpty ? 0 : _int(result.first['count']) ?? 0;
+    return result.isEmpty ? 0 : jsonInt(result.first['count']) ?? 0;
   }
 
   List<Map<String, dynamic>> searchMessages({
@@ -486,25 +488,18 @@ class BotApiStore {
   }
 
   BotApiFileRecord _fileFromRow(Row row) => BotApiFileRecord(
-    id: _int(row['file_id']) ?? 0,
+    id: jsonInt(row['file_id']) ?? 0,
     botFileId: row['bot_file_id'] as String? ?? '',
     uniqueId: row['unique_id'] as String? ?? '',
-    size: _int(row['size']) ?? 0,
+    size: jsonInt(row['size']) ?? 0,
     localPath: row['local_path'] as String? ?? '',
     remotePath: row['remote_path'] as String? ?? '',
   );
 }
 
-int? _int(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value);
-  return null;
-}
-
 int _senderId(Object? value) {
   if (value is! Map) return 0;
-  return _int(value['user_id']) ?? _int(value['chat_id']) ?? 0;
+  return jsonInt(value['user_id']) ?? jsonInt(value['chat_id']) ?? 0;
 }
 
 String _searchText(Map<String, dynamic>? content) {

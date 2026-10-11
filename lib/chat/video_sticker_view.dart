@@ -324,13 +324,7 @@ class _VideoStickerViewState extends State<VideoStickerView>
     int slot,
     LoopingMediaPlayerLease lease,
   ) =>
-      mounted &&
-      _isEligible &&
-      generation == _generation &&
-      _loadedId == ref.id &&
-      _loadedLocalPath == ref.localPath &&
-      _loadedSlot == slot &&
-      slot == TdClient.shared.activeSlot &&
+      _ownsAttempt(generation, ref, slot) &&
       identical(_lease, lease) &&
       !lease.isReleased;
 

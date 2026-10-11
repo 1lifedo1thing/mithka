@@ -1220,8 +1220,7 @@ class _TopicChatViewState extends State<TopicChatView> {
     final listHiddenByUser =
         _topicListOverlaid &&
         (context.watch<TopicListHost?>()?.listHidden ?? false);
-    final top =
-        MediaQuery.of(context).padding.top + iPadWindowChromeInsetOf(context);
+    final top = topChromeInsetOf(context);
     final title = widget.chat.isBotTopicChat
         ? widget.chat.title
         : context.watch<GroupRemarkController?>()?.displayTitleFor(

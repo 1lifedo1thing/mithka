@@ -416,7 +416,7 @@ class _QrScannerViewState extends State<QrScannerView>
             Positioned(
               left: 28,
               right: 28,
-              bottom: MediaQuery.of(context).padding.bottom + 34,
+              bottom: MediaQuery.paddingOf(context).bottom + 34,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -450,7 +450,7 @@ class _QrScannerViewState extends State<QrScannerView>
             left: 12,
             right: 12,
             bottom: _hasPanel
-                ? MediaQuery.of(context).padding.bottom + 12 - _panelDrag
+                ? MediaQuery.paddingOf(context).bottom + 12 - _panelDrag
                 : -420,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,

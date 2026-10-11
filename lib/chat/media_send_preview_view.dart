@@ -8,6 +8,7 @@ import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/toast.dart';
 import '../l10n/app_localizations.dart';
+import '../media/media_metadata.dart';
 import '../media/video_view_compatibility.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -283,7 +284,7 @@ class _MediaSendPreviewViewState extends State<MediaSendPreviewView> {
                         ),
                         const Spacer(),
                         Text(
-                          '${_clock((trim.start / 1000).floor())} – ${_clock((trim.end / 1000).ceil())}',
+                          '${formatMediaDuration((trim.start / 1000).floor())} – ${formatMediaDuration((trim.end / 1000).ceil())}',
                           style: TextStyle(
                             color: c.textSecondary,
                             fontSize: 12,
@@ -363,9 +364,6 @@ class _MediaSendPreviewViewState extends State<MediaSendPreviewView> {
       );
     });
   }
-
-  static String _clock(int seconds) =>
-      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   void _removeSelected() {
     if (_attachments.isEmpty) return;

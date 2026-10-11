@@ -588,7 +588,7 @@ class _MessageDeleteOptionsDialogState
       child: Material(
         color: Colors.transparent,
         child: Container(
-          width: math.min(MediaQuery.of(context).size.width - 40, 420),
+          width: math.min(MediaQuery.sizeOf(context).width - 40, 420),
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
           decoration: BoxDecoration(
             color: c.card,
@@ -7786,11 +7786,7 @@ class _ChatViewState extends State<ChatView> {
     final actionActive = _vm.hasActiveChatAction;
     final wideGroupHeader = _usesWideGroupHeader;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.paddingOf(context).top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: widget.headerColor ?? c.navBar,
         border: widget.showHeaderDivider
@@ -8197,11 +8193,7 @@ class _ChatViewState extends State<ChatView> {
     final c = context.colors;
     final count = _selectedMessageIds.length;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.paddingOf(context).top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),

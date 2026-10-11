@@ -4842,67 +4842,68 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   void _consumeViewedMentions(Iterable<int> messageIds, {bool force = false}) {
-    final candidates = messageIds
-        .where((id) => id > 0 && !_locallyViewedMentionIds.contains(id))
-        .toSet();
-    if (candidates.isEmpty) return;
-    final unreadIds = force
-        ? candidates
-        : _allMessages
-              .where(
-                (message) =>
-                    candidates.contains(message.id) &&
-                    message.containsUnreadMention,
-              )
-              .map((message) => message.id)
-              .toSet();
-    if (unreadIds.isEmpty) return;
-
-    _locallyViewedMentionIds.addAll(unreadIds);
-    while (_locallyViewedMentionIds.length > 512) {
-      _locallyViewedMentionIds.remove(_locallyViewedMentionIds.first);
-    }
-    for (final message in _allMessages) {
-      if (unreadIds.contains(message.id)) {
-        message.containsUnreadMention = false;
-      }
-    }
+    final consumed = _consumeViewedFlags(
+      messageIds,
+      viewedIds: _locallyViewedMentionIds,
+      isUnread: (message) => message.containsUnreadMention,
+      markRead: (message) => message.containsUnreadMention = false,
+      force: force,
+    );
+    if (consumed == 0) return;
     _setUnreadMentionCount(
-      unreadMentionCountAfterReading(unreadMentionCount, unreadIds.length),
+      unreadMentionCountAfterReading(unreadMentionCount, consumed),
       emitLocalUpdate: true,
     );
   }
 
   void _consumeViewedReactions(Iterable<int> messageIds, {bool force = false}) {
+    final consumed = _consumeViewedFlags(
+      messageIds,
+      viewedIds: _locallyViewedReactionIds,
+      isUnread: (message) => message.hasUnreadReactions,
+      markRead: (message) => message.hasUnreadReactions = false,
+      force: force,
+    );
+    if (consumed == 0) return;
+    _setUnreadReactionCount(
+      unreadReactionCountAfterReading(unreadReactionCount, consumed),
+      emitLocalUpdate: true,
+    );
+  }
+
+  /// Remembers the [messageIds] still flagged by [isUnread] (all of them when
+  /// [force]d) in [viewedIds], clears their flag, and returns how many were
+  /// consumed.
+  int _consumeViewedFlags(
+    Iterable<int> messageIds, {
+    required Set<int> viewedIds,
+    required bool Function(ChatMessage message) isUnread,
+    required void Function(ChatMessage message) markRead,
+    required bool force,
+  }) {
     final candidates = messageIds
-        .where((id) => id > 0 && !_locallyViewedReactionIds.contains(id))
+        .where((id) => id > 0 && !viewedIds.contains(id))
         .toSet();
-    if (candidates.isEmpty) return;
+    if (candidates.isEmpty) return 0;
     final unreadIds = force
         ? candidates
         : _allMessages
               .where(
                 (message) =>
-                    candidates.contains(message.id) &&
-                    message.hasUnreadReactions,
+                    candidates.contains(message.id) && isUnread(message),
               )
               .map((message) => message.id)
               .toSet();
-    if (unreadIds.isEmpty) return;
+    if (unreadIds.isEmpty) return 0;
 
-    _locallyViewedReactionIds.addAll(unreadIds);
-    while (_locallyViewedReactionIds.length > 512) {
-      _locallyViewedReactionIds.remove(_locallyViewedReactionIds.first);
+    viewedIds.addAll(unreadIds);
+    while (viewedIds.length > 512) {
+      viewedIds.remove(viewedIds.first);
     }
     for (final message in _allMessages) {
-      if (unreadIds.contains(message.id)) {
-        message.hasUnreadReactions = false;
-      }
+      if (unreadIds.contains(message.id)) markRead(message);
     }
-    _setUnreadReactionCount(
-      unreadReactionCountAfterReading(unreadReactionCount, unreadIds.length),
-      emitLocalUpdate: true,
-    );
+    return unreadIds.length;
   }
 
   bool _setUnreadMentionCount(int count, {bool emitLocalUpdate = false}) {
@@ -6496,8 +6497,10 @@ class ChatViewModel extends ChangeNotifier {
     }
   }
 
-  void _merge(List<ChatMessage> incoming) {
-    if (incoming.isEmpty) return;
+  /// Re-applies what this client already knows about [incoming] messages
+  /// (acknowledged sends, locally viewed mentions and reactions) before they
+  /// replace their stale copies.
+  void _applyLocalMessageState(List<ChatMessage> incoming) {
     for (final message in incoming) {
       if (_acknowledgedPendingMessageIds.contains(message.id)) {
         message.isSendAcknowledged = true;
@@ -6509,6 +6512,11 @@ class ChatViewModel extends ChangeNotifier {
         message.hasUnreadReactions = false;
       }
     }
+  }
+
+  void _merge(List<ChatMessage> incoming) {
+    if (incoming.isEmpty) return;
+    _applyLocalMessageState(incoming);
     if (_appendIfStrictlyNewest(incoming)) {
       _appendToVisibleTranscript(incoming.first);
       return;
@@ -6556,17 +6564,7 @@ class ChatViewModel extends ChangeNotifier {
     required bool preserveLiveArrivals,
   }) {
     if (incoming.isEmpty) return;
-    for (final message in incoming) {
-      if (_acknowledgedPendingMessageIds.contains(message.id)) {
-        message.isSendAcknowledged = true;
-      }
-      if (_locallyViewedMentionIds.contains(message.id)) {
-        message.containsUnreadMention = false;
-      }
-      if (_locallyViewedReactionIds.contains(message.id)) {
-        message.hasUnreadReactions = false;
-      }
-    }
+    _applyLocalMessageState(incoming);
     _allMessages = mergeChatHistoryWindow(
       currentAtRequestStart: messagesAtRequestStart,
       currentAtCompletion: _allMessages,

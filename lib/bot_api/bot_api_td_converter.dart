@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../tdlib/json_helpers.dart' show jsonDouble, jsonInt;
 import 'bot_api_store.dart';
 
 class BotApiConvertedMessage {
@@ -21,7 +22,7 @@ class BotApiTdConverter {
   final BotApiStore store;
   final Map<String, dynamic> bot;
 
-  int get botId => _int(bot['id']) ?? 0;
+  int get botId => jsonInt(bot['id']) ?? 0;
 
   int rememberExternalId(String kind, String value) {
     final id = _stableId(value);
@@ -33,7 +34,7 @@ class BotApiTdConverter {
       store.metadata('external_id.$kind.$id');
 
   Map<String, dynamic> user(Map<String, dynamic> source) {
-    final id = _int(source['id']) ?? 0;
+    final id = jsonInt(source['id']) ?? 0;
     final username = _string(source['username']);
     final isBot = source['is_bot'] == true;
     final photo = profilePhoto(_map(source['photo']));
@@ -108,8 +109,8 @@ class BotApiTdConverter {
       if (sourceSizes.isEmpty) continue;
       final largest = sourceSizes.reduce(
         (a, b) =>
-            ((_int(a['width']) ?? 0) * (_int(a['height']) ?? 0)) >=
-                ((_int(b['width']) ?? 0) * (_int(b['height']) ?? 0))
+            ((jsonInt(a['width']) ?? 0) * (jsonInt(a['height']) ?? 0)) >=
+                ((jsonInt(b['width']) ?? 0) * (jsonInt(b['height']) ?? 0))
             ? a
             : b,
       );
@@ -128,7 +129,7 @@ class BotApiTdConverter {
     }
     return {
       '@type': 'chatPhotos',
-      'total_count': _int(value?['total_count']) ?? photos.length,
+      'total_count': jsonInt(value?['total_count']) ?? photos.length,
       'photos': photos,
     };
   }
@@ -151,7 +152,7 @@ class BotApiTdConverter {
     }
     final tdMessage = _message(source);
     final outgoing = tdMessage['is_outgoing'] == true;
-    final previousUnread = _int(previousChat?['unread_count']) ?? 0;
+    final previousUnread = jsonInt(previousChat?['unread_count']) ?? 0;
     final unread = incrementUnread && !outgoing
         ? previousUnread + 1
         : previousUnread;
@@ -173,13 +174,13 @@ class BotApiTdConverter {
     int unreadCount = 0,
     Map<String, dynamic>? senderChat,
   }) {
-    final id = _int(source['id']) ?? _int(senderChat?['id']) ?? 0;
+    final id = jsonInt(source['id']) ?? jsonInt(senderChat?['id']) ?? 0;
     final type = _string(source['type']).isNotEmpty
         ? _string(source['type'])
         : _string(senderChat?['type']);
     final title = _chatTitle(source, senderChat: senderChat);
-    final date = _int(lastMessage?['date']) ?? 0;
-    final messageId = _int(lastMessage?['id']) ?? 0;
+    final date = jsonInt(lastMessage?['date']) ?? 0;
+    final messageId = jsonInt(lastMessage?['id']) ?? 0;
     final order = date == 0 ? 0 : date * 1000000 + messageId.abs() % 1000000;
     final photo = _chatPhoto(
       _map(source['photo']) ?? _map(senderChat?['photo']),
@@ -249,7 +250,7 @@ class BotApiTdConverter {
   }
 
   int outgoingMessageId(Map<String, dynamic>? message) =>
-      message?['is_outgoing'] == true ? _int(message?['id']) ?? 0 : 0;
+      message?['is_outgoing'] == true ? jsonInt(message?['id']) ?? 0 : 0;
 
   Map<String, dynamic> content(Map<String, dynamic> message) {
     final service = _serviceContent(message);
@@ -351,7 +352,7 @@ class BotApiTdConverter {
         '@type': 'messageVoiceNote',
         'voice_note': {
           '@type': 'voiceNote',
-          'duration': _int(voice['duration']) ?? 0,
+          'duration': jsonInt(voice['duration']) ?? 0,
           'waveform': '',
           'mime_type': _string(voice['mime_type']),
           'speech_recognition_result': null,
@@ -363,17 +364,17 @@ class BotApiTdConverter {
         ),
         'is_listened':
             message['from'] is Map &&
-            _int((message['from'] as Map)['id']) == botId,
+            jsonInt((message['from'] as Map)['id']) == botId,
       };
     }
     final videoNote = _map(message['video_note']);
     if (videoNote != null) {
-      final length = _int(videoNote['length']) ?? 0;
+      final length = jsonInt(videoNote['length']) ?? 0;
       return {
         '@type': 'messageVideoNote',
         'video_note': {
           '@type': 'videoNote',
-          'duration': _int(videoNote['duration']) ?? 0,
+          'duration': jsonInt(videoNote['duration']) ?? 0,
           'waveform': '',
           'length': length,
           'minithumbnail': null,
@@ -398,10 +399,11 @@ class BotApiTdConverter {
       return {
         '@type': 'messageLocation',
         'location': _location(location),
-        'live_period': _int(message['live_period']) ?? 0,
+        'live_period': jsonInt(message['live_period']) ?? 0,
         'expires_in': 0,
-        'heading': _int(message['heading']) ?? 0,
-        'proximity_alert_radius': _int(message['proximity_alert_radius']) ?? 0,
+        'heading': jsonInt(message['heading']) ?? 0,
+        'proximity_alert_radius':
+            jsonInt(message['proximity_alert_radius']) ?? 0,
       };
     }
     final venue = _map(message['venue']);
@@ -437,7 +439,7 @@ class BotApiTdConverter {
           'first_name': _string(contact['first_name']),
           'last_name': _string(contact['last_name']),
           'vcard': _string(contact['vcard']),
-          'user_id': _int(contact['user_id']) ?? 0,
+          'user_id': jsonInt(contact['user_id']) ?? 0,
         },
       };
     }
@@ -450,7 +452,7 @@ class BotApiTdConverter {
         'initial_state': null,
         'final_state': null,
         'emoji': _string(dice['emoji']),
-        'value': _int(dice['value']) ?? 0,
+        'value': jsonInt(dice['value']) ?? 0,
         'success_animation_frame_number': 0,
       };
     }
@@ -476,7 +478,7 @@ class BotApiTdConverter {
       return {
         '@type': 'messageChatAddMembers',
         'member_user_ids': [
-          for (final member in addedUsers) ?_int(member['id']),
+          for (final member in addedUsers) ?jsonInt(member['id']),
         ],
       };
     }
@@ -487,7 +489,7 @@ class BotApiTdConverter {
     if (removedUser != null) {
       return {
         '@type': 'messageChatDeleteMember',
-        'user_id': _int(removedUser['id']) ?? 0,
+        'user_id': jsonInt(removedUser['id']) ?? 0,
       };
     }
 
@@ -517,13 +519,13 @@ class BotApiTdConverter {
         'title': _string((_map(message['chat']))?['title']),
       };
     }
-    if (_int(message['migrate_to_chat_id']) case final chatId?) {
+    if (jsonInt(message['migrate_to_chat_id']) case final chatId?) {
       return {
         '@type': 'messageChatUpgradeTo',
         'supergroup_id': _peerId(chatId),
       };
     }
-    if (_int(message['migrate_from_chat_id']) case final chatId?) {
+    if (jsonInt(message['migrate_from_chat_id']) case final chatId?) {
       return {
         '@type': 'messageChatUpgradeFrom',
         'basic_group_id': _peerId(chatId),
@@ -534,7 +536,7 @@ class BotApiTdConverter {
     if (pinned != null) {
       return {
         '@type': 'messagePinMessage',
-        'message_id': _int(pinned['message_id']) ?? 0,
+        'message_id': jsonInt(pinned['message_id']) ?? 0,
       };
     }
 
@@ -543,7 +545,7 @@ class BotApiTdConverter {
       return {
         '@type': 'messageChatSetMessageAutoDeleteTime',
         'message_auto_delete_time':
-            _int(autoDelete['message_auto_delete_time']) ?? 0,
+            jsonInt(autoDelete['message_auto_delete_time']) ?? 0,
         'from_user_id': 0,
       };
     }
@@ -554,7 +556,7 @@ class BotApiTdConverter {
     if (videoChatEnded != null) {
       return {
         '@type': 'messageVideoChatEnded',
-        'duration': _int(videoChatEnded['duration']) ?? 0,
+        'duration': jsonInt(videoChatEnded['duration']) ?? 0,
       };
     }
 
@@ -565,7 +567,7 @@ class BotApiTdConverter {
         'name': _string(topicCreated['name']),
         'icon': {
           '@type': 'forumTopicIcon',
-          'color': _int(topicCreated['icon_color']) ?? 0,
+          'color': jsonInt(topicCreated['icon_color']) ?? 0,
           'custom_emoji_id': rememberExternalId(
             'custom_emoji',
             _string(topicCreated['icon_custom_emoji_id']),
@@ -604,7 +606,7 @@ class BotApiTdConverter {
     if (boost != null) {
       return {
         '@type': 'messageChatBoost',
-        'boost_count': _int(boost['boost_count']) ?? 1,
+        'boost_count': jsonInt(boost['boost_count']) ?? 1,
       };
     }
     if (message.containsKey('chat_background_set')) {
@@ -618,7 +620,7 @@ class BotApiTdConverter {
         // Bot API 10.2 exposes only the stable id and display name here. Keep
         // both on the TD-shaped content so the transcript can render the rich
         // service card without reaching back into the transport payload.
-        'community_id': _int(community?['id']) ?? 0,
+        'community_id': jsonInt(community?['id']) ?? 0,
         'community_name': _string(community?['name']),
       };
     }
@@ -631,8 +633,8 @@ class BotApiTdConverter {
       return {
         '@type': 'messagePaidMessagePriceChanged',
         'paid_message_star_count':
-            _int(paidPrice['paid_message_star_count']) ??
-            _int(paidPrice['star_count']) ??
+            jsonInt(paidPrice['paid_message_star_count']) ??
+            jsonInt(paidPrice['star_count']) ??
             0,
       };
     }
@@ -640,7 +642,7 @@ class BotApiTdConverter {
     if (directPrice != null) {
       return {
         '@type': 'messageDirectMessagePriceChanged',
-        'star_count': _int(directPrice['star_count']) ?? 0,
+        'star_count': jsonInt(directPrice['star_count']) ?? 0,
       };
     }
 
@@ -687,19 +689,19 @@ class BotApiTdConverter {
               '@type': 'pollOption',
               'id': '$index',
               'text': formattedText(option['text'], option['text_entities']),
-              'voter_count': _int(option['voter_count']) ?? 0,
+              'voter_count': jsonInt(option['voter_count']) ?? 0,
               'vote_percentage': 0,
               'is_chosen': false,
               'is_being_chosen': false,
             },
       ],
-      'total_voter_count': _int(source['total_voter_count']) ?? 0,
+      'total_voter_count': jsonInt(source['total_voter_count']) ?? 0,
       'recent_voter_ids': const <Map<String, dynamic>>[],
       'is_anonymous': source['is_anonymous'] == true,
       'type': type == 'quiz'
           ? {
               '@type': 'pollTypeQuiz',
-              'correct_option_ids': [?_int(source['correct_option_id'])],
+              'correct_option_ids': [?jsonInt(source['correct_option_id'])],
               'explanation': formattedText(
                 source['explanation'],
                 source['explanation_entities'],
@@ -710,8 +712,8 @@ class BotApiTdConverter {
               'allow_multiple_answers':
                   source['allows_multiple_answers'] == true,
             },
-      'open_period': _int(source['open_period']) ?? 0,
-      'close_date': _int(source['close_date']) ?? 0,
+      'open_period': jsonInt(source['open_period']) ?? 0,
+      'close_date': jsonInt(source['close_date']) ?? 0,
       'is_closed': source['is_closed'] == true,
       'can_vote': false,
       'can_get_voters': false,
@@ -735,7 +737,7 @@ class BotApiTdConverter {
     final record = store.registerFile(
       botFileId: botFileId,
       uniqueId: _string(source['file_unique_id']),
-      size: _int(source['file_size']) ?? 0,
+      size: jsonInt(source['file_size']) ?? 0,
     );
     return fileFromRecord(record);
   }
@@ -771,7 +773,7 @@ class BotApiTdConverter {
   }
 
   Map<String, dynamic> supergroup(Map<String, dynamic> chat) {
-    final id = _int(chat['id']) ?? 0;
+    final id = jsonInt(chat['id']) ?? 0;
     final type = _string(chat['type']);
     return {
       '@type': 'supergroup',
@@ -811,7 +813,7 @@ class BotApiTdConverter {
 
   Map<String, dynamic> basicGroup(Map<String, dynamic> chat) => {
     '@type': 'basicGroup',
-    'id': _peerId(_int(chat['id']) ?? 0),
+    'id': _peerId(jsonInt(chat['id']) ?? 0),
     'member_count': 0,
     'status': const {'@type': 'chatMemberStatusMember'},
     'is_active': true,
@@ -822,23 +824,23 @@ class BotApiTdConverter {
     final sourceChat = _map(source['chat']) ?? const <String, dynamic>{};
     final from = _map(source['from']);
     final senderChat = _map(source['sender_chat']);
-    final fromId = _int(from?['id']);
+    final fromId = jsonInt(from?['id']);
     final isOutgoing = fromId == botId;
     return {
       '@type': 'message',
-      'id': _int(source['message_id']) ?? 0,
+      'id': jsonInt(source['message_id']) ?? 0,
       'sender_id': senderChat != null
           ? {
               '@type': 'messageSenderChat',
-              'chat_id': _int(senderChat['id']) ?? 0,
+              'chat_id': jsonInt(senderChat['id']) ?? 0,
             }
           : fromId != null
           ? {'@type': 'messageSenderUser', 'user_id': fromId}
           : {
               '@type': 'messageSenderChat',
-              'chat_id': _int(sourceChat['id']) ?? 0,
+              'chat_id': jsonInt(sourceChat['id']) ?? 0,
             },
-      'chat_id': _int(sourceChat['id']) ?? 0,
+      'chat_id': jsonInt(sourceChat['id']) ?? 0,
       'sending_state': null,
       'scheduling_state': null,
       'is_outgoing': isOutgoing,
@@ -858,8 +860,8 @@ class BotApiTdConverter {
       'is_channel_post': _string(sourceChat['type']) == 'channel',
       'is_topic_message': source['is_topic_message'] == true,
       'contains_unread_mention': false,
-      'date': _int(source['date']) ?? 0,
-      'edit_date': _int(source['edit_date']) ?? 0,
+      'date': jsonInt(source['date']) ?? 0,
+      'edit_date': jsonInt(source['edit_date']) ?? 0,
       'forward_info': _forwardInfo(source),
       'import_info': null,
       'interaction_info': _interactionInfo(source),
@@ -872,7 +874,7 @@ class BotApiTdConverter {
       'self_destruct_in': 0.0,
       'auto_delete_in': 0.0,
       'via_bot_user_id':
-          _int(
+          jsonInt(
             source['via_bot'] is Map ? (source['via_bot'] as Map)['id'] : null,
           ) ??
           0,
@@ -880,7 +882,7 @@ class BotApiTdConverter {
       'sender_boost_count': 0,
       'author_signature': _string(source['author_signature']),
       'media_album_id':
-          _int(source['media_group_id']) ??
+          jsonInt(source['media_group_id']) ??
           _stableId(_string(source['media_group_id'])),
       'effect_id': 0,
       'restriction_reason': '',
@@ -891,14 +893,14 @@ class BotApiTdConverter {
 
   Map<String, dynamic>? _replyTo(Map<String, dynamic> source) {
     final reply = _map(source['reply_to_message']);
-    final id = _int(reply?['message_id']);
+    final id = jsonInt(reply?['message_id']);
     final quote = _map(source['quote']);
     if (id == null) return null;
     return {
       '@type': 'messageReplyToMessage',
       'chat_id':
-          _int((_map(reply?['chat']))?['id']) ??
-          _int((_map(source['chat']))?['id']) ??
+          jsonInt((_map(reply?['chat']))?['id']) ??
+          jsonInt((_map(source['chat']))?['id']) ??
           0,
       'message_id': id,
       'quote': quote == null
@@ -906,7 +908,7 @@ class BotApiTdConverter {
           : {
               '@type': 'textQuote',
               'text': formattedText(quote['text'], quote['entities']),
-              'position': _int(quote['position']) ?? 0,
+              'position': jsonInt(quote['position']) ?? 0,
               'is_manual': quote['is_manual'] == true,
             },
       'origin': null,
@@ -922,7 +924,7 @@ class BotApiTdConverter {
       final converted = switch (type) {
         'user' => {
           '@type': 'messageOriginUser',
-          'sender_user_id': _int((_map(origin['sender_user']))?['id']) ?? 0,
+          'sender_user_id': jsonInt((_map(origin['sender_user']))?['id']) ?? 0,
         },
         'hidden_user' => {
           '@type': 'messageOriginHiddenUser',
@@ -930,13 +932,13 @@ class BotApiTdConverter {
         },
         'chat' => {
           '@type': 'messageOriginChat',
-          'sender_chat_id': _int((_map(origin['sender_chat']))?['id']) ?? 0,
+          'sender_chat_id': jsonInt((_map(origin['sender_chat']))?['id']) ?? 0,
           'author_signature': _string(origin['author_signature']),
         },
         'channel' => {
           '@type': 'messageOriginChannel',
-          'chat_id': _int((_map(origin['chat']))?['id']) ?? 0,
-          'message_id': _int(origin['message_id']) ?? 0,
+          'chat_id': jsonInt((_map(origin['chat']))?['id']) ?? 0,
+          'message_id': jsonInt(origin['message_id']) ?? 0,
           'author_signature': _string(origin['author_signature']),
         },
         _ => null,
@@ -945,7 +947,7 @@ class BotApiTdConverter {
         return {
           '@type': 'messageForwardInfo',
           'origin': converted,
-          'date': _int(source['forward_date']) ?? 0,
+          'date': jsonInt(source['forward_date']) ?? 0,
           'source': null,
           'public_service_announcement_type': '',
         };
@@ -971,7 +973,7 @@ class BotApiTdConverter {
               {
                 '@type': 'messageReaction',
                 'type': _reactionType(_map(reaction['type'])),
-                'total_count': _int(reaction['total_count']) ?? 0,
+                'total_count': jsonInt(reaction['total_count']) ?? 0,
                 'is_chosen': false,
                 'used_sender_id': null,
                 'recent_sender_ids': const <Map<String, dynamic>>[],
@@ -1062,8 +1064,8 @@ class BotApiTdConverter {
 
   Map<String, dynamic> _entity(Map<String, dynamic> source) => {
     '@type': 'textEntity',
-    'offset': _int(source['offset']) ?? 0,
-    'length': _int(source['length']) ?? 0,
+    'offset': jsonInt(source['offset']) ?? 0,
+    'length': jsonInt(source['length']) ?? 0,
     'type': _entityType(source),
   };
 
@@ -1100,7 +1102,7 @@ class BotApiTdConverter {
       },
       'text_mention' => {
         '@type': 'textEntityTypeMentionName',
-        'user_id': _int((_map(source['user']))?['id']) ?? 0,
+        'user_id': jsonInt((_map(source['user']))?['id']) ?? 0,
       },
       'custom_emoji' => {
         '@type': 'textEntityTypeCustomEmoji',
@@ -1117,16 +1119,16 @@ class BotApiTdConverter {
     '@type': 'photoSize',
     'type': 'x',
     'photo': file(source),
-    'width': _int(source['width']) ?? 0,
-    'height': _int(source['height']) ?? 0,
+    'width': jsonInt(source['width']) ?? 0,
+    'height': jsonInt(source['height']) ?? 0,
     'progressive_sizes': const <int>[],
   };
 
   Map<String, dynamic> _video(Map<String, dynamic> source) => {
     '@type': 'video',
-    'duration': _int(source['duration']) ?? 0,
-    'width': _int(source['width']) ?? 0,
-    'height': _int(source['height']) ?? 0,
+    'duration': jsonInt(source['duration']) ?? 0,
+    'width': jsonInt(source['width']) ?? 0,
+    'height': jsonInt(source['height']) ?? 0,
     'file_name': _string(source['file_name']),
     'mime_type': _string(source['mime_type']),
     'has_stickers': false,
@@ -1138,9 +1140,9 @@ class BotApiTdConverter {
 
   Map<String, dynamic> _animation(Map<String, dynamic> source) => {
     '@type': 'animation',
-    'duration': _int(source['duration']) ?? 0,
-    'width': _int(source['width']) ?? 0,
-    'height': _int(source['height']) ?? 0,
+    'duration': jsonInt(source['duration']) ?? 0,
+    'width': jsonInt(source['width']) ?? 0,
+    'height': jsonInt(source['height']) ?? 0,
     'file_name': _string(source['file_name']),
     'mime_type': _string(source['mime_type']),
     'has_stickers': false,
@@ -1151,7 +1153,7 @@ class BotApiTdConverter {
 
   Map<String, dynamic> _audio(Map<String, dynamic> source) => {
     '@type': 'audio',
-    'duration': _int(source['duration']) ?? 0,
+    'duration': jsonInt(source['duration']) ?? 0,
     'title': _string(source['title']),
     'performer': _string(source['performer']),
     'file_name': _string(source['file_name']),
@@ -1182,8 +1184,8 @@ class BotApiTdConverter {
       '@type': 'sticker',
       'id': _stableId(_string(source['file_unique_id'])),
       'set_id': rememberExternalId('sticker_set', setName),
-      'width': _int(source['width']) ?? 0,
-      'height': _int(source['height']) ?? 0,
+      'width': jsonInt(source['width']) ?? 0,
+      'height': jsonInt(source['height']) ?? 0,
       'emoji': _string(source['emoji']),
       'format': {
         '@type': video
@@ -1217,8 +1219,8 @@ class BotApiTdConverter {
       : {
           '@type': 'thumbnail',
           'format': const {'@type': 'thumbnailFormatJpeg'},
-          'width': _int(source['width']) ?? 0,
-          'height': _int(source['height']) ?? 0,
+          'width': jsonInt(source['width']) ?? 0,
+          'height': jsonInt(source['height']) ?? 0,
           'file': file(source),
         };
 
@@ -1247,9 +1249,9 @@ class BotApiTdConverter {
 
   Map<String, dynamic> _location(Map<String, dynamic> source) => {
     '@type': 'location',
-    'latitude': _double(source['latitude']) ?? 0.0,
-    'longitude': _double(source['longitude']) ?? 0.0,
-    'horizontal_accuracy': _double(source['horizontal_accuracy']) ?? 0.0,
+    'latitude': jsonDouble(source['latitude']) ?? 0.0,
+    'longitude': jsonDouble(source['longitude']) ?? 0.0,
+    'horizontal_accuracy': jsonDouble(source['horizontal_accuracy']) ?? 0.0,
   };
 
   Map<String, dynamic> _chatType(int id, String type) => switch (type) {
@@ -1332,7 +1334,7 @@ List<Map<String, dynamic>> _uniqueUsers(List<Map<String, dynamic>> users) {
   final ids = <int>{};
   return [
     for (final value in users)
-      if (ids.add(_int(value['id']) ?? 0)) value,
+      if (ids.add(jsonInt(value['id']) ?? 0)) value,
   ];
 }
 
@@ -1438,17 +1440,3 @@ Map<String, dynamic>? _map(Object? value) =>
 List<Object?> _list(Object? value) => value is List ? value : const [];
 
 String _string(Object? value) => value is String ? value : '';
-
-int? _int(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value);
-  return null;
-}
-
-double? _double(Object? value) {
-  if (value is double) return value;
-  if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value);
-  return null;
-}
