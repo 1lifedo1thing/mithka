@@ -494,5 +494,51 @@ void main() {
       expect(spans('没有链接'), isEmpty);
       expect(spans(''), isEmpty);
     });
+
+    test('a bare host with unicode labels is one token', () {
+      expect(spans('例子.com/中文abc'), ['例子.com/中文abc']);
+      expect(spans('例子a.com/文本abc'), ['例子a.com/文本abc']);
+    });
+
+    test('CJK text directly before a host joins it, as TDLib reads it', () {
+      // match_urls walks left through domain symbols, so the entity covers the
+      // whole run — spacing anywhere inside would change the host.
+      expect(spans('看例子.com/中文abc好'), ['看例子.com/中文abc好']);
+      expect(spans('a例子.com'), ['a例子.com']);
+    });
+
+    test('a bare host in a sentence is claimed exactly', () {
+      expect(spans('见 example.com 然后'), ['example.com']);
+      expect(spans('https://例子.com/中文abc'), ['https://例子.com/中文abc']);
+    });
+
+    test('CJK and punycode TLDs are links, unknown ASCII TLDs are not', () {
+      expect(spans('例子.中国'), ['例子.中国']);
+      expect(spans('例子.xn--abc'), ['例子.xn--abc']);
+      expect(spans('中文.English'), isEmpty);
+      expect(spans('今天用iPhone很开心.明天继续'), isEmpty);
+      expect(spans('版本1.2.3发布'), isEmpty);
+    });
+
+    test('user info belongs to the link, like an email-style Url', () {
+      expect(spans('user:pass@例子.com/x'), ['user:pass@例子.com/x']);
+      expect(spans('mail@例子.com'), ['mail@例子.com']);
+    });
+
+    test('an invalid port is left off the link', () {
+      expect(spans('例子.com:65536'), ['例子.com']);
+      expect(spans('例子.com:0'), ['例子.com']);
+      expect(spans('例子.com:8080/path'), ['例子.com:8080/path']);
+    });
+
+    test('a space breaks the host, so only the tail is claimed', () {
+      expect(spans('例 子.com'), ['子.com']);
+    });
+
+    test('a scheme start behind a dot is not a link at all', () {
+      // match_urls cannot start a url in the middle of a domain: the dot
+      // before `https` poisons the whole match and TDLib reports no entity.
+      expect(spans('中文.https://example.com'), isEmpty);
+    });
   });
 }

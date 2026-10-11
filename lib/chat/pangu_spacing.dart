@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../tdlib/td_models.dart';
+import 'pangu_url_tlds.dart';
 
 /// 盘古之白 — the space that splits full-width CJK text from half-width text.
 ///
@@ -104,14 +105,52 @@ class PanguSpacing {
   static List<PanguProtectedRange> detectedRangesFor(String text) {
     if (text.length < 2) return const [];
     final ranges = <PanguProtectedRange>[];
+    final schemedRanges = <List<int>>[];
+    final poisonedRanges = <List<int>>[];
     for (final pattern in _detectedTokenPatterns) {
       for (final match in pattern.allMatches(text)) {
         final end = _tokenEnd(text, match.start, match.end);
-        if (end > match.start) {
-          ranges.add(PanguProtectedRange(match.start, end));
+        if (end <= match.start) continue;
+        // A scheme run whose first character follows an ASCII domain symbol
+        // cannot start a URL: `中文.https://…` reports no entity at all
+        // because fix_url cannot split the prefix off a domain. CJK does
+        // not poison it — `看https://…` is a link per TDLib.
+        if (pattern == _schemedUrl &&
+            match.start > 0 &&
+            _isAsciiHostChar(text.codeUnitAt(match.start - 1))) {
+          // The whole run is one domain to match_urls: no part of it is a
+          // link, the host inside included.
+          poisonedRanges.add([match.start, end]);
+          continue;
         }
+        ranges.add(PanguProtectedRange(match.start, end));
+        if (pattern == _schemedUrl) schemedRanges.add([match.start, end]);
       }
     }
+    // The bare-URL scanner would re-claim the host inside a schemed URL;
+    // its ranges are only for links without one, and the tail of a run a
+    // poisoned scheme starts is not a link either.
+    final urlRanges = <List<int>>[];
+    for (final match in _detectedBareUrl(text)) {
+      final end = _tokenEnd(text, match.start, match.end);
+      if (end <= match.start) continue;
+      final swallowed =
+          schemedRanges.any((r) => match.start >= r[0] && match.end <= r[1]) ||
+          poisonedRanges.any((r) => match.start >= r[0] && match.end <= r[1]);
+      if (!swallowed) {
+        ranges.add(PanguProtectedRange(match.start, end));
+        urlRanges.add([match.start, end]);
+      }
+    }
+    // A hashtag or mention pattern inside a URL range (`例子.com#frag`'s
+    // fragment reads as a hashtag to the regex) is part of the link to
+    // TDLib, not a separate token.
+    ranges.removeWhere((range) {
+      if (urlRanges.any((r) => range.start == r[0] && range.end == r[1])) {
+        return false;
+      }
+      return urlRanges.any((r) => range.start >= r[0] && range.end <= r[1]);
+    });
     return ranges;
   }
 
@@ -282,24 +321,282 @@ class PanguSpacing {
   /// A URL with a scheme, then everything up to whitespace or one of the
   /// delimiters TDLib ends a path at (`is_url_path_symbol`).
   static final RegExp _schemedUrl = RegExp(
-    r'[A-Za-z][A-Za-z0-9+.-]*://[^\s<>"\u00ab\u00bb]+',
+    r'[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\"\u00ab\u00bb]+',
   );
 
-  /// A bare host with its optional user info, port and path. The host ends in an
-  /// ASCII letter TLD so a version number, a filename or a CJK sentence with a
-  /// full stop in it is not mistaken for one; the path is unrestricted, because
-  /// that is where a link carries its CJK.
-  static final RegExp _bareUrl = RegExp(
-    r'(?:[A-Za-z0-9_~%+-]+@)?'
-    r'(?:[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?\.)+'
-    r'[A-Za-z]{2,}'
-    r'(?::[0-9]{1,5})?'
-    r'(?:[/?#][^\s<>"\u00ab\u00bb]*)?',
-  );
+  /// The parts of a URL without a scheme are not regular: TDLib's
+  /// `match_urls` walks through domain symbols in both directions, so a
+  /// host can carry CJK labels (`例子.com`), the last label must be one of
+  /// [panguCommonTlds] (or punycode `xn--`), a pure-digit host is only an
+  /// IPv4, and a port above 65535 is given back. [_detectedBareUrl] scans
+  /// for those ranges by hand instead of trusting a narrower ASCII pattern,
+  /// which protected only the ASCII suffix of a Unicode-host URL and let
+  /// the spacing pass split the link.
+  static Iterable<_TextMatch> _detectedBareUrl(String text) sync* {
+    var index = 0;
+    while (index < text.length) {
+      final end = _bareUrlEnd(text, index);
+      if (end > index) {
+        yield _TextMatch(index, end);
+        index = end;
+        continue;
+      }
+      index++;
+    }
+  }
+
+  /// The end of the bare URL starting at [index], or [index] when the text
+  /// there is not one. Mirrors `fix_url`/`match_urls` in MessageEntity.cpp:
+  /// an optional user-info run, then the host's domain symbols split on '.',
+  /// its labels and TLD validated, then a port and a path taken when well
+  /// formed.
+  static int _bareUrlEnd(String text, int index) {
+    // A scheme behind a domain symbol is not a link start: `中文.https://…`
+    // leaves match_urls no place to begin, and TDLib reports no entity. The
+    // scheme itself is handled by the regex list, so a run that contains one
+    // only yields its pre-scheme prefix, which is never a valid host here.
+    if (index > 0 && _schemeAt(text, index) != null) return index;
+    // User info: `user@` (the password form `user:pass@` included) belongs
+    // to the link, mirroring the email-style Url TDLib reports.
+    final at = _userInfoAt(text, index);
+    final hostStart = at == null ? index : at + 1;
+    var hostEnd = hostStart;
+    while (hostEnd < text.length && _isHostChar(text.codeUnitAt(hostEnd))) {
+      hostEnd++;
+    }
+    if (hostEnd == hostStart) return index;
+    // Trim sentence punctuation off the host's tail.
+    var hostLast = hostEnd;
+    while (hostLast > hostStart && _isGiveBack(text.codeUnitAt(hostLast - 1))) {
+      hostLast--;
+    }
+    if (hostLast <= hostStart) return index;
+    var hostText = text.substring(hostStart, hostLast);
+    // A bare host may not end with a bare '.'; TDLib strips trailing dots
+    // before validating the labels.
+    while (hostText.endsWith('.')) {
+      hostText = hostText.substring(0, hostText.length - 1);
+    }
+    if (!_isBareHost(hostText)) return index;
+    var urlEnd = hostLast;
+    // Port: ':' digits, value 1..65535; an invalid one is left off the
+    // link, and the ':' stays sentence punctuation.
+    if (urlEnd < text.length && text.codeUnitAt(urlEnd) == 0x3a) {
+      final portEnd = _portEnd(text, urlEnd + 1);
+      if (portEnd > urlEnd + 1) {
+        urlEnd = portEnd;
+      }
+    }
+    // Path: one of / ? #, then anything to a path delimiter.
+    if (urlEnd < text.length &&
+        (text.codeUnitAt(urlEnd) == 0x2f ||
+            text.codeUnitAt(urlEnd) == 0x3f ||
+            text.codeUnitAt(urlEnd) == 0x23)) {
+      urlEnd++;
+      while (urlEnd < text.length &&
+          _isUrlPathSymbol(text.codeUnitAt(urlEnd))) {
+        urlEnd++;
+      }
+    }
+    while (urlEnd > index + 1 && _isGiveBack(text.codeUnitAt(urlEnd - 1))) {
+      urlEnd--;
+    }
+    // A bare host never starts mid-word: the code unit before the run must
+    // not be a domain symbol (match_urls' prefix rule). An email-shaped
+    // link carries its own user info, which match_urls reads from the '@'
+    // instead, so CJK before the user name does not poison it.
+    if (at == null && index > 0 && _isHostChar(text.codeUnitAt(index - 1))) {
+      return index;
+    }
+    return urlEnd;
+  }
+
+  /// The '@' ending a user-info run that starts at [index] and ends by
+  /// [hostEnd], when the run is all user-info characters (letters, digits,
+  /// and `. : _ % + -`), else null. TDLib's fix_url includes `user@` /
+  /// `user:pass@` in the Url, and an email-shaped text is one whole Url.
+  static int? _userInfoAt(String text, int index) {
+    var end = index;
+    while (end < text.length) {
+      final unit = text.codeUnitAt(end);
+      final isUserInfoChar =
+          (unit >= 0x30 && unit <= 0x39) ||
+          (unit >= 0x41 && unit <= 0x5a) ||
+          (unit >= 0x61 && unit <= 0x7a) ||
+          unit == 0x2e ||
+          unit == 0x3a ||
+          unit == 0x5f ||
+          unit == 0x25 ||
+          unit == 0x2b ||
+          unit == 0x2d;
+      if (!isUserInfoChar) break;
+      end++;
+    }
+    if (end < text.length && text.codeUnitAt(end) == 0x40 && end > index) {
+      return end;
+    }
+    return null;
+  }
+
+  /// The scheme at [index] when one starts there, else null.
+  static String? _schemeAt(String text, int index) {
+    if (index >= text.length) return null;
+    var end = index;
+    while (end < text.length) {
+      final unit = text.codeUnitAt(end);
+      final isSchemeChar =
+          (unit >= 0x41 && unit <= 0x5a) ||
+          (unit >= 0x61 && unit <= 0x7a) ||
+          (end > index &&
+              ((unit >= 0x30 && unit <= 0x39) ||
+                  unit == 0x2b ||
+                  unit == 0x2d ||
+                  unit == 0x2e));
+      if (!isSchemeChar) break;
+      end++;
+    }
+    if (end > index + 2 &&
+        end + 2 < text.length &&
+        text.codeUnitAt(end) == 0x3a &&
+        text.codeUnitAt(end + 1) == 0x2f &&
+        text.codeUnitAt(end + 2) == 0x2f) {
+      return text.substring(index, end);
+    }
+    return null;
+  }
+
+  /// An ASCII domain symbol: the characters that, before a scheme start,
+  /// glue the two into one domain run and leave the scheme nowhere to begin.
+  static bool _isAsciiHostChar(int unit) =>
+      unit == 0x2e ||
+      unit == 0x5f ||
+      unit == 0x2d ||
+      unit == 0x7e ||
+      (unit >= 0x30 && unit <= 0x39) ||
+      (unit >= 0x41 && unit <= 0x5a) ||
+      (unit >= 0x61 && unit <= 0x7a);
+
+  /// A character of a host run: TDLib's `is_domain_symbol` — ASCII
+  /// `. alnum _ - ~`, or any non-separator unicode (which covers CJK).
+  /// `@` and `:` are the user-info and port separators, handled by the
+  /// caller, so they end a plain host run.
+  static bool _isHostChar(int unit) {
+    if (unit == 0x40 || unit == 0x3a) return false;
+    if (unit < 0x80) {
+      return unit == 0x2e ||
+          unit == 0x5f ||
+          unit == 0x2d ||
+          unit == 0x7e ||
+          (unit >= 0x30 && unit <= 0x39) ||
+          (unit >= 0x41 && unit <= 0x5a) ||
+          (unit >= 0x61 && unit <= 0x7a);
+    }
+    return !_isRuneSeparator(String.fromCharCode(unit).runes.first);
+  }
+
+  /// Unicode separators (Zs/Zl/Zp plus the control spaces TDLib rejects).
+  static bool _isRuneSeparator(int rune) {
+    if (rune == 0x20 || rune == 0x09 || rune == 0x0a || rune == 0x0d) {
+      return true;
+    }
+    if ((rune >= 0x1c && rune <= 0x1f) || rune == 0x0b || rune == 0x0c) {
+      return true;
+    }
+    if (rune == 0xa0 || rune == 0x1680) return true;
+    if (rune >= 0x2000 && rune <= 0x200a) return true;
+    if (rune == 0x2028 || rune == 0x2029 || rune == 0x202f || rune == 0x205f) {
+      return true;
+    }
+    return rune == 0x3000 || rune == 0xfeff;
+  }
+
+  /// Path characters TDLib allows (`is_url_path_symbol`): anything that is
+  /// not whitespace, `<> " « »`, a separator, or a control character.
+  static bool _isUrlPathSymbol(int unit) {
+    if (unit == 0x3c || unit == 0x3e || unit == 0x22) return false;
+    if (unit == 0xab || unit == 0xbb) return false;
+    if (unit < 0x20) return false;
+    if (unit < 0x80) return true;
+    return !_isRuneSeparator(String.fromCharCode(unit).runes.first);
+  }
+
+  /// Where a valid port ends after its `:`, or the `:` itself when there is
+  /// no port to take: digits only, value at most 65535, at most five
+  /// significant digits.
+  static int _portEnd(String text, int start) {
+    var end = start;
+    while (end < text.length &&
+        text.codeUnitAt(end) >= 0x30 &&
+        text.codeUnitAt(end) <= 0x39) {
+      end++;
+    }
+    if (end == start) return start - 1;
+    final port = int.tryParse(text.substring(start, end));
+    // TDLib refuses a port of 0 (fix_url checks 1..65535).
+    if (port == null || port > 65535 || port == 0) return start - 1;
+    final significant = text
+        .substring(start, end)
+        .replaceFirst(RegExp(r'^0+'), '');
+    if (significant.length > 5) return start - 1;
+    return end;
+  }
+
+  /// Whether [host] is a host TDLib links without a scheme: two or more
+  /// labels split on '.', each 1..63 characters with no trailing '-', the
+  /// TLD is a common one (or punycode `xn--`), and a pure-digit host is
+  /// only an IPv4.
+  static bool _isBareHost(String host) {
+    if (host.isEmpty) return false;
+    var hostText = host;
+    while (hostText.endsWith('.')) {
+      hostText = hostText.substring(0, hostText.length - 1);
+    }
+    if (hostText.isEmpty) return false;
+    final labels = hostText.split('.');
+    if (labels.length < 2) return false;
+    final allDigits = labels.every(
+      (label) =>
+          label.isNotEmpty && label.runes.every((r) => r >= 0x30 && r <= 0x39),
+    );
+    if (allDigits) return labels.length == 4;
+    for (final label in labels) {
+      // fix_url: every label is 1..63 characters and never ends in '-'.
+      if (label.isEmpty || label.length > 63 || label.endsWith('-')) {
+        return false;
+      }
+    }
+    final tld = labels.last;
+    if (tld.startsWith('xn--')) {
+      // fix_url: the punycode TLD as a whole must exceed five bytes and hold
+      // only ASCII letters and digits after the prefix.
+      if (tld.length <= 5) return false;
+      final body = tld.substring(4);
+      if (body.isEmpty) return false;
+      return body.runes.every(
+        (r) =>
+            (r >= 0x30 && r <= 0x39) ||
+            (r >= 0x61 && r <= 0x7a) ||
+            (r >= 0x41 && r <= 0x5a),
+      );
+    }
+    if (tld.contains('-') || tld.contains('_')) return false;
+    return panguCommonTlds.contains(tld);
+  }
+
+  /// Sentence punctuation TDLib hands back from the end of a link.
+  static bool _isGiveBack(int unit) =>
+      unit == 0x2e ||
+      unit == 0x3a ||
+      unit == 0x3b ||
+      unit == 0x2c ||
+      unit == 0x28 ||
+      unit == 0x27 ||
+      unit == 0x3f ||
+      unit == 0x21 ||
+      unit == 0x60;
 
   static final List<RegExp> _detectedTokenPatterns = [
     _schemedUrl,
-    _bareUrl,
     // A mention: Telegram usernames are ASCII, so a CJK tail is not part of it.
     RegExp(r'@[A-Za-z0-9_]{3,32}'),
     // A hashtag runs to 256 letters of any script (TDLib's `is_hashtag_letter`),
@@ -531,3 +828,37 @@ class _PanguMemoEntry {
 }
 
 enum _Script { cjk, latin, other }
+
+/// A [Match] over plain text offsets: the hand-written bare-URL scanner
+/// yields these where a RegExp cannot express the shape. The pattern list
+/// only reads `start` and `end`, so the group accessors stay trivial.
+class _TextMatch implements Match {
+  const _TextMatch(this.start, this.end);
+
+  @override
+  final int start;
+
+  @override
+  final int end;
+
+  @override
+  String operator [](int group) =>
+      group == 0 ? '' : throw RangeError.index(group, this);
+
+  @override
+  String? group(int group) => group == 0 ? '' : null;
+
+  @override
+  List<String?> groups(List<int> groupIndices) => [
+    for (final i in groupIndices) group(i),
+  ];
+
+  @override
+  String get input => '';
+
+  @override
+  Pattern get pattern => '';
+
+  @override
+  int get groupCount => 0;
+}

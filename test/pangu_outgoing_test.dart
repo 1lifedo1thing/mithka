@@ -145,6 +145,43 @@ void main() {
     expect(outgoingText(sent()), caption);
   });
 
+  // A caption typed by hand carries no entities, so the only thing standing
+  // between 盘古之白 and a rewritten link is the detector. TDLib adds the `Url`
+  // entity after the message is sent, and a space inside it changes the target
+  // rather than how it reads.
+  test('a caption keeps a unicode host in one piece', () async {
+    final vm = model(send: true);
+    const caption = '例子.com/中文abc';
+    await vm.sendAttachments(const [
+      OutgoingAttachment(
+        path: '/synthetic/a.jpg',
+        kind: OutgoingAttachmentKind.photo,
+      ),
+    ], caption: caption);
+    expect(outgoingText(sent()), caption);
+  });
+
+  test('a caption keeps a mixed-script host in one piece', () async {
+    final vm = model(send: true);
+    const caption = '例子a.com/文本abc';
+    await vm.sendAttachments(const [
+      OutgoingAttachment(
+        path: '/synthetic/a.jpg',
+        kind: OutgoingAttachmentKind.photo,
+      ),
+    ], caption: caption);
+    expect(outgoingText(sent()), caption);
+  });
+
+  test('an ordinary sentence keeps its spacing and nothing more', () async {
+    final vm = model(send: true)..setDraft('今天用iPhone很开心.明天继续');
+    expect(await vm.send(), isTrue);
+    // No link exists here (TDLib finds no entity on this sentence), so the
+    // pass only does its CJK↔half-width spacing — never a split, and no
+    // protection is owed to any part of the sentence.
+    expect(outgoingText(sent()), '今天用 iPhone 很开心.明天继续');
+  });
+
   test('a link keeps its query values and is spaced into the sentence', () async {
     final vm = model(send: true)..setDraft('看https://example.com/a?q=中文abc');
     expect(await vm.send(), isTrue);
