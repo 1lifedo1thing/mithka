@@ -1331,18 +1331,23 @@ class _ChatListViewState extends State<ChatListView>
     );
   }
 
-  void _openCommunity(CommunityGroupEntry entry) {
+  void _openCommunity(CommunityGroupEntry entry) =>
+      _openCommunityHub(entry.community);
+
+  /// Opens the community hub, whether the caller came from the folded
+  /// chat-list row or from a member chat's corner badge.
+  void _openCommunityHub(CommunitySummary community) {
     if (!context.read<ThemeController>().communitiesEnabled) return;
     final selection = CommunityListSelection(
-      community: entry.community,
-      chats: _model.chatsInCommunity(entry.community.id),
-      viewableChats: _model.viewableChatsInCommunity(entry.community.id),
+      community: community,
+      chats: _model.chatsInCommunity(community.id),
+      viewableChats: _model.viewableChatsInCommunity(community.id),
       onCollapsedChanged: (value) =>
-          _model.setCommunityCollapsed(entry.community.id, value),
+          _model.setCommunityCollapsed(community.id, value),
       updates: _model,
-      chatsProvider: () => _model.chatsInCommunity(entry.community.id),
+      chatsProvider: () => _model.chatsInCommunity(community.id),
       viewableChatsProvider: () =>
-          _model.viewableChatsInCommunity(entry.community.id),
+          _model.viewableChatsInCommunity(community.id),
     );
     final onCommunitySelected = widget.onCommunitySelected;
     if (onCommunitySelected != null) {
@@ -2666,7 +2671,16 @@ class _ChatListViewState extends State<ChatListView>
     return ChatListSelectionHighlight(
       key: ValueKey(chat.id),
       selected: selected,
-      child: ChatRowView(chat: chat, selected: selected),
+      child: ChatRowView(
+        chat: chat,
+        selected: selected,
+        avatarBadge: _communityBadge(
+          chat,
+          communitiesEnabled: context
+              .read<ThemeController>()
+              .communitiesEnabled,
+        ),
+      ),
     );
   }
 
@@ -2922,9 +2936,24 @@ class _ChatListViewState extends State<ChatListView>
     );
   }
 
+  /// A community's chats are ordinary rows again once "Show as One Chat" is
+  /// off, and without this marker the hub has no entry point at all.
+  Widget? _communityBadge(
+    ChatSummary chat, {
+    required bool communitiesEnabled,
+  }) {
+    final community = _model.communityBadgeFor(
+      chat.id,
+      communitiesEnabled: communitiesEnabled,
+    );
+    if (community == null) return null;
+    return CommunityAvatarBadge(onTap: () => _openCommunityHub(community));
+  }
+
   Widget _swipeRow(ChatSummary chat) {
     final selected = widget.selectedChatId == chat.id;
-    final swipeMode = context.watch<ThemeController>().chatListSwipeMode;
+    final theme = context.watch<ThemeController>();
+    final swipeMode = theme.chatListSwipeMode;
     final platform = Theme.of(context).platform;
     final desktopContextMenu = !kIsWeb && isDesktopTargetPlatform(platform);
     final desktopTouchGestures =
@@ -2994,6 +3023,10 @@ class _ChatListViewState extends State<ChatListView>
           chat: chat,
           selected: selected,
           onClearUnread: () => _model.markRead(chat),
+          avatarBadge: _communityBadge(
+            chat,
+            communitiesEnabled: theme.communitiesEnabled,
+          ),
         ),
       ),
     );
