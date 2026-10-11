@@ -10,6 +10,14 @@
 //  participate in the drop math, and dragging near an edge auto-scrolls so
 //  off-screen rows can be reached.
 //
+//  Drag end paths are deliberately split. A pointer-up over a cell is the
+//  only path that persists a reorder; a cancelled drag (native pointer
+//  cancellation, a disabling rebuild while the drag is live, or dispose)
+//  ends the drag, drops the feedback, stops the autoscroll, and writes
+//  nothing. A second pointer touching during a drag never starts a
+//  competing gesture (LongPressDraggable's single-flight recognizer plus
+//  [_startDrag]'s guard).
+//
 //  Motion contract: no tickers, no AnimationControllers. Reduced motion
 //  disables dragging entirely (the hosting screen keeps its non-drag
 //  Move earlier / Move later actions as the fallback), so the component can
@@ -19,6 +27,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../theme/app_theme.dart';
 
 /// Persists a reorder; [newIndex] is the final position of the dragged item
 /// after it is removed from [oldIndex] (i.e. the index of the cell it was
@@ -80,6 +90,19 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
   bool _autoscrollingDown = false;
   Timer? _autoscrollTimer;
 
+  /// The drag was cancelled (native pointer cancellation): set by the
+  /// recognizer's cancel callback before the end callback runs, so the end
+  /// path can tell an aborted drag from a real drop. This grid has no
+  /// [DragTarget]s (drop math is manual), so `wasAccepted` in [onDragEnd]
+  /// is always false and cannot be the discriminator.
+  bool _pointerCancelled = false;
+
+  /// The pointer id that pressed each cell, captured on pointer-down so the
+  /// drag's cancel/up can be matched to the exact finger that owns it. An
+  /// overlapping second finger is a different id and must not abort the
+  /// first drag.
+  final Map<int, int> _downPointerByCell = {};
+
   GlobalKey _cellKey(int index) => _cellKeys.putIfAbsent(index, GlobalKey.new);
 
   bool get _effectiveDragEnabled =>
@@ -92,12 +115,24 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
     if (widget.itemCount < old.itemCount) {
       _cellKeys.removeWhere((index, _) => index >= widget.itemCount);
     }
-    if (!_effectiveDragEnabled) _finishDrag();
+    // Losing the drag affordance mid-drag (edit mode opened, an operation
+    // went in flight, reduced motion turned on) is a cancellation, not a
+    // drop: the user never lifted the pointer to choose a destination.
+    if (!_effectiveDragEnabled) _abortDrag();
   }
 
   @override
   void dispose() {
+    // Never setState here: the element is being unmounted (mounted is still
+    // true while the framework marks it defunct), so only cancel the timer
+    // and clear the drag fields. The live-abort UI refresh belongs to
+    // [_abortDrag], which runs while the widget is still built.
     _autoscrollTimer?.cancel();
+    _autoscrollTimer = null;
+    _autoscrollingUp = false;
+    _autoscrollingDown = false;
+    _lastPointer = null;
+    _draggingIndex = null;
     super.dispose();
   }
 
@@ -111,6 +146,14 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
     return renderObject.localToGlobal(Offset.zero) & renderObject.size;
   }
 
+  /// The live mounted cell indexes: the keys whose render boxes are actually
+  /// in the tree right now. Lazy construction keeps this sparse — after a
+  /// scroll jump the mounted bottom cells are not the low indexes — so drop
+  /// math must never assume indexes are dense in `0..length`.
+  Iterable<int> get _mountedIndexes => _cellKeys.entries
+      .map((entry) => entry.key)
+      .where((index) => _cellKeys[index]?.currentContext != null);
+
   /// The drop target for a global pointer position: the cell whose rectangle
   /// contains it, or the nearest mounted cell's center when the pointer is
   /// off every cell (above/below the viewport, between gaps).
@@ -119,7 +162,7 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
     int? containing;
     var nearestIndex = -1;
     var nearestDistance = double.infinity;
-    for (var index = 0; index < _cellKeys.length; index++) {
+    for (final index in _mountedIndexes) {
       final rect = _cellRect(index);
       if (rect == null) continue;
       if (rect.contains(global)) {
@@ -138,11 +181,29 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
   }
 
   void _startDrag(int index) {
-    if (!_effectiveDragEnabled) return;
-    setState(() => _draggingIndex = index);
+    if (!_effectiveDragEnabled || _draggingIndex != null) return;
+    setState(() {
+      _draggingIndex = index;
+      _pointerCancelled = false;
+    });
+  }
+
+  /// The pointer that pressed this cell (pointer-down). Recorded per cell so
+  /// the drag that this cell starts later knows which finger owns it.
+  void _recordPointerDown(int index, int pointer) {
+    _downPointerByCell[index] = pointer;
+  }
+
+  /// A cell's Listener saw a pointer cancelled. Matched to the pointer that
+  /// pressed this cell, so an unrelated second finger lifting or being
+  /// cancelled elsewhere never aborts the live drag.
+  void _markPointerCancelled(int index, int pointer) {
+    if (_downPointerByCell[index] != pointer) return;
+    if (_draggingIndex == index) _pointerCancelled = true;
   }
 
   void _updateDrag(int index, DragUpdateDetails details) {
+    if (_draggingIndex != index) return;
     _lastPointer = details.globalPosition;
     if (widget.scrollController == null || widget.viewportKey == null) return;
     final viewport =
@@ -192,17 +253,28 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
     if (target != controller.offset) controller.jumpTo(target);
   }
 
-  Future<void> _finishDrag() async {
-    final oldIndex = _draggingIndex;
-    final pointer = _lastPointer;
+  /// Ends any drag without writing anything: the pointer was cancelled, the
+  /// affordance disappeared, or the component is going away. The autoscroll
+  /// and feedback stop with it; nothing persists.
+  void _abortDrag() {
     _autoscrollTimer?.cancel();
     _autoscrollTimer = null;
     _autoscrollingUp = false;
     _autoscrollingDown = false;
     _lastPointer = null;
+    _pointerCancelled = false;
     if (_draggingIndex != null && mounted) {
       setState(() => _draggingIndex = null);
+    } else {
+      _draggingIndex = null;
     }
+  }
+
+  /// The single committing path: the user lifted the pointer over a cell.
+  Future<void> _dropDrag() async {
+    final oldIndex = _draggingIndex;
+    final pointer = _lastPointer;
+    _abortDrag();
     if (oldIndex == null || pointer == null) return;
     final target = _targetIndex(pointer);
     if (target == null || target == oldIndex) return;
@@ -211,25 +283,22 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
 
   Widget _dragFeedback(BuildContext context, int index) {
     final border = BorderRadius.circular(12);
-    return Material(
-      type: MaterialType.transparency,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: border,
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x55000000),
-              blurRadius: 18,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: border,
-          child: ColoredBox(
-            color: Theme.of(context).colorScheme.surface,
-            child: widget.cellBuilder(context, index),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: border,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x55000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: border,
+        child: ColoredBox(
+          color: context.colors.card,
+          child: widget.cellBuilder(context, index),
         ),
       ),
     );
@@ -259,27 +328,52 @@ class _StickerReorderGridSliverState extends State<StickerReorderGridSliver> {
           return SizedBox(
             key: key,
             width: extent,
-            child: LongPressDraggable<int>(
-              data: index,
-              maxSimultaneousDrags: 1,
-              dragAnchorStrategy: pointerDragAnchorStrategy,
-              onDragStarted: () => _startDrag(index),
-              onDragUpdate: (details) => _updateDrag(index, details),
-              onDraggableCanceled: (_, _) => unawaited(_finishDrag()),
-              onDragEnd: (_) => unawaited(_finishDrag()),
-              feedback: SizedBox(
-                width: extent,
-                height: extent,
-                child: _dragFeedback(context, index),
+            child: Listener(
+              // The cell's own Listener still receives the pointer's
+              // cancel/up events for the drag it started (the recognizer
+              // routes by the stored hit-test result), so a native pointer
+              // cancellation is seen here before [onDragEnd] runs. This grid
+              // has no DragTargets, so `wasAccepted` is always false and
+              // cannot tell a real drop from a cancelled drag — this flag
+              // can.
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (event) =>
+                  _recordPointerDown(index, event.pointer),
+              onPointerCancel: (event) =>
+                  _markPointerCancelled(index, event.pointer),
+              child: LongPressDraggable<int>(
+                data: index,
+                maxSimultaneousDrags: 1,
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                onDragStarted: () => _startDrag(index),
+                onDragUpdate: (details) => _updateDrag(index, details),
+                onDragEnd: (_) => unawaited(_endDrag()),
+                feedback: SizedBox(
+                  width: extent,
+                  height: extent,
+                  child: _dragFeedback(context, index),
+                ),
+                childWhenDragging: IgnorePointer(
+                  child: Opacity(opacity: 0.0, child: content),
+                ),
+                child: content,
               ),
-              childWhenDragging: IgnorePointer(
-                child: Opacity(opacity: 0.0, child: content),
-              ),
-              child: content,
             ),
           );
         },
       );
     },
   );
+
+  /// Routes the recognizer's single end callback. A native pointer cancel
+  /// (seen by the cell's Listener before this runs) aborts; otherwise the
+  /// pointer was lifted over a cell and the drop commits. `wasAccepted` is
+  /// not used: this grid has no DragTargets, so it is always false.
+  Future<void> _endDrag() {
+    if (_pointerCancelled || _draggingIndex == null) {
+      _abortDrag();
+      return Future<void>.value();
+    }
+    return _dropDrag();
+  }
 }

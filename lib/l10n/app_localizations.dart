@@ -2752,6 +2752,8 @@ abstract final class AppStringKeys {
   static const stickerStudioRemove = 'stickerStudioRemove';
   static const stickerStudioRefresh = 'stickerStudioRefresh';
   static const stickerStudioRemoveMessage = 'stickerStudioRemoveMessage';
+  static const stickerStudioRemoveSelectedFailed =
+      'stickerStudioRemoveSelectedFailed';
   static const stickerStudioRemoveSelectedMessage =
       'stickerStudioRemoveSelectedMessage';
   static const stickerStudioRemoveSelectedTitle =

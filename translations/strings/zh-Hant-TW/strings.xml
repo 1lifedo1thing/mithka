@@ -2893,6 +2893,7 @@
     <string name="stickerStudioRemoveMessage">The sticker will be removed from this set.</string>
     <string name="stickerStudioRemoveSelectedTitle">移除 {value1} 個貼圖？</string>
     <string name="stickerStudioRemoveSelectedMessage">選取的貼圖將從該貼圖集中移除。</string>
+    <string name="stickerStudioRemoveSelectedFailed">已移除 {value2} 個貼圖中的 {value1} 個。其餘失敗——請再次嘗試移除剩餘貼圖。</string>
     <string name="stickerStudioRemoveSticker">Remove sticker?</string>
     <string name="stickerStudioRemoveThumbnail">Remove thumbnail</string>
     <string name="stickerStudioRename">Rename set</string>

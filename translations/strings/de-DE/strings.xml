@@ -2904,6 +2904,7 @@
     <string name="stickerStudioRemoveMessage">The sticker will be removed from this set.</string>
     <string name="stickerStudioRemoveSelectedTitle">{value1} Sticker entfernen?</string>
     <string name="stickerStudioRemoveSelectedMessage">Die ausgewählten Sticker werden aus diesem Set entfernt.</string>
+    <string name="stickerStudioRemoveSelectedFailed">{value1} von {value2} Stickern wurden entfernt. Die übrigen sind fehlgeschlagen — versuche, die verbleibenden Sticker erneut zu entfernen.</string>
     <string name="stickerStudioRemoveSticker">Remove sticker?</string>
     <string name="stickerStudioRemoveThumbnail">Remove thumbnail</string>
     <string name="stickerStudioRename">Rename set</string>

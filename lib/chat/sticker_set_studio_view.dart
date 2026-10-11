@@ -342,7 +342,7 @@ class StickerSetCreateView extends StatefulWidget {
 
 class _StickerSetCreateViewState extends State<StickerSetCreateView> {
   late final StickerSetManagementService _service =
-      widget.service ?? StickerSetManagementService();
+      widget.service ?? StickerSetManagementService.forActiveAccount();
   final _title = TextEditingController();
   final _name = TextEditingController();
   OwnedStickerSetType _type = OwnedStickerSetType.regular;
@@ -603,7 +603,10 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                 _section(
                   colors,
                   children: [
-                    ReorderableListView(
+                    // Widgets-layer reorder machinery (no Material list
+                    // chrome): the app supplies the drag proxy, the delayed
+                    // long-press listener matches the manage grid's gesture.
+                    ReorderableList(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       onReorderItem: (oldIndex, newIndex) => setState(
@@ -612,15 +615,14 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
                           _stickers.removeAt(oldIndex),
                         ),
                       ),
-                      children: [
-                        for (var index = 0; index < _stickers.length; index++)
-                          _draftRow(
-                            colors,
-                            _stickers[index],
-                            index,
-                            key: ObjectKey(_stickers[index]),
-                          ),
-                      ],
+                      proxyDecorator: _draftProxyDecorator,
+                      itemBuilder: (context, index) => _draftRow(
+                        colors,
+                        _stickers[index],
+                        index,
+                        key: ObjectKey(_stickers[index]),
+                      ),
+                      itemCount: _stickers.length,
                     ),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -755,64 +757,113 @@ class _StickerSetCreateViewState extends State<StickerSetCreateView> {
   }
 
   /// One draft row: tap to edit the source and its emoji/keywords, trash to
-  /// remove, long-press to reorder (ReorderableListView's default handles).
+  /// remove, long-press to reorder (the widgets-layer delayed drag listener,
+  /// the same gesture the manage grid uses).
   Widget _draftRow(
     AppColors colors,
     NewStickerDraft draft,
     int index, {
     required Key key,
-  }) => GestureDetector(
+  }) => ReorderableDelayedDragStartListener(
     key: key,
-    behavior: HitTestBehavior.opaque,
-    onTap: _working ? null : () => _editDraft(index),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.divider, width: 0.5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            StickerDraftPreview(draft: draft, size: 44),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    draft.emojis,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 20, color: colors.textPrimary),
-                  ),
-                  Text(
-                    context.l10n.t(AppStringKeys.stickerStudioFormatFile, {
-                      'value1': draft.format.name.toUpperCase(),
-                      'value2': draft.path.split(Platform.pathSeparator).last,
-                    }),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _working ? null : () => setState(() => _remove(index)),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: AppIcon(
-                  HeroAppIcons.trash,
-                  size: 19,
-                  color: colors.textSecondary,
+    index: index,
+    enabled: !_working,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _working ? null : () => _editDraft(index),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: colors.divider, width: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              StickerDraftPreview(draft: draft, size: 44),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      draft.emojis,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 20, color: colors.textPrimary),
+                    ),
+                    Text(
+                      context.l10n.t(AppStringKeys.stickerStudioFormatFile, {
+                        'value1': draft.format.name.toUpperCase(),
+                        'value2': draft.path.split(Platform.pathSeparator).last,
+                      }),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _working ? null : () => setState(() => _remove(index)),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: AppIcon(
+                    HeroAppIcons.trash,
+                    size: 19,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),
+  );
+
+  /// The owned drag proxy for draft rows: the row itself, lifted with the
+  /// studio's card surface and the grid feedback's shadow, so the create
+  /// flow and the manage grid show one drag language. No Material elevation.
+  Widget _draftProxyDecorator(
+    Widget child,
+    int index,
+    Animation<double> animation,
+  ) => AnimatedBuilder(
+    animation: animation,
+    builder: (context, row) {
+      final border = BorderRadius.circular(12);
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: border,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(
+                0x55000000,
+              ).withValues(alpha: 0.55 * animation.value),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: border,
+          child: ColoredBox(
+            color: context.colors.card,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 1, end: 1.04).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOut),
+              ),
+              child: row,
+            ),
+          ),
+        ),
+      );
+    },
+    child: child,
   );
 
   void _remove(int index) {
@@ -839,7 +890,7 @@ class StickerSetManageView extends StatefulWidget {
 
 class _StickerSetManageViewState extends State<StickerSetManageView> {
   late final StickerSetManagementService _service =
-      widget.service ?? StickerSetManagementService();
+      widget.service ?? StickerSetManagementService.forActiveAccount();
   final _gridViewportKey = GlobalKey(debugLabel: 'studio-grid-viewport');
   final _scrollController = ScrollController();
 
@@ -997,8 +1048,13 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
   }
 
   /// Edit-mode batch delete: one confirmation, then the picked stickers are
-  /// removed serially (TDLib has no bulk remove; order doesn't matter, and a
-  /// mid-batch failure leaves the rest of the set intact and reported).
+  /// removed serially (TDLib has no bulk remove). A failed removal does not
+  /// forfeit the rest — the loop continues so remaining selections are still
+  /// deleted, and the failures are reported (which sticker file ids failed
+  /// and the error) instead of a bare count. The service is pinned to the
+  /// account that loaded the set, so a foreground account switch during the
+  /// confirmation or between removals fails closed instead of sending the
+  /// selected ids to another account.
   Future<void> _removeSelected() async {
     if (_selectedFileIds.isEmpty || _working) return;
     final count = _selectedFileIds.length;
@@ -1016,28 +1072,35 @@ class _StickerSetManageViewState extends State<StickerSetManageView> {
     );
     if (!yes) return;
     setState(() => _working = true);
-    var failures = 0;
+    final picked = _selectedFileIds.toList();
     try {
-      for (final fileId in _selectedFileIds.toList()) {
-        try {
-          await _service.remove(fileId);
-        } catch (_) {
-          failures++;
-        }
-      }
+      final result = await _service.removeSelected(picked);
       _changed = true;
-      _selectedFileIds.clear();
+      _selectedFileIds
+        ..clear()
+        ..addAll(result.failures.map((failure) => failure.fileId));
       await _load();
-    } finally {
-      if (mounted) setState(() => _working = false);
-      if (mounted && failures > 0) {
+      if (mounted && result.failures.isNotEmpty) {
         showToast(
           context,
-          context.l10n.t(AppStringKeys.stickerStudioUpdateFailed, {
-            'value1': failures,
+          context.l10n.t(AppStringKeys.stickerStudioRemoveSelectedFailed, {
+            'value1': result.removed.length,
+            'value2': picked.length,
           }),
         );
       }
+    } catch (error) {
+      // The owning account went away mid-batch: nothing further is sent.
+      if (mounted) {
+        showToast(
+          context,
+          context.l10n.t(AppStringKeys.stickerStudioUpdateFailed, {
+            'value1': error,
+          }),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
