@@ -229,6 +229,40 @@ void main() {
       },
     );
 
+    test(
+      'a pick after a clear survives the load rejecting the history',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'emojiPanelRecents.v1': '[{"e":"😀","c":3,"t":9}]',
+        });
+        EmojiRecentsStore.shared.resetForTesting();
+        final store = EmojiRecentsStore.shared;
+        final loading = store.loadIfNeeded();
+        store.clear();
+        // The user immediately picks a new emoji after clearing: the pick is
+        // newer than the load, so it must survive the load settling.
+        store.record('😎');
+        await loading;
+        await Future<void>.delayed(Duration.zero);
+        expect(store.entries.map((e) => e.emoji).toList(), ['😎']);
+        expect(store.entries.single.count, 1);
+        final prefs = await SharedPreferences.getInstance();
+        final stored = decodeEntries(
+          prefs.getString(EmojiRecentsStore.storageKey),
+        );
+        expect(
+          stored.map((e) => e.emoji).toList(),
+          ['😎'],
+          reason: 'the post-clear pick was lost on disk',
+        );
+        expect(
+          stored.any((e) => e.emoji == '😀'),
+          isFalse,
+          reason: 'the cleared history resurrected from disk',
+        );
+      },
+    );
+
     test('a re-pick during an in-flight load merges counts', () async {
       SharedPreferences.setMockInitialValues({
         'emojiPanelRecents.v1': '[{"e":"😀","c":3,"t":9}]',

@@ -97,6 +97,12 @@ class EmojiRecentsStore extends ChangeNotifier {
   bool _loaded = false;
   Future<void>? _loading;
 
+  /// The last `lastUsed` stamp handed out. Stamps are strictly increasing:
+  /// a burst of picks inside one wall-clock millisecond would otherwise all
+  /// tie, leaving their order to the sort's treatment of equal keys rather
+  /// than pick order.
+  int _lastStamp = 0;
+
   /// The persisted history has not been read back yet, so a write now would
   /// replace it with the partial in-flight list. The load merges everything
   /// and writes once at the end.
@@ -132,10 +138,12 @@ class EmojiRecentsStore extends ChangeNotifier {
     } catch (_) {
       persisted = const [];
     }
-    // A clear that raced the read wins: the user meant to drop the history,
-    // not to resurrect it.
+    // A clear that raced the read wins over the history: the user meant to
+    // drop it, not to resurrect it. But mutations made after the clear are
+    // newer than the read, so they survive it — only the persisted history
+    // is rejected, not the whole in-memory list.
     if (_clearedWhileLoading) {
-      _entries = const [];
+      _entries = rankEntries(_entries);
     } else {
       // Mutations made while the read was in flight are the newer half of
       // the truth; merge them with the history instead of replacing either.
@@ -187,8 +195,16 @@ class EmojiRecentsStore extends ChangeNotifier {
     _record(EmojiRecentEntry(emoji: emoji, customEmojiId: customEmojiId));
   }
 
-  void _record(EmojiRecentEntry entry) {
+  /// Monotonic pick timestamp: the wall clock only provides a lower bound,
+  /// because an in-test burst of records can land in the same millisecond.
+  int _nextStamp() {
     final now = DateTime.now().millisecondsSinceEpoch;
+    _lastStamp = _lastStamp >= now ? _lastStamp + 1 : now;
+    return _lastStamp;
+  }
+
+  void _record(EmojiRecentEntry entry) {
+    final now = _nextStamp();
     final next = <EmojiRecentEntry>[
       entry.copyWith(count: 1, lastUsed: now),
       for (final existing in _entries)
@@ -248,6 +264,8 @@ class EmojiRecentsStore extends ChangeNotifier {
     _entries = const [];
     _loaded = false;
     _loading = null;
+    _persistAfterLoad = false;
+    _clearedWhileLoading = false;
   }
 
   @visibleForTesting
@@ -260,6 +278,12 @@ class EmojiRecentsStore extends ChangeNotifier {
 
 /// Frequency first, then recency, capped at [limit] — the lowest-ranked
 /// entries fall off the end.
+///
+/// The comparator is made total by an identity tie-break: entries that tie on
+/// both count and `lastUsed` (a burst of picks within one clock tick, or a
+/// seed with unset timestamps) then order by identity, so the ranking is a
+/// pure function of the data instead of `List.sort`'s unstable shuffle of
+/// equal elements.
 List<EmojiRecentEntry> rankEntries(
   List<EmojiRecentEntry> entries, {
   int limit = EmojiRecentsStore.maxEntries,
@@ -267,7 +291,8 @@ List<EmojiRecentEntry> rankEntries(
   final ranked = List<EmojiRecentEntry>.of(entries)
     ..sort((a, b) {
       if (a.count != b.count) return b.count.compareTo(a.count);
-      return b.lastUsed.compareTo(a.lastUsed);
+      if (a.lastUsed != b.lastUsed) return b.lastUsed.compareTo(a.lastUsed);
+      return a.identity.compareTo(b.identity);
     });
   return ranked.length > limit
       ? List<EmojiRecentEntry>.unmodifiable(ranked.take(limit))
