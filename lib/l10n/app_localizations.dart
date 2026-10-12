@@ -1565,8 +1565,10 @@ abstract final class AppStringKeys {
   static const emojiCategorySymbols = 'emojiCategorySymbols';
   static const emojiCategoryTravelAndPlaces = 'emojiCategoryTravelAndPlaces';
   static const emojiFontCatalogSystemDefault = 'emojiFontCatalogSystemDefault';
+  static const emojiPanelPreview = 'emojiPanelPreview';
   static const emojiPreviewFaceWithTearsOfJoy =
       'emojiPreviewFaceWithTearsOfJoy';
+  static const emojiRecentsSection = 'emojiRecentsSection';
   static const emojiStatusClear = 'emojiStatusClear';
   static const emojiStatusNoAvailableStatuses =
       'emojiStatusNoAvailableStatuses';
@@ -3189,6 +3191,7 @@ abstract final class AppStringKeys {
   static const contactShareEmpty = 'contactShareEmpty';
   static const composerMediaSearch = 'composerMediaSearch';
   static const composerMediaSearchEmpty = 'composerMediaSearchEmpty';
+  static const composerMediaPicker = 'composerMediaPicker';
   static const storyReplyHint = 'storyReplyHint';
   static const storyReplySent = 'storyReplySent';
   static const storyShare = 'storyShare';
