@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../tdlib/json_helpers.dart' show jsonInt;
+
 /// Non-secret metadata for one Telegram Bot API account.
 ///
 /// Tokens deliberately live in secure storage. The endpoint never contains a
@@ -27,7 +29,7 @@ class BotApiAccount {
         bot: bot ?? this.bot,
       );
 
-  int get botId => _int(bot['id']) ?? 0;
+  int get botId => jsonInt(bot['id']) ?? 0;
   String get username => (bot['username'] as String?)?.trim() ?? '';
   String get displayName {
     final first = (bot['first_name'] as String?)?.trim() ?? '';
@@ -45,7 +47,7 @@ class BotApiAccount {
   static BotApiAccount? fromJson(Object? value) {
     if (value is! Map) return null;
     final map = Map<String, dynamic>.from(value);
-    final slot = _int(map['slot']);
+    final slot = jsonInt(map['slot']);
     final endpointValue = map['endpoint'];
     final botValue = map['bot'];
     if (slot == null || endpointValue is! String || botValue is! Map) {
@@ -60,13 +62,6 @@ class BotApiAccount {
     } on FormatException {
       return null;
     }
-  }
-
-  static int? _int(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
   }
 }
 
@@ -138,9 +133,14 @@ bool _isLocalHost(String host) {
       (a == 192 && b == 168);
 }
 
+final RegExp _botTokenShape = RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$');
+
+/// Whether [token] has the `<bot id>:<secret>` shape Telegram issues.
+bool isTelegramBotTokenShape(String token) => _botTokenShape.hasMatch(token);
+
 String normalizeBotToken(String value) {
   final token = value.trim();
-  if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(token)) {
+  if (!isTelegramBotTokenShape(token)) {
     throw const FormatException('Enter a valid Telegram bot token.');
   }
   return token;

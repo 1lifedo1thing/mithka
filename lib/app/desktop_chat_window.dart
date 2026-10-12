@@ -14,7 +14,6 @@ import '../chat/desktop_chat_context_pane.dart';
 import '../chat/group_remark_controller.dart';
 import '../chat/music_player_controller.dart';
 import '../chats/chat_folder_tag_controller.dart';
-import '../components/keyboard_dismiss_on_tap.dart';
 import '../l10n/app_locale_controller.dart';
 import '../l10n/app_localizations.dart';
 import '../settings/ai_settings_controller.dart';
@@ -39,6 +38,7 @@ import 'desktop_chat_window_stub.dart'
 import 'desktop_utility_window_models.dart';
 import 'detail_content_reveal.dart';
 import 'global_video_split_host.dart';
+import 'scaled_app_view.dart';
 
 export 'desktop_chat_window_models.dart';
 
@@ -360,7 +360,7 @@ class _DesktopChatWindowAppState extends State<DesktopChatWindowApp> {
                 const Positioned.fill(child: GlobalCallOverlayHost()),
               ],
             );
-            return _DesktopChatScaledView(
+            return ScaledAppView(
               textScale: _theme.effectiveTextScale(
                 MediaQuery.textScalerOf(context),
               ),
@@ -538,61 +538,4 @@ class _DesktopStandaloneChatSurfaceState
       child: chat,
     );
   }
-}
-
-class _DesktopChatScaledView extends StatelessWidget {
-  const _DesktopChatScaledView({
-    required this.textScale,
-    required this.interfaceScale,
-    required this.child,
-  });
-
-  final double textScale;
-  final double interfaceScale;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final scale = interfaceScale;
-    final virtualSize = Size(
-      media.size.width / scale,
-      media.size.height / scale,
-    );
-    final scaledMedia = media.copyWith(
-      size: virtualSize,
-      padding: _unscale(media.padding, scale),
-      viewPadding: _unscale(media.viewPadding, scale),
-      viewInsets: _unscale(media.viewInsets, scale),
-      systemGestureInsets: _unscale(media.systemGestureInsets, scale),
-      textScaler: TextScaler.linear(textScale),
-    );
-    return AppKeyboardDismissOnTap(
-      child: ClipRect(
-        child: OverflowBox(
-          alignment: Alignment.topLeft,
-          minWidth: virtualSize.width,
-          maxWidth: virtualSize.width,
-          minHeight: virtualSize.height,
-          maxHeight: virtualSize.height,
-          child: Transform.scale(
-            scale: scale,
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: virtualSize.width,
-              height: virtualSize.height,
-              child: MediaQuery(data: scaledMedia, child: child),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  EdgeInsets _unscale(EdgeInsets insets, double scale) => EdgeInsets.fromLTRB(
-    insets.left / scale,
-    insets.top / scale,
-    insets.right / scale,
-    insets.bottom / scale,
-  );
 }

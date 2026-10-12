@@ -1472,6 +1472,8 @@
     <string name="generalForwardRichMarkdownHint">Markdown 형식 텍스트(AI 답장 등)을 리치 텍스트로 전달할지 선택해요</string>
     <string name="generalKeepChatContextPaneClosed">그룹 옆 패널을 닫힌 상태로 두기</string>
     <string name="generalKeepChatContextPaneClosedHint">태블릿과 데스크톱에서 그룹이나 채널을 열 때 오른쪽 멤버·공지 패널이 자동으로 나타나지 않아요. 대화 상단 버튼으로는 열 수 있어요</string>
+    <string name="generalMediaMetadata">미디어 메타데이터 표시</string>
+    <string name="generalMediaMetadataHint">이미지·동영상 뷰어 메뉴에 해상도, 크기, 길이, 코덱, 프레임 레이트, MIME 형식 항목을 추가합니다.</string>
     <string name="generalSaveCapturedPhotos">촬영한 사진을 시스템 앨범에 저장</string>
     <string name="generalSaveCapturedPhotosHint">끄면 앱 내 카메라로 촬영하며 사진이 앨범에 저장되지 않습니다.</string>
     <string name="generalSendMessageWithEnter">Enter 키로 메시지 보내기</string>
@@ -1938,6 +1940,17 @@
     <string name="loginWithQrCode">QR 코드로 로그인</string>
     <string name="mainTabResizeSidebar">사이드바 크기 조절</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">비트레이트</string>
+    <string name="mediaMetadataCodec">코덱</string>
+    <string name="mediaMetadataDuration">길이</string>
+    <string name="mediaMetadataFrameRate">프레임 레이트</string>
+    <string name="mediaMetadataMime">MIME 형식</string>
+    <string name="mediaMetadataName">이름</string>
+    <string name="mediaMetadataResolution">해상도</string>
+    <string name="mediaMetadataSize">크기</string>
+    <string name="mediaMetadataTitle">미디어 메타데이터</string>
+    <string name="mediaMetadataType">유형</string>
+    <string name="mediaMetadataViewInfo">미디어 정보</string>
     <string name="mediaSendPreviewStartTimestampSeconds">시작 타임스탬프(초)</string>
     <string name="mediaSendPreviewTitle">미디어 미리보기</string>
     <string name="mediaSendPreviewTrimVideo">비디오 다듬기</string>

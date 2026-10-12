@@ -29,6 +29,7 @@ import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
 import '../theme/date_text.dart';
 import '../theme/theme_controller.dart';
+import 'forum_topic_fields.dart';
 import 'topic_chat_view.dart';
 import 'topic_post_content.dart';
 
@@ -149,7 +150,7 @@ class _TopicChannelsViewState extends State<TopicChannelsView> {
         final info = topic.obj('info') ?? topic;
         final last = topic.obj('last_message');
         final parsedLast = last == null ? null : TDParse.message(last);
-        final threadId = _topicId(topic, info) ?? parsedLast?.id;
+        final threadId = forumTopicId(topic, info) ?? parsedLast?.id;
         final messages = await _recentRootPostsForTopic(
           chat.id,
           threadId,
@@ -234,9 +235,9 @@ class _TopicChannelsViewState extends State<TopicChannelsView> {
   }
 
   _TopicPost? _topicPostFromCache(Map<String, dynamic> item) {
-    final chatId = _cachedInt(item['chat_id']);
-    final messageId = _cachedInt(item['message_id']);
-    final threadId = _cachedInt(item['thread_id']);
+    final chatId = jsonInt(item['chat_id']);
+    final messageId = jsonInt(item['message_id']);
+    final threadId = jsonInt(item['thread_id']);
     if (chatId == null || messageId == null || threadId == null) return null;
     final chatTitle = (item['chat_title'] as String?)?.trim();
     final topicName = (item['topic_name'] as String?)?.trim();
@@ -247,9 +248,9 @@ class _TopicChannelsViewState extends State<TopicChannelsView> {
       return null;
     }
     final text = (item['text'] as String?) ?? '';
-    final date = _cachedInt(item['date']) ?? 0;
-    final commentCount = _cachedInt(item['comment_count']) ?? 0;
-    final reactionCount = _cachedInt(item['reaction_count']) ?? 0;
+    final date = jsonInt(item['date']) ?? 0;
+    final commentCount = jsonInt(item['comment_count']) ?? 0;
+    final reactionCount = jsonInt(item['reaction_count']) ?? 0;
     final message =
         ChatMessage(
             id: messageId,
@@ -283,20 +284,6 @@ class _TopicChannelsViewState extends State<TopicChannelsView> {
       threadId: threadId,
       message: message,
     );
-  }
-
-  int? _cachedInt(Object? value) {
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
-  }
-
-  int? _topicId(Map<String, dynamic> topic, Map<String, dynamic> info) {
-    return info.integer('forum_topic_id') ??
-        topic.integer('forum_topic_id') ??
-        info.int64('message_thread_id') ??
-        topic.int64('message_thread_id');
   }
 
   Future<bool> _isJoinedChat(ChatSummary chat) async {

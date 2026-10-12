@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'desktop_window_argument_normalizers.dart';
+
 const desktopMiniAppWindowType = 'mithka.mini-app';
 const _desktopMiniAppWindowProtocolVersion = 1;
 int _desktopMiniAppWindowSequence = 0;
@@ -162,23 +164,13 @@ class DesktopMiniAppWindowArguments {
   }
 
   static bool isValidInstanceId(String source) =>
-      source.isNotEmpty &&
-      source.length <= 96 &&
-      RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(source);
+      isDesktopWindowInstanceId(source);
 
-  static String normalizeTitle(String? source) {
-    final value = source?.replaceAll(RegExp(r'[\r\n]+'), ' ').trim() ?? '';
-    if (value.isEmpty) return 'Mini App';
-    return value.length <= 256 ? value : value.substring(0, 256);
-  }
+  static String normalizeTitle(String? source) =>
+      normalizeDesktopWindowTitle(source, fallback: 'Mini App');
 
-  static String normalizeLocaleTag(String? source) {
-    final value = source?.trim() ?? '';
-    if (value.isEmpty || value.length > 32) return 'en';
-    return RegExp(r'^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$').hasMatch(value)
-        ? value
-        : 'en';
-  }
+  static String normalizeLocaleTag(String? source) =>
+      normalizeDesktopWindowLocaleTag(source);
 }
 
 /// Main-engine-only launch material delivered after the child authenticates.

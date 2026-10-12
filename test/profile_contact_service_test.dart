@@ -95,6 +95,18 @@ void main() {
     expect(source, contains('showAppConfirmDialog('));
   });
 
+  test('featured-photo sheet reuses the viewer save pipeline', () {
+    final viewer = File('lib/chat/full_image_viewer.dart').readAsStringSync();
+    final source = File(
+      'lib/profile/profile_detail_view.dart',
+    ).readAsStringSync();
+    expect(viewer, contains('Future<void> saveViewerImage('));
+    expect(viewer, contains('await saveViewerImage(context,'));
+    expect(source, contains('saveViewerImage('));
+    expect(source, contains("ValueKey('featured-photo-save')"));
+    expect(source, contains('AppStringKeys.messageActionSaveToPhotos'));
+  });
+
   test('contact personal photo can be set or cleared with null', () {
     final photo = localStaticChatPhoto('/tmp/personal.jpg');
     expect(setPersonalProfilePhotoRequest(userId: 4, photo: photo), {

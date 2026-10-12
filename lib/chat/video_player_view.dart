@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fvp/fvp.dart';
 import 'package:mithka/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
@@ -28,6 +29,8 @@ import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
+import '../media/media_metadata.dart';
+import '../media/media_metadata_dialog.dart';
 import '../media/video_playback_reporting.dart';
 import '../media/video_view_compatibility.dart';
 import '../platform/fullscreen_system_ui.dart';
@@ -41,6 +44,7 @@ import '../tdlib/td_image_loader.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
+import '../theme/theme_controller.dart';
 import 'chat_picker_view.dart';
 import 'forward_options.dart';
 import 'media_download_service.dart';
@@ -526,7 +530,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     debugLabel: 'video-display-mode-button',
   );
   final List<FocusNode> _moreMenuFocusNodes = List<FocusNode>.generate(
-    5,
+    6,
     (index) => FocusNode(debugLabel: 'video-more-menu-action-$index'),
   );
   final Map<VideoDisplayMode, FocusNode> _modeMenuFocusNodes = {
@@ -1893,7 +1897,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       final server = _streamServer;
       final shouldCancelOnStop =
           !_openedCompletedLocalFile && _progress?.isCompleted != true;
-      var restoreAccepted = false;
+      final handlers = _fVideoPictureInPictureSessionHandlers(
+        c,
+        id: handoffId,
+        server: server,
+        shouldCancelOnStop: shouldCancelOnStop,
+      );
       started = await FVideoPictureInPicture.start(
         id: handoffId,
         uri: uri,
@@ -1910,33 +1919,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         onEntered: _handleFVideoPictureInPictureEntered,
         onRestored: _handleFVideoPictureInPictureRestored,
         onActionRequested: _handleFVideoPictureInPictureAction,
-        onRestoreRequested: (position) async {
-          final accepted = await _restoreFVideoPictureInPicture(position);
-          restoreAccepted = accepted;
-          return accepted;
-        },
-        onStop: (finalPosition) async {
-          if (_usesAndroidFVideoPictureInPicture && mounted) {
-            _systemPiPPrepared = false;
-            _systemPiPId = null;
-            _systemPiPActive = false;
-            _streamServer = null;
-            try {
-              await c.pause();
-            } catch (_) {}
-            if (mounted) _close();
-          }
-          if (finalPosition != null) {
-            await _storeResumePosition(finalPosition, c.value.duration);
-          }
-          if (FVideoPictureInPicture.usesActivePlayer(handoffId)) {
-            await c.dispose();
-          }
-          await server?.close();
-          if (shouldCancelOnStop && !restoreAccepted) {
-            await _cancelIncompleteDownload();
-          }
-        },
+        onRestoreRequested: handlers.onRestoreRequested,
+        onStop: handlers.onStop,
       );
       if (!mounted) {
         await FVideoPictureInPicture.cancelPrepared(id);
@@ -1971,6 +1955,51 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     if (!_systemPiPUsesActivePlayer) unawaited(c.pause());
     _close();
     return true;
+  }
+
+  /// Restore and stop handlers for one system PiP session, shared by the
+  /// prepared and the on-demand start. A stop after an accepted restore keeps
+  /// the download, which the restored in-app player goes on using.
+  ({
+    FVideoPictureInPictureRestoreRequested onRestoreRequested,
+    FVideoPictureInPictureStopped onStop,
+  })
+  _fVideoPictureInPictureSessionHandlers(
+    VideoPlayerController c, {
+    required String id,
+    required TdVideoStreamServer? server,
+    required bool shouldCancelOnStop,
+  }) {
+    var restoreAccepted = false;
+    return (
+      onRestoreRequested: (position) async {
+        final accepted = await _restoreFVideoPictureInPicture(position);
+        restoreAccepted = accepted;
+        return accepted;
+      },
+      onStop: (finalPosition) async {
+        if (_usesAndroidFVideoPictureInPicture && mounted) {
+          _systemPiPPrepared = false;
+          _systemPiPId = null;
+          _systemPiPActive = false;
+          _streamServer = null;
+          try {
+            await c.pause();
+          } catch (_) {}
+          if (mounted) _close();
+        }
+        if (finalPosition != null) {
+          await _storeResumePosition(finalPosition, c.value.duration);
+        }
+        if (FVideoPictureInPicture.usesActivePlayer(id)) {
+          await c.dispose();
+        }
+        await server?.close();
+        if (shouldCancelOnStop && !restoreAccepted) {
+          await _cancelIncompleteDownload();
+        }
+      },
+    );
   }
 
   Uri? _systemPiPSourceUri() {
@@ -2011,7 +2040,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     _systemPiPId = id;
     final sourceRect = _systemPictureInPictureSourceRect(c);
     if (sourceRect != null) _lastSystemPiPSourceRect = sourceRect;
-    var restoreAccepted = false;
+    final handlers = _fVideoPictureInPictureSessionHandlers(
+      c,
+      id: id,
+      server: server,
+      shouldCancelOnStop: shouldCancelOnStop,
+    );
     final prepared = await FVideoPictureInPicture.prepare(
       id: id,
       uri: uri,
@@ -2028,33 +2062,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       onEntered: _handleFVideoPictureInPictureEntered,
       onRestored: _handleFVideoPictureInPictureRestored,
       onActionRequested: _handleFVideoPictureInPictureAction,
-      onRestoreRequested: (position) async {
-        final accepted = await _restoreFVideoPictureInPicture(position);
-        restoreAccepted = accepted;
-        return accepted;
-      },
-      onStop: (finalPosition) async {
-        if (_usesAndroidFVideoPictureInPicture && mounted) {
-          _systemPiPPrepared = false;
-          _systemPiPId = null;
-          _systemPiPActive = false;
-          _streamServer = null;
-          try {
-            await c.pause();
-          } catch (_) {}
-          if (mounted) _close();
-        }
-        if (finalPosition != null) {
-          await _storeResumePosition(finalPosition, c.value.duration);
-        }
-        if (FVideoPictureInPicture.usesActivePlayer(id)) {
-          await c.dispose();
-        }
-        await server?.close();
-        if (shouldCancelOnStop && !restoreAccepted) {
-          await _cancelIncompleteDownload();
-        }
-      },
+      onRestoreRequested: handlers.onRestoreRequested,
+      onStop: handlers.onStop,
     );
     if (!mounted || _systemPiPId != id) {
       if (prepared) unawaited(FVideoPictureInPicture.cancelPrepared(id));
@@ -3350,6 +3359,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         _moreMenuFocusNodes[2],
         _moreMenuFocusNodes[3],
         if (_showsOrientationButton) _moreMenuFocusNodes[4],
+        if (_showsMetadataRow) _moreMenuFocusNodes[5],
       ];
     }
     if (_modeMenuVisible) {
@@ -4281,6 +4291,33 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     return Size(content.width * scale, content.height * scale);
   }
 
+  /// Shares the photo gallery's preference for its metadata row. A player
+  /// hosted outside the app's providers has no preference to read, so the row
+  /// stays hidden rather than guessing one. The focus traversal reads this too:
+  /// a node whose item is not rendered would swallow an arrow key.
+  bool get _showsMetadataRow =>
+      Provider.of<ThemeController?>(
+        context,
+        listen: false,
+      )?.mediaMetadataEnabled ??
+      false;
+
+  /// The current video's media facts, opened from the viewer menu. The player
+  /// may be streaming through its own loopback server, so it hands over the
+  /// completed local file only when it really opened one — see
+  /// [MediaMetadata.fromVideoFile].
+  void _showMediaMetadata() {
+    final metadata = MediaMetadata.fromVideoFile(
+      widget.video,
+      width: widget.width,
+      height: widget.height,
+      durationSeconds: widget.durationSeconds,
+      playerPath: _localPath,
+      playerOpenedLocalFile: _openedCompletedLocalFile,
+    );
+    unawaited(showMediaMetadataDialog(context, metadata));
+  }
+
   void _toggleMoreMenu() {
     final opening = !_moreMenuVisible;
     setState(() {
@@ -4322,9 +4359,20 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     if (hideReusableControls) scope!.actions.toggleControls();
   }
 
-  Widget _moreMenuOverlay({required VoidCallback onTapOutside}) {
+  Widget _moreMenuOverlay({required VoidCallback onTapOutside}) => Builder(
+    builder: (context) =>
+        _buildMoreMenuOverlay(context, onTapOutside: onTapOutside),
+  );
+
+  Widget _buildMoreMenuOverlay(
+    BuildContext context, {
+    required VoidCallback onTapOutside,
+  }) {
     final media = MediaQuery.of(context);
     final phoneFullscreen = media.size.shortestSide < 600;
+    final showMetadata = context.select<ThemeController?, bool>(
+      (theme) => theme?.mediaMetadataEnabled ?? false,
+    );
     final menuWidth = math.min(212.0, media.size.width - 24);
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final trailingSafeInset = rtl ? media.padding.left : media.padding.right;
@@ -4479,6 +4527,21 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
                                         () => unawaited(
                                           _toggleVideoOrientation(),
                                         ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                if (showMetadata) ...[
+                                  const _VideoMenuSeparator(),
+                                  KeyedSubtree(
+                                    key: const ValueKey('video-more-metadata'),
+                                    child: _FocusableVideoMenuItem(
+                                      icon: HeroAppIcons.circleInfo,
+                                      label: AppStringKeys.mediaMetadataViewInfo
+                                          .l10n(context),
+                                      focusNode: _moreMenuFocusNodes[5],
+                                      onPressed: () => _runMoreMenuAction(
+                                        _showMediaMetadata,
                                       ),
                                     ),
                                   ),
@@ -4809,10 +4872,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       children: [
         _loadingPlaceholder(),
         PositionedDirectional(
-          top:
-              MediaQuery.paddingOf(context).top +
-              iPadWindowChromeInsetOf(context) +
-              6,
+          top: topChromeInsetOf(context) + 6,
           start: 8,
           child: _roundIconButton(
             HeroAppIcons.chevronLeft,
@@ -6857,15 +6917,8 @@ double _nextPlaybackSpeed(double speed) {
 }
 
 @visibleForTesting
-String formatVideoPlayerDuration(Duration value) {
-  final seconds = math.max(0, value.inSeconds);
-  final hours = seconds ~/ 3600;
-  final minutes = (seconds ~/ 60) % 60;
-  final remainder = seconds % 60;
-  return hours > 0
-      ? '$hours:${minutes.toString().padLeft(2, '0')}:${remainder.toString().padLeft(2, '0')}'
-      : '$minutes:${remainder.toString().padLeft(2, '0')}';
-}
+String formatVideoPlayerDuration(Duration value) =>
+    formatMediaDuration(value.inSeconds);
 
 class _VideoLoadingRing extends StatefulWidget {
   const _VideoLoadingRing({required this.size});

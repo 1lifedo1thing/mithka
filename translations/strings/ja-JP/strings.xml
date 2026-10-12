@@ -1472,6 +1472,8 @@
     <string name="generalForwardRichMarkdownHint">Markdown形式のテキスト（AIの返信など）をリッチテキストとして転送するか選べます</string>
     <string name="generalKeepChatContextPaneClosed">グループのサイドパネルを閉じたままにする</string>
     <string name="generalKeepChatContextPaneClosedHint">タブレットやデスクトップでグループやチャンネルを開いたとき、右側のメンバーと告知のパネルを自動では開きません。チャット上部のボタンからは開けます</string>
+    <string name="generalMediaMetadata">メディアのメタデータを表示</string>
+    <string name="generalMediaMetadataHint">画像・動画ビューアのメニューに、解像度・サイズ・長さ・コーデック・フレームレート・MIME タイプを表示する項目を追加します。</string>
     <string name="generalSaveCapturedPhotos">撮影した写真をシステムのアルバムに保存</string>
     <string name="generalSaveCapturedPhotosHint">オフにするとアプリ内カメラで撮影し、写真はアルバムに保存されません。</string>
     <string name="generalSendMessageWithEnter">Enterキーでメッセージを送信</string>
@@ -1938,6 +1940,17 @@
     <string name="loginWithQrCode">QR コードでログイン</string>
     <string name="mainTabResizeSidebar">サイドバーの幅を調整</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">ビットレート</string>
+    <string name="mediaMetadataCodec">コーデック</string>
+    <string name="mediaMetadataDuration">長さ</string>
+    <string name="mediaMetadataFrameRate">フレームレート</string>
+    <string name="mediaMetadataMime">MIME タイプ</string>
+    <string name="mediaMetadataName">名前</string>
+    <string name="mediaMetadataResolution">解像度</string>
+    <string name="mediaMetadataSize">サイズ</string>
+    <string name="mediaMetadataTitle">メディアのメタデータ</string>
+    <string name="mediaMetadataType">種類</string>
+    <string name="mediaMetadataViewInfo">メディア情報</string>
     <string name="mediaSendPreviewStartTimestampSeconds">開始タイムスタンプ (秒)</string>
     <string name="mediaSendPreviewTitle">メディアのプレビュー</string>
     <string name="mediaSendPreviewTrimVideo">ビデオをトリミングする</string>

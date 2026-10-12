@@ -31,6 +31,7 @@ import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'add_people_view.dart';
+import 'contact_users.dart';
 
 bool contactMatchesQuery(Contact contact, String rawQuery) => _contactMatches(
   contact,
@@ -274,11 +275,7 @@ class _ContactsViewState extends State<ContactsView> {
     return Container(
       key: const ValueKey('contacts-root-header'),
       color: c.listHeaderTint,
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -748,25 +745,16 @@ class ContactsViewModel extends ChangeNotifier {
     contactsLoading = true;
     _safeNotify();
     try {
-      final result = await TdClient.shared.query({'@type': 'getContacts'});
+      final users = await fetchContactUsers(TdClient.shared, limit: 300);
       if (_disposed) return;
-      final ids = result.int64Array('user_ids') ?? const <int>[];
       final loaded = <Contact>[];
-      for (final id in ids.take(300)) {
-        if (_disposed) return;
-        try {
-          final user = await TdClient.shared.query({
-            '@type': 'getUser',
-            'user_id': id,
-          });
-          if (_disposed) return;
-          final contact = _contactFromUser(id, user);
-          if (_isBotUser(user)) {
-            _botIndex[id] = contact;
-          } else {
-            loaded.add(contact);
-          }
-        } catch (_) {}
+      for (final (id, user) in users) {
+        final contact = _contactFromUser(id, user);
+        if (_isBotUser(user)) {
+          _botIndex[id] = contact;
+        } else {
+          loaded.add(contact);
+        }
       }
       loaded.sort(
         (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),

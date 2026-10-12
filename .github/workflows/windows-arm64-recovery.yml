@@ -129,6 +129,7 @@ jobs:
           # Compiler opt-in only: preserve the plugins' supported legacy ABI.
           $env:CL = "$env:CL /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
           flutter build windows --release --no-pub `
+            --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" `
             --build-name="$env:APP_VERSION" `
             --build-number="$env:BUILD_STAMP" `
             --dart-define="GIT_COMMIT=$env:SOURCE_SHORT" `

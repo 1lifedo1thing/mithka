@@ -263,9 +263,7 @@ class _DesktopPrimaryWindowFrameState extends State<DesktopPrimaryWindowFrame> {
       return widget.child;
     }
     final accounts = context.watch<AccountStore?>();
-    final activeAccount = accounts?.summaries
-        .where((account) => account.slot == accounts.activeSlot)
-        .firstOrNull;
+    final activeAccount = accounts?.activeSummary;
     final identity = widget.accountName?.trim().isNotEmpty == true
         ? widget.accountName!.trim()
         : activeAccount?.name.trim();

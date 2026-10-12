@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'desktop_window_argument_normalizers.dart';
+
 const desktopUtilityWindowType = 'mithka.utility';
 const _desktopUtilityWindowProtocolVersion = 1;
 int _desktopUtilityWindowInstanceSequence = 0;
@@ -300,19 +302,11 @@ class DesktopUtilityWindowArguments {
     }
   }
 
-  static String normalizeTitle(String? source) {
-    final value = source?.replaceAll(RegExp(r'[\r\n]+'), ' ').trim() ?? '';
-    if (value.isEmpty) return 'Mithka';
-    return value.length <= 256 ? value : value.substring(0, 256);
-  }
+  static String normalizeTitle(String? source) =>
+      normalizeDesktopWindowTitle(source, fallback: 'Mithka');
 
-  static String normalizeLocaleTag(String? source) {
-    final value = source?.trim() ?? '';
-    if (value.isEmpty || value.length > 32) return 'en';
-    return RegExp(r'^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$').hasMatch(value)
-        ? value
-        : 'en';
-  }
+  static String normalizeLocaleTag(String? source) =>
+      normalizeDesktopWindowLocaleTag(source);
 
   static String? normalizeSettingsCategoryId(String? source) {
     final value = source?.trim().toLowerCase();
@@ -320,19 +314,11 @@ class DesktopUtilityWindowArguments {
     return RegExp(r'^[a-z][a-z0-9-]*$').hasMatch(value) ? value : null;
   }
 
-  static String normalizeSearchQuery(String? source) {
-    final value = source?.replaceAll(RegExp(r'[\r\n]+'), ' ').trim() ?? '';
-    return value.length <= 256 ? value : value.substring(0, 256);
-  }
+  static String normalizeSearchQuery(String? source) =>
+      normalizeDesktopWindowTitle(source, fallback: '');
 
   static String? normalizeInstanceId(String? source) {
     final value = source?.trim();
-    if (value == null ||
-        value.isEmpty ||
-        value.length > 96 ||
-        !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) {
-      return null;
-    }
-    return value;
+    return value != null && isDesktopWindowInstanceId(value) ? value : null;
   }
 }

@@ -54,3 +54,9 @@ jobs:
 
       - name: Run unit and widget tests
         run: flutter test --concurrency=4
+
+      - name: Verify Telegram API Terms compile-time gate
+        run: |
+          flutter test test/build_flags_test.dart --dart-define=I_DONT_FUCKING_CARE_ABOUT_TOS=false
+          flutter test test/build_flags_test.dart --dart-define=I_DONT_FUCKING_CARE_ABOUT_TOS=true --dart-define=EXPECT_TOS_VIOLATIONS=true
+          flutter test test/build_flags_test.dart --dart-define=I_DONT_FUCKING_CARE_ABOUT_TOS=invalid

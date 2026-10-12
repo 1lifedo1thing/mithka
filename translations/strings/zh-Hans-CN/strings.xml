@@ -1472,6 +1472,8 @@
     <string name="generalForwardRichMarkdownHint">识别 Markdown 排版的文本（如 AI 回复），转发时可渲染为富文本</string>
     <string name="generalKeepChatContextPaneClosed">保持群侧栏收起</string>
     <string name="generalKeepChatContextPaneClosedHint">平板和桌面端进入群组或频道时，不再自动展开右侧的成员与公告面板，聊天顶栏按钮仍可手动打开</string>
+    <string name="generalMediaMetadata">显示媒体信息</string>
+    <string name="generalMediaMetadataHint">在图片和视频查看器的菜单里加入一项，显示分辨率、大小、时长、编码、帧率和 MIME 类型。</string>
     <string name="generalSaveCapturedPhotos">拍摄的照片保存到系统相册</string>
     <string name="generalSaveCapturedPhotosHint">关闭后改用应用内相机拍摄，照片不会进入系统相册。</string>
     <string name="generalSendMessageWithEnter">回车键发送消息</string>
@@ -1938,6 +1940,17 @@
     <string name="loginWithQrCode">使用二维码登录</string>
     <string name="mainTabResizeSidebar">调整侧栏宽度</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">码率</string>
+    <string name="mediaMetadataCodec">编码</string>
+    <string name="mediaMetadataDuration">时长</string>
+    <string name="mediaMetadataFrameRate">帧率</string>
+    <string name="mediaMetadataMime">MIME 类型</string>
+    <string name="mediaMetadataName">名称</string>
+    <string name="mediaMetadataResolution">分辨率</string>
+    <string name="mediaMetadataSize">大小</string>
+    <string name="mediaMetadataTitle">媒体信息</string>
+    <string name="mediaMetadataType">类型</string>
+    <string name="mediaMetadataViewInfo">媒体信息</string>
     <string name="mediaSendPreviewStartTimestampSeconds">开始时间戳（秒）</string>
     <string name="mediaSendPreviewTitle">媒体预览</string>
     <string name="mediaSendPreviewTrimVideo">修剪视频</string>

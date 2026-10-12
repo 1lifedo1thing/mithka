@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cold-start background for system dark mode: the app's dark surface
+         (AppColors.background), a near-black grey rather than OLED pure black
+         so the starting window, the window behind the Flutter view, and the
+         first Flutter frame are all the same colour. -->
+    <color name="launch_background">#202324</color>
+</resources>

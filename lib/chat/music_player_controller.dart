@@ -20,6 +20,7 @@ import '../app/chat_deep_link_controller.dart';
 import '../components/app_icons.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
+import '../media/media_metadata.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_image_loader.dart';
 import '../tdlib/td_models.dart';
@@ -152,6 +153,7 @@ class MusicPlayerController extends ChangeNotifier implements NowPlayingTarget {
       folderUpdate: () => clientId == null
           ? null
           : TdClient.shared.latestChatFoldersUpdateForClient(clientId),
+      folderWait: MusicPlaylistService.waiterForClient(clientId),
     );
   }
 
@@ -1343,7 +1345,7 @@ class _MusicScrubberState extends State<_MusicScrubber> {
             SizedBox(
               width: _labelWidth,
               child: Text(
-                totalMs > 0 ? _duration(elapsed.inSeconds) : '-:--',
+                totalMs > 0 ? formatMediaDuration(elapsed.inSeconds) : '-:--',
                 style: labelStyle,
               ),
             ),
@@ -1369,7 +1371,9 @@ class _MusicScrubberState extends State<_MusicScrubber> {
             SizedBox(
               width: _labelWidth,
               child: Text(
-                totalMs > 0 ? '-${_duration(remaining.inSeconds)}' : '-:--',
+                totalMs > 0
+                    ? '-${formatMediaDuration(remaining.inSeconds)}'
+                    : '-:--',
                 textAlign: TextAlign.right,
                 style: labelStyle,
               ),
@@ -2660,7 +2664,7 @@ class _QueueRow extends StatelessWidget {
                     [
                       if ((music.performer ?? '').trim().isNotEmpty)
                         music.performer!.trim(),
-                      _duration(music.duration),
+                      formatMediaDuration(music.duration),
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2756,14 +2760,6 @@ String _musicName(MessageMusic music) {
   if (title.isNotEmpty) return title;
   if (performer.isNotEmpty) return performer;
   return AppStrings.t(AppStringKeys.profileDetailMusic);
-}
-
-String _duration(int seconds) {
-  final h = seconds ~/ 3600;
-  final m = (seconds % 3600) ~/ 60;
-  final s = seconds % 60;
-  String two(int value) => value.toString().padLeft(2, '0');
-  return h > 0 ? '$h:${two(m)}:${two(s)}' : '$m:${two(s)}';
 }
 
 Widget _modeIconWidget(

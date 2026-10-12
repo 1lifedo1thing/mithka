@@ -6,6 +6,7 @@ import 'package:mithka/l10n/app_localizations.dart';
 import '../components/app_icons.dart';
 import '../components/photo_avatar.dart';
 import '../components/ui_components.dart';
+import '../contacts/contact_users.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -72,28 +73,21 @@ class _ContactSharePickerViewState extends State<ContactSharePickerView> {
   Future<void> _load() async {
     final loaded = <_ShareContact>[];
     try {
-      final result = await TdClient.shared.query({'@type': 'getContacts'});
-      for (final id in result.int64Array('user_ids') ?? const <int>[]) {
-        try {
-          final user = await TdClient.shared.query({
-            '@type': 'getUser',
-            'user_id': id,
-          });
-          final phone = user.str('phone_number') ?? '';
-          if (phone.trim().isEmpty) continue;
-          loaded.add(
-            _ShareContact(
-              card: MessageContactCard(
-                phoneNumber: phone,
-                firstName: user.str('first_name') ?? '',
-                lastName: user.str('last_name') ?? '',
-                vcard: '',
-                userId: id,
-              ),
-              photo: TDParse.smallPhoto(user.obj('profile_photo')),
+      for (final (id, user) in await fetchContactUsers(TdClient.shared)) {
+        final phone = user.str('phone_number') ?? '';
+        if (phone.trim().isEmpty) continue;
+        loaded.add(
+          _ShareContact(
+            card: MessageContactCard(
+              phoneNumber: phone,
+              firstName: user.str('first_name') ?? '',
+              lastName: user.str('last_name') ?? '',
+              vcard: '',
+              userId: id,
             ),
-          );
-        } catch (_) {}
+            photo: TDParse.smallPhoto(user.obj('profile_photo')),
+          ),
+        );
       }
       loaded.sort(
         (a, b) => a.card.displayName.toLowerCase().compareTo(

@@ -541,10 +541,7 @@ class _ShortVideoViewState extends State<ShortVideoView> {
     return Positioned(
       left: 8,
       right: 8,
-      top:
-          MediaQuery.paddingOf(context).top +
-          iPadWindowChromeInsetOf(context) +
-          6,
+      top: topChromeInsetOf(context) + 6,
       child: Row(
         children: [
           _roundButton(

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cold-start background. Must stay in sync with the app's light surface
+         (AppColors.background in lib/theme/app_theme.dart) and with the iOS
+         LaunchBackground color set, or the handoff from the starting window to
+         Flutter's first frame is a visible flash. -->
+    <color name="launch_background">#FFFFFF</color>
+</resources>

@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../chat/link_handler.dart';
 import '../components/app_icons.dart';
+import '../components/scanner_circle_button.dart';
 import '../components/toast.dart';
 import '../platform/camera_permission.dart';
 import '../theme/app_theme.dart';
@@ -380,14 +381,14 @@ class _QrScannerViewState extends State<QrScannerView>
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: Row(
                 children: [
-                  _ScannerCircleButton(
+                  ScannerCircleButton(
                     icon: HeroAppIcons.xmark,
                     onTap: () => Navigator.of(context).pop(),
                   ),
                   const Spacer(),
                   ValueListenableBuilder<MobileScannerState>(
                     valueListenable: _controller,
-                    builder: (context, state, _) => _ScannerCircleButton(
+                    builder: (context, state, _) => ScannerCircleButton(
                       icon: HeroAppIcons.arrowsRotate,
                       onTap: state.isInitialized && state.isRunning
                           ? _switchCamera
@@ -397,7 +398,7 @@ class _QrScannerViewState extends State<QrScannerView>
                   const SizedBox(width: 12),
                   ValueListenableBuilder<MobileScannerState>(
                     valueListenable: _controller,
-                    builder: (context, state, _) => _ScannerCircleButton(
+                    builder: (context, state, _) => ScannerCircleButton(
                       icon: HeroAppIcons.flash,
                       active: state.torchState == TorchState.on,
                       onTap:
@@ -416,7 +417,7 @@ class _QrScannerViewState extends State<QrScannerView>
             Positioned(
               left: 28,
               right: 28,
-              bottom: MediaQuery.of(context).padding.bottom + 34,
+              bottom: MediaQuery.paddingOf(context).bottom + 34,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -450,7 +451,7 @@ class _QrScannerViewState extends State<QrScannerView>
             left: 12,
             right: 12,
             bottom: _hasPanel
-                ? MediaQuery.of(context).padding.bottom + 12 - _panelDrag
+                ? MediaQuery.paddingOf(context).bottom + 12 - _panelDrag
                 : -420,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -512,45 +513,6 @@ class _QrScannerFrame extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _ScannerCircleButton extends StatelessWidget {
-  const _ScannerCircleButton({
-    required this.icon,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final AppIconData icon;
-  final VoidCallback? onTap;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: active ? AppTheme.brand : const Color(0x66000000),
-          shape: BoxShape.circle,
-          border: Border.all(color: const Color(0x33FFFFFF)),
-        ),
-        child: Center(
-          child: AppIcon(
-            icon,
-            size: 22,
-            color: onTap == null
-                ? const Color(0x66FFFFFF)
-                : const Color(0xFFFFFFFF),
-          ),
-        ),
-      ),
     );
   }
 }

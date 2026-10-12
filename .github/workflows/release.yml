@@ -251,6 +251,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           flutter build apk --release --split-per-abi \
+            --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
             --target-platform ${{ matrix.target }} \
             --build-name="${{ needs.prepare.outputs.app_version }}" \
             --build-number="${{ needs.prepare.outputs.android_version_code }}" \
@@ -456,6 +457,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           flutter build linux --release \
+            --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
             --target-platform="linux-${{ matrix.architecture }}" \
             --build-name="${{ needs.prepare.outputs.app_version }}" \
             --build-number="${{ needs.prepare.outputs.build_stamp }}" \
@@ -469,6 +471,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           flutter build macos --release \
+            --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
             --build-name="${{ needs.prepare.outputs.app_version }}" \
             --build-number="${{ needs.prepare.outputs.build_stamp }}" \
             --dart-define="GIT_COMMIT=${{ needs.prepare.outputs.short_sha }}" \
@@ -508,6 +511,7 @@ jobs:
           # --no-pub keeps pub from re-resolving over the plugin set this job
           # settled on; the dependencies step above already fetched them.
           flutter build windows --release --no-pub `
+            --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" `
             --build-name="${{ needs.prepare.outputs.app_version }}" `
             --build-number="${{ needs.prepare.outputs.build_stamp }}" `
             --dart-define="GIT_COMMIT=${{ needs.prepare.outputs.short_sha }}" `

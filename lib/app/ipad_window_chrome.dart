@@ -33,9 +33,14 @@ double iPadWindowChromeInsetOf(BuildContext context) {
   return iPadWindowChromeInset(
     viewSize: view.physicalSize,
     displaySize: view.display.size,
-    paddingTop: MediaQuery.of(context).padding.top,
+    paddingTop: MediaQuery.paddingOf(context).top,
   );
 }
+
+/// Top safe-area inset plus [iPadWindowChromeInsetOf]: the clearance a
+/// screen header needs above its first row of content.
+double topChromeInsetOf(BuildContext context) =>
+    MediaQuery.paddingOf(context).top + iPadWindowChromeInsetOf(context);
 
 /// Pure variant of [iPadWindowChromeInsetOf].
 ///
@@ -67,12 +72,9 @@ double iPadWindowChromeInset({
   return floating ? iPadWindowControlsTopInset : 0;
 }
 
-bool _isSmallerInBothDimensions(Size size, Size other) {
-  final sides = [size.width, size.height]..sort();
-  final otherSides = [other.width, other.height]..sort();
-  return sides[0] < otherSides[0] - _sizeTolerance &&
-      sides[1] < otherSides[1] - _sizeTolerance;
-}
+bool _isSmallerInBothDimensions(Size size, Size other) =>
+    size.shortestSide < other.shortestSide - _sizeTolerance &&
+    size.longestSide < other.longestSide - _sizeTolerance;
 
 bool _supportsWindowControls(String? operatingSystemVersion) {
   final major = operatingSystemVersion == null

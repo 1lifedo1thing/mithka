@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../tdlib/json_helpers.dart' show jsonInt;
 import 'bot_api_account.dart';
 
 class BotApiException implements Exception {
@@ -150,7 +151,7 @@ class BotApiClient {
     }
     final payload = Map<String, dynamic>.from(decoded);
     if (payload['ok'] == true) return payload['result'];
-    final code = _asInt(payload['error_code']) ?? response.statusCode;
+    final code = jsonInt(payload['error_code']) ?? response.statusCode;
     final description = payload['description'];
     throw BotApiException(
       code,
@@ -168,11 +169,4 @@ class BotApiClient {
   void _ensureOpen() {
     if (_closed) throw const BotApiException(499, 'Bot API client is closed.');
   }
-}
-
-int? _asInt(Object? value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value);
-  return null;
 }

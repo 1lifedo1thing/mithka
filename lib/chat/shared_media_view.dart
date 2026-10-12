@@ -23,6 +23,7 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../settings/data_storage_service.dart';
 import '../settings/downloads_view.dart';
 import '../settings/retain_download_button.dart';
@@ -190,6 +191,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   final TextEditingController _search = TextEditingController();
   final VoicePlayer _voice = VoicePlayer();
   StreamSubscription? _fileSub;
+  StreamSubscription? _folderSub;
   Timer? _searchDebounce;
   String _query = '';
   int _requestGeneration = 0;
@@ -257,6 +259,19 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     _load(_tab);
     if (_isMusicHub) {
       unawaited(_refreshMusicHubSources());
+      // TDLib pushes the folder list only when it changes, and it can land
+      // after the library has already been read as empty. While this tab is
+      // open, follow those pushes so the playlists appear without the user
+      // having to close and reopen the hub.
+      _folderSub = _client
+          .subscribeAll()
+          .where((update) {
+            if (update.type != 'updateChatFolders') return false;
+            final clientId = update.integer('@client_id');
+            return clientId != null &&
+                _client.slotForClient(clientId) == _accountSlot;
+          })
+          .listen((_) => unawaited(_refreshMusicHubSources()));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         MusicPlayerController.shared.attachEmbeddedPlayerHost(this);
@@ -269,6 +284,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
   void dispose() {
     _searchDebounce?.cancel();
     _fileSub?.cancel();
+    _folderSub?.cancel();
     _voice.dispose();
     _search.dispose();
     if (_musicPlayerHostAttached) {
@@ -881,7 +897,9 @@ class _SharedMediaViewState extends State<SharedMediaView> {
               AppStrings.t(AppStringKeys.musicPlayerPlaylists),
               onAdd: () => unawaited(createMusicPlaylist(context)),
             ),
-            if (controller.playlists.isEmpty)
+            if (controller.playlists.isEmpty && controller.playlistsLoading)
+              _musicSourcesLoading()
+            else if (controller.playlists.isEmpty)
               _musicSourcesEmpty(
                 AppStrings.t(AppStringKeys.musicPlayerNoPlaylists),
                 showCreate: playedChats.isEmpty,
@@ -1000,6 +1018,18 @@ class _SharedMediaViewState extends State<SharedMediaView> {
           ],
         ],
       ),
+    );
+  }
+
+  /// Shown while the playlist library is still being read from Telegram. The
+  /// tab used to jump straight to the "create your first playlist" empty state
+  /// during the load, so a real library briefly — and on a slow folder push,
+  /// persistently — read as if it had been deleted.
+  Widget _musicSourcesLoading() {
+    return const Padding(
+      key: ValueKey('music-playlists-loading'),
+      padding: EdgeInsets.symmetric(vertical: 42),
+      child: Center(child: AppActivityIndicator(size: 22)),
     );
   }
 
@@ -1143,11 +1173,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final c = context.colors;
     return Container(
       key: const ValueKey('shared-media-inner-header'),
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),
@@ -1781,7 +1807,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                     ),
                     child: Text(
-                      _duration(message.videoDuration!),
+                      formatMediaDuration(message.videoDuration!),
                       style: const TextStyle(fontSize: 11, color: Colors.white),
                     ),
                   ),
@@ -1860,7 +1886,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final status = _downloadLabel(message, state, multiline: true);
     final semanticsLabel = [
       title,
-      if (duration > 0) _duration(duration),
+      if (duration > 0) formatMediaDuration(duration),
       status,
       source,
     ].where((value) => value.isNotEmpty).join(', ');
@@ -1934,7 +1960,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                         Positioned(
                           left: 9,
                           bottom: 9,
-                          child: _overlayPill(_duration(duration)),
+                          child: _overlayPill(formatMediaDuration(duration)),
                         ),
                       if (state?.completed == true)
                         Positioned(
@@ -2107,8 +2133,8 @@ class _SharedMediaViewState extends State<SharedMediaView> {
             ? (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0)
             : 0.0;
         final durationText = active && position > Duration.zero
-            ? '${_duration(position.inSeconds)} / ${_duration(voice.duration)}'
-            : _duration(voice.duration);
+            ? '${formatMediaDuration(position.inSeconds)} / ${formatMediaDuration(voice.duration)}'
+            : formatMediaDuration(voice.duration);
         final sender = _voiceSenderLabel(message);
         final source = _sourceTitleFor(message);
         final subtitle = [
@@ -2276,7 +2302,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                 const SizedBox(width: 8),
                 _musicPlaylistButton(message),
                 Text(
-                  _duration(music.duration),
+                  formatMediaDuration(music.duration),
                   style: TextStyle(
                     fontSize: 12,
                     color: active ? musicPlayerAccent : c.textTertiary,
@@ -2326,7 +2352,8 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     final title = _videoTitle(message);
     final subtitle = [
       DateText.listLabel(message.date),
-      if ((message.videoDuration ?? 0) > 0) _duration(message.videoDuration!),
+      if ((message.videoDuration ?? 0) > 0)
+        formatMediaDuration(message.videoDuration!),
     ].join(' · ');
     final downloadLabel = _downloadLabel(message, state, multiline: true);
     final caption = message.text.trim();
@@ -2391,7 +2418,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
                             right: 5,
                             bottom: 5,
                             child: _overlayPill(
-                              _duration(message.videoDuration!),
+                              formatMediaDuration(message.videoDuration!),
                             ),
                           ),
                       ],
@@ -2900,13 +2927,5 @@ class _SharedMediaViewState extends State<SharedMediaView> {
     if (bytes >= 1 << 20) return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
     if (bytes >= 1 << 10) return '${(bytes / (1 << 10)).toStringAsFixed(0)} KB';
     return '$bytes B';
-  }
-
-  String _duration(int seconds) {
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    final s = seconds % 60;
-    String two(int value) => value.toString().padLeft(2, '0');
-    return h > 0 ? '$h:${two(m)}:${two(s)}' : '$m:${two(s)}';
   }
 }

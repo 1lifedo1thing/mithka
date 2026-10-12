@@ -417,7 +417,7 @@ class _LocationPickerViewState extends State<LocationPickerView> {
         16,
         12,
         16,
-        12 + MediaQuery.of(context).padding.bottom,
+        12 + MediaQuery.paddingOf(context).bottom,
       ),
       child: Row(
         children: [

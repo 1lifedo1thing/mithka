@@ -21,6 +21,7 @@ class TdFileRef {
     this.localPath,
     this.fileName,
     this.mimeType,
+    this.size,
     this.miniThumb,
     this.thumbnail,
     this.hasAnimation = false,
@@ -30,6 +31,10 @@ class TdFileRef {
   final String? localPath;
   final String? fileName;
   final String? mimeType;
+
+  /// Bytes TDLib knows for this file: the real size once it is known,
+  /// otherwise the server's estimate. Null when neither is available.
+  final int? size;
   final bool hasAnimation;
   final int? photoId;
   Uint8List? miniThumb; // decoded JPEG for instant placeholder
@@ -41,6 +46,7 @@ class TdFileRef {
       localPath: _usablePath(localPath) ?? _usablePath(previous?.localPath),
       fileName: _usablePath(fileName) ?? _usablePath(previous?.fileName),
       mimeType: _usablePath(mimeType) ?? _usablePath(previous?.mimeType),
+      size: size ?? previous?.size,
       miniThumb: miniThumb ?? previous?.miniThumb,
       hasAnimation: hasAnimation || (previous?.hasAnimation ?? false),
       photoId: photoId ?? previous?.photoId,
@@ -2707,10 +2713,12 @@ abstract final class TDParse {
         _splitMarkdownTableRow(trimmed).length >= 2;
   }
 
+  static final _markdownSeparatorCell = RegExp(r'^:?-{3,}:?$');
+
   static bool _looksLikeMarkdownSeparatorRow(String line) {
     final cells = _splitMarkdownTableRow(line);
     if (cells.length < 2) return false;
-    return cells.every((cell) => RegExp(r'^:?-{3,}:?$').hasMatch(cell.trim()));
+    return cells.every((cell) => _markdownSeparatorCell.hasMatch(cell.trim()));
   }
 
   static List<RichMessageTableCell> _markdownTableCells(
@@ -3635,6 +3643,31 @@ abstract final class TDParse {
     );
   }
 
+  static MediaAttachment _messageStickerMedia(
+    Map<String, dynamic> sticker, {
+    bool isAnimatedEmoji = false,
+  }) {
+    final thumb = fileRef(sticker.obj('thumbnail')?.obj('file'));
+    final stickerFile = fileRef(sticker.obj('sticker'));
+    final fmt = sticker.obj('format')?.type;
+    final isTgs = fmt == 'stickerFormatTgs';
+    final isWebm = fmt == 'stickerFormatWebm';
+    return MediaAttachment(
+      // Static (.webp) stickers are shown directly via `image`, so point at
+      // the full sticker file — the thumbnail is low-res and looks blurry
+      // scaled up. Animated (.tgs) / video (.webm) keep the thumb only as a
+      // placeholder behind the rendered animation.
+      image: (isTgs || isWebm) ? thumb : (stickerFile ?? thumb),
+      width: sticker.integer('width'),
+      height: sticker.integer('height'),
+      animated: isTgs ? stickerFile : null,
+      videoSticker: isWebm ? stickerFile : null,
+      stickerFileId: stickerFile?.id,
+      stickerSetId: sticker.int64('set_id'),
+      isAnimatedEmoji: isAnimatedEmoji,
+    );
+  }
+
   static MediaAttachment _paidMediaAttachment(Map<String, dynamic> media) {
     return switch (media.type) {
       'paidMediaPhoto' => photoAttachment(media.obj('photo')),
@@ -3667,48 +3700,13 @@ abstract final class TDParse {
         }
       case 'messageSticker':
         final sticker = content.obj('sticker');
-        if (sticker != null) {
-          final thumb = fileRef(sticker.obj('thumbnail')?.obj('file'));
-          final stickerFile = fileRef(sticker.obj('sticker'));
-          final w = sticker.integer('width'), h = sticker.integer('height');
-          final fmt = sticker.obj('format')?.type;
-          final isTgs = fmt == 'stickerFormatTgs';
-          final isWebm = fmt == 'stickerFormatWebm';
-          return MediaAttachment(
-            // Static (.webp) stickers are shown directly via `image`, so point at
-            // the full sticker file — the thumbnail is low-res and looks blurry
-            // scaled up. Animated (.tgs) / video (.webm) keep the thumb only as a
-            // placeholder behind the rendered animation.
-            image: (isTgs || isWebm) ? thumb : (stickerFile ?? thumb),
-            width: w,
-            height: h,
-            animated: isTgs ? stickerFile : null,
-            videoSticker: isWebm ? stickerFile : null,
-            stickerFileId: stickerFile?.id,
-            stickerSetId: sticker.int64('set_id'),
-          );
-        }
+        if (sticker != null) return _messageStickerMedia(sticker);
       case 'messageAnimatedEmoji':
         // A lone emoji → TDLib sends its animated sticker (usually .tgs); render
         // it like a sticker so single emoji animate instead of "[动画表情]" text.
         final sticker = content.obj('animated_emoji')?.obj('sticker');
         if (sticker != null) {
-          final thumb = fileRef(sticker.obj('thumbnail')?.obj('file'));
-          final stickerFile = fileRef(sticker.obj('sticker'));
-          final w = sticker.integer('width'), h = sticker.integer('height');
-          final fmt = sticker.obj('format')?.type;
-          final isTgs = fmt == 'stickerFormatTgs';
-          final isWebm = fmt == 'stickerFormatWebm';
-          return MediaAttachment(
-            image: (isTgs || isWebm) ? thumb : (stickerFile ?? thumb),
-            width: w,
-            height: h,
-            animated: isTgs ? stickerFile : null,
-            videoSticker: isWebm ? stickerFile : null,
-            stickerFileId: stickerFile?.id,
-            stickerSetId: sticker.int64('set_id'),
-            isAnimatedEmoji: true,
-          );
+          return _messageStickerMedia(sticker, isAnimatedEmoji: true);
         }
       case 'messageAnimation':
         final anim = content.obj('animation');
@@ -4183,6 +4181,7 @@ abstract final class TDParse {
     return TdFileRef(
       id: ref.id,
       localPath: ref.localPath,
+      size: ref.size,
       miniThumb: ref.miniThumb,
       thumbnail: ref.thumbnail,
       hasAnimation: photoInfo.boolean('has_animation') ?? false,
@@ -4214,6 +4213,7 @@ abstract final class TDParse {
       localPath: completedLocalPath,
       fileName: fileName,
       mimeType: mimeType,
+      size: _fileSize(file),
       miniThumb: miniThumb,
       thumbnail: normalizedThumbnail,
     );

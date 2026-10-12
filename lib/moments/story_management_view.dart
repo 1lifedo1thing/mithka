@@ -396,106 +396,56 @@ class _StoryManagementViewState extends State<StoryManagementView> {
     String title, {
     List<int> initial = const [],
   }) async {
-    final stories = <int, Map<String, dynamic>>{
-      for (final story in [..._profile, ..._archive])
-        if (story.integer('id') case final int id) id: story,
-    };
+    final stories = _storiesById();
     final selected = initial.toSet();
-    return showAppModalSheet<List<int>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          top: false,
-          child: FractionallySizedBox(
-            heightFactor: 0.82,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              decoration: BoxDecoration(
-                color: context.colors.background,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
-                ),
+    return _storyIdSheet(
+      title: title,
+      confirmLabel: AppStrings.t(AppStringKeys.addMembersDone),
+      result: selected.toList,
+      body: (context, setSheetState) => stories.isEmpty
+          ? Center(
+              child: Text(
+                AppStrings.t(AppStringKeys.storyManagementNoManageableStories),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
-              child: Column(
-                children: [
-                  _sheetTitle(title),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: stories.isEmpty
-                        ? Center(
-                            child: Text(
-                              AppStrings.t(
-                                AppStringKeys
-                                    .storyManagementNoManageableStories,
-                              ),
-                              style: TextStyle(
-                                color: context.colors.textSecondary,
-                              ),
-                            ),
-                          )
-                        : ListView(
-                            children: [
-                              for (final entry in stories.entries)
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => setSheetState(() {
-                                    if (!selected.remove(entry.key)) {
-                                      selected.add(entry.key);
-                                    }
-                                  }),
-                                  child: SizedBox(
-                                    height: 52,
-                                    child: Row(
-                                      children: [
-                                        AppIcon(
-                                          selected.contains(entry.key)
-                                              ? HeroAppIcons.circleCheck
-                                              : HeroAppIcons.circle,
-                                          size: 21,
-                                          color: selected.contains(entry.key)
-                                              ? AppTheme.brand
-                                              : context.colors.textTertiary,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            _storyLabel(entry.value),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
+            )
+          : ListView(
+              children: [
+                for (final entry in stories.entries)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setSheetState(() {
+                      if (!selected.remove(entry.key)) {
+                        selected.add(entry.key);
+                      }
+                    }),
+                    child: SizedBox(
+                      height: 52,
+                      child: Row(
+                        children: [
+                          AppIcon(
+                            selected.contains(entry.key)
+                                ? HeroAppIcons.circleCheck
+                                : HeroAppIcons.circle,
+                            size: 21,
+                            color: selected.contains(entry.key)
+                                ? AppTheme.brand
+                                : context.colors.textTertiary,
                           ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      StoryDialogAction(
-                        label: AppStrings.t(AppStringKeys.confirmCancel),
-                        onTap: () => Navigator.of(sheetContext).pop(),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _storyLabel(entry.value),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      StoryDialogAction(
-                        label: AppStrings.t(AppStringKeys.addMembersDone),
-                        primary: true,
-                        onTap: () =>
-                            Navigator.of(sheetContext).pop(selected.toList()),
-                      ),
-                    ],
+                    ),
                   ),
-                ],
-              ),
+              ],
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -547,10 +497,62 @@ class _StoryManagementViewState extends State<StoryManagementView> {
 
   Future<List<int>?> _reorderStoryIds(String title, List<int> initial) async {
     final order = [...initial];
-    final byId = <int, Map<String, dynamic>>{
-      for (final story in [..._profile, ..._archive])
-        if (story.integer('id') case final int id) id: story,
-    };
+    final byId = _storiesById();
+    return _storyIdSheet(
+      title: title,
+      confirmLabel: AppStrings.t(AppStringKeys.storyManagementSaveOrder),
+      result: () => order,
+      body: (context, setSheetState) => ReorderableListView.builder(
+        itemCount: order.length,
+        onReorderItem: (oldIndex, newIndex) => setSheetState(
+          () => order.insert(newIndex, order.removeAt(oldIndex)),
+        ),
+        itemBuilder: (context, index) => ReorderableDragStartListener(
+          key: ValueKey(order[index]),
+          index: index,
+          child: Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              color: context.colors.searchFill,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+            ),
+            child: Row(
+              children: [
+                AppIcon(
+                  HeroAppIcons.bars,
+                  size: 20,
+                  color: context.colors.textTertiary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _storyLabel(byId[order[index]] ?? {'id': order[index]}),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Map<int, Map<String, dynamic>> _storiesById() => {
+    for (final story in [..._profile, ..._archive])
+      if (story.integer('id') case final int id) id: story,
+  };
+
+  /// A tall bottom sheet listing stories under [title], returning [result]
+  /// when confirmed and null when cancelled.
+  Future<List<int>?> _storyIdSheet({
+    required String title,
+    required String confirmLabel,
+    required List<int> Function() result,
+    required Widget Function(BuildContext context, StateSetter setSheetState)
+    body,
+  }) {
     return showAppModalSheet<List<int>>(
       context: context,
       isScrollControlled: true,
@@ -572,50 +574,7 @@ class _StoryManagementViewState extends State<StoryManagementView> {
                 children: [
                   _sheetTitle(title),
                   const SizedBox(height: 8),
-                  Expanded(
-                    child: ReorderableListView.builder(
-                      itemCount: order.length,
-                      onReorderItem: (oldIndex, newIndex) => setSheetState(
-                        () => order.insert(newIndex, order.removeAt(oldIndex)),
-                      ),
-                      itemBuilder: (context, index) =>
-                          ReorderableDragStartListener(
-                            key: ValueKey(order[index]),
-                            index: index,
-                            child: Container(
-                              height: 52,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              margin: const EdgeInsets.only(bottom: 6),
-                              decoration: BoxDecoration(
-                                color: context.colors.searchFill,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.card,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  AppIcon(
-                                    HeroAppIcons.bars,
-                                    size: 20,
-                                    color: context.colors.textTertiary,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _storyLabel(
-                                        byId[order[index]] ??
-                                            {'id': order[index]},
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                    ),
-                  ),
+                  Expanded(child: body(context, setSheetState)),
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -626,11 +585,9 @@ class _StoryManagementViewState extends State<StoryManagementView> {
                       ),
                       const SizedBox(width: 10),
                       StoryDialogAction(
-                        label: AppStrings.t(
-                          AppStringKeys.storyManagementSaveOrder,
-                        ),
+                        label: confirmLabel,
                         primary: true,
-                        onTap: () => Navigator.of(sheetContext).pop(order),
+                        onTap: () => Navigator.of(sheetContext).pop(result()),
                       ),
                     ],
                   ),

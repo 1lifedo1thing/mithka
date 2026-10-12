@@ -813,8 +813,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   /// Cover (blurred profile photo, gradient fallback) + overlapping avatar +
   /// name/username/status.
   Widget _header() {
-    final top =
-        MediaQuery.of(context).padding.top + iPadWindowChromeInsetOf(context);
+    final top = topChromeInsetOf(context);
     final bannerH = top + 232;
     final status = _isOnline
         ? AppStrings.t(AppStringKeys.presenceOnline)
@@ -1667,15 +1666,17 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     BuildContext previewContext,
     _FeaturedProfilePhoto photo,
   ) async {
-    final delete = await showGeneralDialog<bool>(
+    final action = await showGeneralDialog<_FeaturedPhotoAction>(
       context: previewContext,
       barrierDismissible: true,
       barrierLabel: AppStrings.t(AppStringKeys.countryPickerCancel),
       barrierColor: const Color(0x99000000),
       transitionDuration: const Duration(milliseconds: 160),
       pageBuilder: (menuContext, _, _) => _FeaturedPhotoMenu(
-        onDelete: () => Navigator.of(menuContext).pop(true),
-        onCancel: () => Navigator.of(menuContext).pop(false),
+        onSave: () => Navigator.of(menuContext).pop(_FeaturedPhotoAction.save),
+        onDelete: () =>
+            Navigator.of(menuContext).pop(_FeaturedPhotoAction.delete),
+        onCancel: () => Navigator.of(menuContext).pop(),
       ),
       transitionBuilder: (_, animation, _, child) => FadeTransition(
         opacity: animation,
@@ -1688,7 +1689,14 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
         ),
       ),
     );
-    if (delete != true || !previewContext.mounted) return;
+    if (!previewContext.mounted) return;
+    // Save mirrors the chat gallery's `…` menu: the sheet closes, the image
+    // stays on screen and the save pipeline reports its own progress.
+    if (action == _FeaturedPhotoAction.save) {
+      await saveViewerImage(previewContext, photo.file);
+      return;
+    }
+    if (action != _FeaturedPhotoAction.delete) return;
     final confirmed = await showAppConfirmDialog(
       previewContext,
       title: AppStringKeys.profilePhotoDeleteTitle,
@@ -1835,9 +1843,16 @@ class _FeaturedProfilePhoto {
   final TdFileRef file;
 }
 
-class _FeaturedPhotoMenu extends StatelessWidget {
-  const _FeaturedPhotoMenu({required this.onDelete, required this.onCancel});
+enum _FeaturedPhotoAction { save, delete }
 
+class _FeaturedPhotoMenu extends StatelessWidget {
+  const _FeaturedPhotoMenu({
+    required this.onSave,
+    required this.onDelete,
+    required this.onCancel,
+  });
+
+  final VoidCallback onSave;
   final VoidCallback onDelete;
   final VoidCallback onCancel;
 
@@ -1866,13 +1881,29 @@ class _FeaturedPhotoMenu extends StatelessWidget {
                   ],
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: _action(
-                  context,
-                  key: const ValueKey('featured-photo-delete'),
-                  icon: HeroAppIcons.trash,
-                  label: AppStrings.t(AppStringKeys.chatDelete),
-                  color: AppTheme.tagRed,
-                  onTap: onDelete,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _action(
+                      context,
+                      key: const ValueKey('featured-photo-save'),
+                      icon: HeroAppIcons.download,
+                      label: AppStrings.t(
+                        AppStringKeys.messageActionSaveToPhotos,
+                      ),
+                      color: c.textPrimary,
+                      onTap: onSave,
+                    ),
+                    const InsetDivider(leadingInset: 56),
+                    _action(
+                      context,
+                      key: const ValueKey('featured-photo-delete'),
+                      icon: HeroAppIcons.trash,
+                      label: AppStrings.t(AppStringKeys.chatDelete),
+                      color: AppTheme.tagRed,
+                      onTap: onDelete,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),

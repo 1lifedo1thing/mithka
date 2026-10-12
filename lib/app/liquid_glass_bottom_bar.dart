@@ -105,9 +105,14 @@ class LiquidGlassBottomBar extends StatelessWidget {
                                     key: const ValueKey(
                                       'liquid-glass-selection',
                                     ),
+                                    // A stadium (radius = slot height) pulls its
+                                    // corner arcs ~10 px inward at the label row,
+                                    // cutting the label/icon of narrow tablet
+                                    // tabs. Capping the radius keeps every tab's
+                                    // icon+label inside the filled shape.
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(
-                                        AppRadius.pill,
+                                        AppRadius.control,
                                       ),
                                       color: colors.linkBlue.withValues(
                                         alpha: highContrast

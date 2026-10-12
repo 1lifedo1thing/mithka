@@ -127,8 +127,8 @@ class TelegramMiniAppRecent {
     if (value is! Map) return null;
     final title = value['title'] as String?;
     final url = value['url'] as String?;
-    final botUserId = _asInt(value['botUserId']);
-    final chatId = _asInt(value['chatId']);
+    final botUserId = jsonInt(value['botUserId']);
+    final chatId = jsonInt(value['chatId']);
     final mainWebApp = value['mainWebApp'] == true;
     final shortName = value['webAppShortName'] as String? ?? '';
     if (title == null ||
@@ -138,14 +138,14 @@ class TelegramMiniAppRecent {
         chatId == null) {
       return null;
     }
-    final photoFileId = _asInt(value['photoFileId']);
+    final photoFileId = jsonInt(value['photoFileId']);
     return TelegramMiniAppRecent(
       title: title,
       botTitle: value['botTitle'] as String? ?? '',
       url: url,
       botUserId: botUserId,
       chatId: chatId,
-      updatedAt: _asInt(value['updatedAt']) ?? 0,
+      updatedAt: jsonInt(value['updatedAt']) ?? 0,
       keyboardButtonText: value['keyboardButtonText'] as String?,
       mainWebApp: mainWebApp,
       startParameter: value['startParameter'] as String? ?? '',
@@ -153,13 +153,6 @@ class TelegramMiniAppRecent {
       allowWriteAccess: value['allowWriteAccess'] == true,
       photo: photoFileId == null ? null : TdFileRef(id: photoFileId),
     );
-  }
-
-  static int? _asInt(Object? value) {
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
   }
 }
 
@@ -340,42 +333,35 @@ abstract final class TelegramMiniAppRecents {
         'chat_list': {'@type': 'chatListMain'},
         'limit': 80,
       });
-      final ids = chats.int64Array('chat_ids') ?? const <int>[];
-      final apps = <TelegramMiniAppRecent>[];
-      for (final chatId in ids) {
-        try {
-          final chat = await TdClient.shared.query({
-            '@type': 'getChat',
-            'chat_id': chatId,
-          });
-          final type = chat.obj('type');
-          if (type?.type != 'chatTypePrivate') continue;
-          final userId = type?.int64('user_id');
-          if (userId == null) continue;
-          final full = await TdClient.shared.query({
-            '@type': 'getUserFullInfo',
-            'user_id': userId,
-          });
-          final menu = full.obj('bot_info')?.obj('menu_button');
-          if (menu?.type != 'botMenuButton') continue;
-          final url = menu?.str('url')?.trim() ?? '';
-          if (url.isEmpty) continue;
-          final text = menu?.str('text')?.trim() ?? '';
-          final botTitle = chat.str('title')?.trim() ?? '';
-          apps.add(
-            TelegramMiniAppRecent(
-              title: text,
-              botTitle: botTitle,
+      final privateChats = await _privateChats(
+        chats.int64Array('chat_ids') ?? const <int>[],
+      );
+      final apps = await Future.wait(
+        privateChats.map((entry) async {
+          try {
+            final full = await TdClient.shared.query({
+              '@type': 'getUserFullInfo',
+              'user_id': entry.userId,
+            });
+            final menu = full.obj('bot_info')?.obj('menu_button');
+            if (menu?.type != 'botMenuButton') return null;
+            final url = menu?.str('url')?.trim() ?? '';
+            if (url.isEmpty) return null;
+            return TelegramMiniAppRecent(
+              title: menu?.str('text')?.trim() ?? '',
+              botTitle: entry.chat.str('title')?.trim() ?? '',
               url: url,
-              botUserId: userId,
-              chatId: chatId,
+              botUserId: entry.userId,
+              chatId: entry.chatId,
               updatedAt: 0,
-              photo: TDParse.smallPhoto(chat.obj('photo')),
-            ),
-          );
-        } catch (_) {}
-      }
-      return apps;
+              photo: TDParse.smallPhoto(entry.chat.obj('photo')),
+            );
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      return apps.nonNulls.toList();
     } catch (_) {
       return const [];
     }
@@ -388,37 +374,51 @@ abstract final class TelegramMiniAppRecents {
         'category': {'@type': 'topChatCategoryWebAppBots'},
         'limit': _limit,
       });
-      final ids = chats.int64Array('chat_ids') ?? const <int>[];
-      final apps = <TelegramMiniAppRecent>[];
-      for (final chatId in ids) {
+      final privateChats = await _privateChats(
+        chats.int64Array('chat_ids') ?? const <int>[],
+      );
+      return [
+        for (final entry in privateChats)
+          TelegramMiniAppRecent(
+            title: entry.chat.str('title')?.trim() ?? '',
+            botTitle: entry.chat.str('title')?.trim() ?? '',
+            url: '',
+            botUserId: entry.userId,
+            chatId: entry.chatId,
+            updatedAt: 0,
+            mainWebApp: true,
+            photo: TDParse.smallPhoto(entry.chat.obj('photo')),
+          ),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The private chats among [chatIds], with their user ids, in [chatIds]
+  /// order. The `getChat` lookups run concurrently; a chat that fails to load
+  /// is left out.
+  static Future<List<({int chatId, TdObject chat, int userId})>> _privateChats(
+    List<int> chatIds,
+  ) async {
+    final chats = await Future.wait(
+      chatIds.map((chatId) async {
         try {
           final chat = await TdClient.shared.query({
             '@type': 'getChat',
             'chat_id': chatId,
           });
           final type = chat.obj('type');
-          if (type?.type != 'chatTypePrivate') continue;
+          if (type?.type != 'chatTypePrivate') return null;
           final userId = type?.int64('user_id');
-          if (userId == null) continue;
-          final title = chat.str('title')?.trim();
-          apps.add(
-            TelegramMiniAppRecent(
-              title: title ?? '',
-              botTitle: title ?? '',
-              url: '',
-              botUserId: userId,
-              chatId: chatId,
-              updatedAt: 0,
-              mainWebApp: true,
-              photo: TDParse.smallPhoto(chat.obj('photo')),
-            ),
-          );
-        } catch (_) {}
-      }
-      return apps;
-    } catch (_) {
-      return const [];
-    }
+          if (userId == null) return null;
+          return (chatId: chatId, chat: chat, userId: userId);
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
+    return chats.nonNulls.toList();
   }
 
   static List<TelegramMiniAppRecent> _merge(

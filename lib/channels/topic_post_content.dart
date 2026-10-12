@@ -99,7 +99,7 @@ class _TopicContentImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width - 28;
+    final width = MediaQuery.sizeOf(context).width - 28;
     final height = _imageHeight(width);
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -109,8 +109,8 @@ class _TopicContentImage extends StatelessWidget {
         child: TDImage(
           photo: message.image,
           cornerRadius: 6,
-          cacheWidth: (width * MediaQuery.of(context).devicePixelRatio).round(),
-          cacheHeight: (height * MediaQuery.of(context).devicePixelRatio)
+          cacheWidth: (width * MediaQuery.devicePixelRatioOf(context)).round(),
+          cacheHeight: (height * MediaQuery.devicePixelRatioOf(context))
               .round(),
         ),
       ),

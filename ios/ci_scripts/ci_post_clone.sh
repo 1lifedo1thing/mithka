@@ -123,6 +123,7 @@ flutter_build_ios_config_with_retry() {
   n=1
   while :; do
     if flutter build ios --config-only --release \
+      --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
       --build-name="$XCODE_BUILD_NAME" \
       --build-number="$APP_BUILD_NUMBER" \
       --dart-define="GIT_COMMIT=$GIT_COMMIT" \

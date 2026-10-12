@@ -38,6 +38,7 @@ import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/date_text.dart';
 import '../theme/theme_controller.dart';
+import 'forum_topic_fields.dart';
 import 'topic_list_host.dart';
 import 'topic_navigation.dart';
 import 'topic_post_content.dart';
@@ -459,7 +460,7 @@ class _TopicChatViewState extends State<TopicChatView> {
         final info = topic.obj('info') ?? topic;
         final last = topic.obj('last_message');
         final message = last == null ? null : TDParse.message(last);
-        final id = _topicId(topic, info) ?? message?.id;
+        final id = forumTopicId(topic, info) ?? message?.id;
         if (id == null || id == 0) continue;
         final isServiceLast = message?.isService == true;
         final fallbackDate = last?.integer('date');
@@ -482,9 +483,9 @@ class _TopicChatViewState extends State<TopicChatView> {
             isMuted:
                 (topic.obj('notification_settings')?.integer('mute_for') ?? 0) >
                 0,
-            unreadCount: _topicUnreadCount(topic, info),
-            iconCustomEmojiId: _topicCustomEmojiId(topic, info),
-            iconColor: _topicIconColor(topic, info),
+            unreadCount: forumTopicUnreadCount(topic, info),
+            iconCustomEmojiId: forumTopicCustomEmojiId(topic, info),
+            iconColor: forumTopicIconColor(topic, info),
             lastMessageIsSynthetic: message == null || isServiceLast,
           ),
         );
@@ -585,23 +586,6 @@ class _TopicChatViewState extends State<TopicChatView> {
     }
   }
 
-  int _topicUnreadCount(Map<String, dynamic> topic, Map<String, dynamic> info) {
-    final count =
-        topic.integer('unread_count') ??
-        info.integer('unread_count') ??
-        topic.integer('unread_mention_count') ??
-        info.integer('unread_mention_count') ??
-        0;
-    return count < 0 ? 0 : count;
-  }
-
-  int? _topicId(Map<String, dynamic> topic, Map<String, dynamic> info) {
-    return info.integer('forum_topic_id') ??
-        topic.integer('forum_topic_id') ??
-        info.int64('message_thread_id') ??
-        topic.int64('message_thread_id');
-  }
-
   ChatMessage _fallbackTopicMessage(
     int id,
     Map<String, dynamic> info,
@@ -620,30 +604,6 @@ class _TopicChatViewState extends State<TopicChatView> {
       isOutgoing: false,
       chatId: widget.chat.id,
     );
-  }
-
-  int _topicCustomEmojiId(
-    Map<String, dynamic> topic,
-    Map<String, dynamic> info,
-  ) {
-    return info.obj('icon')?.int64('custom_emoji_id') ??
-        topic.obj('icon')?.int64('custom_emoji_id') ??
-        info.int64('icon_custom_emoji_id') ??
-        topic.int64('icon_custom_emoji_id') ??
-        0;
-  }
-
-  Color? _topicIconColor(
-    Map<String, dynamic> topic,
-    Map<String, dynamic> info,
-  ) {
-    final raw =
-        info.obj('icon')?.integer('color') ??
-        topic.obj('icon')?.integer('color') ??
-        info.integer('icon_color') ??
-        topic.integer('icon_color');
-    if (raw == null || raw == 0) return null;
-    return Color(0xFF000000 | (raw & 0xFFFFFF));
   }
 
   // Materialized rather than recomputed: as a getter this allocated a
@@ -1220,8 +1180,7 @@ class _TopicChatViewState extends State<TopicChatView> {
     final listHiddenByUser =
         _topicListOverlaid &&
         (context.watch<TopicListHost?>()?.listHidden ?? false);
-    final top =
-        MediaQuery.of(context).padding.top + iPadWindowChromeInsetOf(context);
+    final top = topChromeInsetOf(context);
     final title = widget.chat.isBotTopicChat
         ? widget.chat.title
         : context.watch<GroupRemarkController?>()?.displayTitleFor(

@@ -1618,6 +1618,8 @@ abstract final class AppStringKeys {
       'generalKeepChatContextPaneClosed';
   static const generalKeepChatContextPaneClosedHint =
       'generalKeepChatContextPaneClosedHint';
+  static const generalMediaMetadata = 'generalMediaMetadata';
+  static const generalMediaMetadataHint = 'generalMediaMetadataHint';
   static const generalSaveCapturedPhotos = 'generalSaveCapturedPhotos';
   static const generalSaveCapturedPhotosHint = 'generalSaveCapturedPhotosHint';
   static const generalSendMessageWithEnter = 'generalSendMessageWithEnter';
@@ -3651,6 +3653,17 @@ abstract final class AppStringKeys {
       'loginTelegramPremiumIsRequired';
   static const loginTelegramRequiresAnEmailAddressToFinishSigning =
       'loginTelegramRequiresAnEmailAddressToFinishSigning';
+  static const mediaMetadataBitrate = 'mediaMetadataBitrate';
+  static const mediaMetadataCodec = 'mediaMetadataCodec';
+  static const mediaMetadataDuration = 'mediaMetadataDuration';
+  static const mediaMetadataFrameRate = 'mediaMetadataFrameRate';
+  static const mediaMetadataMime = 'mediaMetadataMime';
+  static const mediaMetadataName = 'mediaMetadataName';
+  static const mediaMetadataResolution = 'mediaMetadataResolution';
+  static const mediaMetadataSize = 'mediaMetadataSize';
+  static const mediaMetadataTitle = 'mediaMetadataTitle';
+  static const mediaMetadataType = 'mediaMetadataType';
+  static const mediaMetadataViewInfo = 'mediaMetadataViewInfo';
   static const mediaSendPreviewStartTimestampSeconds =
       'mediaSendPreviewStartTimestampSeconds';
   static const mediaSendPreviewTrimVideo = 'mediaSendPreviewTrimVideo';

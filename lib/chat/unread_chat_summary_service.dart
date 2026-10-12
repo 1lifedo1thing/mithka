@@ -132,8 +132,18 @@ class UnreadChatSummaryFailureCause {
   final String message;
 }
 
+// Compiled once: the scoring and fallback passes below run them per message.
+final RegExp _whitespaceRun = RegExp(r'\s+');
+final RegExp _trailingPunctuation = RegExp(r'[。！？!?.,，…]+$');
+final RegExp _questionMark = RegExp(r'[?？]');
+final RegExp _linkMentionOrQuestion = RegExp(r'https?://|@\w|[?？]');
+final RegExp _highSignalMarker = RegExp(r'[?？!！]|https?://|@\w');
+final RegExp _wordCharacter = RegExp(
+  r'[a-z0-9\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]',
+);
+
 String _safeDiagnosticMessage(String value) {
-  final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final normalized = value.trim().replaceAll(_whitespaceRun, ' ');
   if (normalized.length <= 500) return normalized;
   return '${normalized.substring(0, 497)}...';
 }
@@ -1294,8 +1304,8 @@ class UnreadChatSummaryService {
   String _normalizedMessageText(String text) => text
       .trim()
       .toLowerCase()
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .replaceAll(RegExp(r'[。！？!?.,，…]+$'), '');
+      .replaceAll(_whitespaceRun, ' ')
+      .replaceAll(_trailingPunctuation, '');
 
   bool _isLowSignalStandaloneReply(
     UnreadChatMessage message,
@@ -1306,7 +1316,7 @@ class UnreadChatSummaryService {
         message.contentType != 'messageText' ||
         message.replyToMessageId != null ||
         normalized.isEmpty ||
-        RegExp(r'https?://|@\w|[?？]').hasMatch(normalized)) {
+        _linkMentionOrQuestion.hasMatch(normalized)) {
       return false;
     }
     if (const {
@@ -1332,10 +1342,7 @@ class UnreadChatSummaryService {
     }.contains(normalized)) {
       return true;
     }
-    return normalized.length <= 8 &&
-        !RegExp(
-          r'[a-z0-9\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]',
-        ).hasMatch(normalized);
+    return normalized.length <= 8 && !_wordCharacter.hasMatch(normalized);
   }
 
   List<_PromptUnit> _promptUnits(List<UnreadChatMessage> messages) {
@@ -1498,7 +1505,7 @@ class UnreadChatSummaryService {
     for (final message in unit.messages) {
       if (message.replyToMessageId != null) score += 3;
       if (message.contentType != 'messageText') score += 1.5;
-      if (RegExp(r'[?？!！]|https?://|@\w').hasMatch(message.text)) {
+      if (_highSignalMarker.hasMatch(message.text)) {
         score += 1.5;
       }
       if (message.text.length >= 96) score += 0.75;
@@ -1771,7 +1778,7 @@ class UnreadChatSummaryService {
     void add(UnreadChatSummaryItem item) {
       if (result.length >= limit) return;
       final key = item.text.trim().toLowerCase().replaceAll(
-        RegExp(r'\s+'),
+        _whitespaceRun,
         ' ',
       );
       if (key.isEmpty || !seen.add(key)) return;
@@ -1808,7 +1815,7 @@ class UnreadChatSummaryService {
     add(candidates.first);
     add(candidates.last);
     for (final message in candidates.reversed) {
-      if (RegExp(r'[?？]').hasMatch(message.text) ||
+      if (_questionMark.hasMatch(message.text) ||
           message.replyToMessageId != null) {
         add(message);
       }
@@ -1832,7 +1839,7 @@ class UnreadChatSummaryService {
     final questions = messages
         .where(
           (message) =>
-              !message.isOutgoing && RegExp(r'[?？]').hasMatch(message.text),
+              !message.isOutgoing && _questionMark.hasMatch(message.text),
         )
         .map(item)
         .toList(growable: false);

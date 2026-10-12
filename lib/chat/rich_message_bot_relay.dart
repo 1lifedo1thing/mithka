@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../bot_api/bot_api_account.dart' show isTelegramBotTokenShape;
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import 'forward_options.dart';
@@ -252,18 +253,7 @@ class RichMessageBotRelay {
       );
     }
 
-    final botChat = await tdClient.query({
-      '@type': 'createPrivateChat',
-      'user_id': bot.id,
-      'force': true,
-    });
-    final fromChatId = botChat.int64('id');
-    if (fromChatId == null) {
-      throw const RichMessageRelayException(
-        'missing_bot_chat',
-        'The relay bot chat could not be opened.',
-      );
-    }
+    final fromChatId = await _openBotChat(tdClient, bot.id);
 
     onProgress?.call(
       RichMessageRelayProgress(
@@ -377,18 +367,7 @@ class RichMessageBotRelay {
         mediaCount: 1,
       ),
     );
-    final botChat = await tdClient.query({
-      '@type': 'createPrivateChat',
-      'user_id': bot.id,
-      'force': true,
-    });
-    final fromChatId = botChat.int64('id');
-    if (fromChatId == null) {
-      throw const RichMessageRelayException(
-        'missing_bot_chat',
-        'The relay bot chat could not be opened.',
-      );
-    }
+    final fromChatId = await _openBotChat(tdClient, bot.id);
     final sourceMessageId = await _waitForTdMessage(
       tdClient,
       fromChatId,
@@ -442,18 +421,7 @@ class RichMessageBotRelay {
       if (error.code != 'bot_not_started') rethrow;
     }
 
-    final botChat = await tdClient.query({
-      '@type': 'createPrivateChat',
-      'user_id': botUserId,
-      'force': true,
-    });
-    final botChatId = botChat.int64('id');
-    if (botChatId == null) {
-      throw const RichMessageRelayException(
-        'missing_bot_chat',
-        'The relay bot chat could not be opened.',
-      );
-    }
+    final botChatId = await _openBotChat(tdClient, botUserId);
     await tdClient.query({
       '@type': 'sendMessage',
       'chat_id': botChatId,
@@ -654,21 +622,42 @@ class RichMessageBotRelay {
     parseRelayForwardResponse(response);
   }
 
-  Future<Map<String, dynamic>> _call(
-    String token,
-    String method, [
-    Map<String, dynamic>? parameters,
-  ]) async {
+  /// The id of this account's private chat with the relay bot.
+  Future<int> _openBotChat(TdClient tdClient, int botUserId) async {
+    final botChat = await tdClient.query({
+      '@type': 'createPrivateChat',
+      'user_id': botUserId,
+      'force': true,
+    });
+    final chatId = botChat.int64('id');
+    if (chatId == null) {
+      throw const RichMessageRelayException(
+        'missing_bot_chat',
+        'The relay bot chat could not be opened.',
+      );
+    }
+    return chatId;
+  }
+
+  Uri _endpoint(String token, String method) {
     final normalizedToken = token.trim();
-    if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(normalizedToken)) {
+    if (!isTelegramBotTokenShape(normalizedToken)) {
       throw const RichMessageRelayException(
         'invalid_token',
         'The bot token format is invalid.',
       );
     }
-    final endpoint = _apiBase.replace(
+    return _apiBase.replace(
       path: '${_apiBase.path}/bot$normalizedToken/$method',
     );
+  }
+
+  Future<Map<String, dynamic>> _call(
+    String token,
+    String method, [
+    Map<String, dynamic>? parameters,
+  ]) async {
+    final endpoint = _endpoint(token, method);
     http.Response response;
     try {
       response = await _http
@@ -699,16 +688,7 @@ class RichMessageBotRelay {
     required String field,
     required String path,
   }) async {
-    final normalizedToken = token.trim();
-    if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(normalizedToken)) {
-      throw const RichMessageRelayException(
-        'invalid_token',
-        'The bot token format is invalid.',
-      );
-    }
-    final endpoint = _apiBase.replace(
-      path: '${_apiBase.path}/bot$normalizedToken/$method',
-    );
+    final endpoint = _endpoint(token, method);
     try {
       final request = http.MultipartRequest('POST', endpoint)
         ..fields.addAll(fields)
@@ -739,16 +719,7 @@ class RichMessageBotRelay {
     required Map<String, String> fields,
     required List<({String field, String path})> files,
   }) async {
-    final normalizedToken = token.trim();
-    if (!RegExp(r'^\d+:[A-Za-z0-9_-]{20,}$').hasMatch(normalizedToken)) {
-      throw const RichMessageRelayException(
-        'invalid_token',
-        'The bot token format is invalid.',
-      );
-    }
-    final endpoint = _apiBase.replace(
-      path: '${_apiBase.path}/bot$normalizedToken/$method',
-    );
+    final endpoint = _endpoint(token, method);
     try {
       final request = http.MultipartRequest('POST', endpoint)
         ..fields.addAll(fields);

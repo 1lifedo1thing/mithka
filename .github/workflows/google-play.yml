@@ -204,6 +204,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           flutter build appbundle --release \
+            --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
             --target-platform android-arm,android-arm64,android-x64 \
             --build-name="${{ needs.prepare.outputs.app_version }}" \
             --build-number="${{ needs.prepare.outputs.android_version_code }}" \

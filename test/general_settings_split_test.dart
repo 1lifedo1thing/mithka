@@ -43,6 +43,7 @@ void main() {
       'chat-behavior-saved-messages-identity',
       'chat-behavior-preserve-sender',
       'chat-behavior-forward-rich-markdown',
+      'chat-behavior-media-metadata',
       'chat-behavior-save-captured-photos',
       'chat-behavior-quick-replies',
       'chat-behavior-link-browser',
@@ -67,7 +68,7 @@ void main() {
     );
     expect(
       find.byType(SettingsLeadingIcon),
-      findsNWidgets(10),
+      findsNWidgets(11),
       reason: 'detail rows use the shared accent line-icon treatment',
     );
     expect(
@@ -124,9 +125,27 @@ void main() {
     await tester.pump();
     expect(theme.preserveSenderWhenRepeating, isFalse);
 
-    await tester.tap(find.byKey(const ValueKey('chat-behavior-quick-replies')));
+    // One row longer than before, so the tail of the list needs a scroll
+    // before its switches are hittable.
+    final quickRepliesRow = find.byKey(
+      const ValueKey('chat-behavior-quick-replies'),
+    );
+    await tester.ensureVisible(quickRepliesRow);
+    await tester.pump();
+    await tester.tap(quickRepliesRow);
     await tester.pump();
     expect(theme.quickRepliesEnabled, isFalse);
+
+    final metadataRow = find.byKey(
+      const ValueKey('chat-behavior-media-metadata'),
+    );
+    await tester.ensureVisible(metadataRow);
+    await tester.pump();
+    expect(theme.mediaMetadataEnabled, isTrue);
+    await tester.tap(metadataRow);
+    await tester.pump();
+    expect(theme.mediaMetadataEnabled, isFalse);
+    expect(prefs.getBool('mediaMetadataEnabled'), isFalse);
 
     final browserRow = find.byKey(const ValueKey('chat-behavior-link-browser'));
     await tester.ensureVisible(browserRow);

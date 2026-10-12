@@ -1479,6 +1479,8 @@
     <string name="generalForwardRichMarkdownHint">Bei Markdown-Texten (z. B. KI-Antworten) Weiterleitung als Rich Text anbieten</string>
     <string name="generalKeepChatContextPaneClosed">Gruppen-Seitenleiste geschlossen lassen</string>
     <string name="generalKeepChatContextPaneClosedHint">Auf Tablets und dem Desktop öffnet eine Gruppe oder ein Kanal nicht automatisch das Mitglieder- und Ankündigungsfeld rechts. Die Schaltfläche im Chat-Kopf öffnet es weiterhin</string>
+    <string name="generalMediaMetadata">Medien-Metadaten anzeigen</string>
+    <string name="generalMediaMetadataHint">Zeigt im Menü der Bild- und Videoansicht einen Eintrag mit Auflösung, Größe, Dauer, Codec, Bildrate und MIME-Typ.</string>
     <string name="generalSaveCapturedPhotos">Aufgenommene Fotos im System-Album speichern</string>
     <string name="generalSaveCapturedPhotosHint">Aus: Fotos werden mit der App-Kamera aufgenommen und gelangen nie ins Album.</string>
     <string name="generalSendMessageWithEnter">Nachricht mit Eingabetaste senden</string>
@@ -1945,6 +1947,17 @@
     <string name="loginWithQrCode">Mit QR-Code anmelden</string>
     <string name="mainTabResizeSidebar">Seitenleiste anpassen</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">Bitrate</string>
+    <string name="mediaMetadataCodec">Codec</string>
+    <string name="mediaMetadataDuration">Dauer</string>
+    <string name="mediaMetadataFrameRate">Bildrate</string>
+    <string name="mediaMetadataMime">MIME-Typ</string>
+    <string name="mediaMetadataName">Name</string>
+    <string name="mediaMetadataResolution">Auflösung</string>
+    <string name="mediaMetadataSize">Größe</string>
+    <string name="mediaMetadataTitle">Medien-Metadaten</string>
+    <string name="mediaMetadataType">Typ</string>
+    <string name="mediaMetadataViewInfo">Medieninfo</string>
     <string name="mediaSendPreviewStartTimestampSeconds">Startzeitstempel (Sekunden)</string>
     <string name="mediaSendPreviewTitle">Medienvorschau</string>
     <string name="mediaSendPreviewTrimVideo">Video zuschneiden</string>

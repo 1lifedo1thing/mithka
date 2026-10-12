@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../l10n/app_localizations.dart';
+import '../media/media_metadata.dart';
 import '../tdlib/td_image_loader.dart';
 import '../theme/app_theme.dart';
 
@@ -583,7 +584,7 @@ class _StatsForNerdsPanel extends StatelessWidget {
             _NerdStatRow(
               label: AppStrings.t(AppStringKeys.videoDebuggerNetworkActivity),
               value: AppStrings.t(AppStringKeys.videoDebuggerPerSecond, {
-                'value1': _formatBytes(speed.round()),
+                'value1': formatMediaByteSize(speed.round()),
               }),
             ),
             _NerdStatRow(
@@ -596,7 +597,7 @@ class _StatsForNerdsPanel extends StatelessWidget {
             _NerdStatRow(
               label: AppStrings.t(AppStringKeys.videoDebuggerCache),
               value: total > 0
-                  ? '${_formatBytes(downloaded)} / ${_formatBytes(total)}'
+                  ? '${formatMediaByteSize(downloaded)} / ${formatMediaByteSize(total)}'
                   : AppStrings.t(AppStringKeys.videoDebuggerWaitingForSize),
             ),
             _NerdStatRow(
@@ -669,7 +670,7 @@ class _DownloadBlockPanel extends StatelessWidget {
     return _InspectorPanel(
       title: AppStrings.t(AppStringKeys.videoDebuggerStreamCache),
       trailing: total > 0
-          ? '${_formatBytes(downloaded)} / ${_formatBytes(total)}  •  ${(fraction * 100).round()}%'
+          ? '${formatMediaByteSize(downloaded)} / ${formatMediaByteSize(total)}  •  ${(fraction * 100).round()}%'
           : AppStrings.t(AppStringKeys.videoDebuggerWaitingForSize),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
@@ -920,13 +921,4 @@ String _formatBitsPerSecond(double bytesPerSecond) {
   final bits = bytesPerSecond * 8;
   if (bits >= 1000000) return '${(bits / 1000000).toStringAsFixed(1)} Mbps';
   return '${(bits / 1000).toStringAsFixed(0)} Kbps';
-}
-
-String _formatBytes(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  if (bytes < 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
 }

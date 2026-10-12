@@ -24,7 +24,9 @@ echo "== CocoaPods =="
 (cd ios && pod install)
 
 echo "== Build IPA =="
-flutter build ipa --release --export-options-plist=ios/ExportOptions.app-store-connect.plist
+flutter build ipa --release \
+  --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
+  --export-options-plist=ios/ExportOptions.app-store-connect.plist
 
 ARCHIVE="$REPO_ROOT/build/ios/archive/Runner.xcarchive"
 TDJSON_DSYM="$ARCHIVE/dSYMs/tdjson.framework.dSYM"

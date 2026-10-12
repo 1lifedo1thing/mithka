@@ -44,6 +44,7 @@ import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../media/app_asset_picker.dart';
+import '../media/media_metadata.dart';
 import '../moments/story_viewer_view.dart';
 import '../notifications/notification_controller.dart';
 import '../platform/desktop_clipboard_images.dart';
@@ -587,7 +588,7 @@ class _MessageDeleteOptionsDialogState
       child: Material(
         color: Colors.transparent,
         child: Container(
-          width: math.min(MediaQuery.of(context).size.width - 40, 420),
+          width: math.min(MediaQuery.sizeOf(context).width - 40, 420),
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
           decoration: BoxDecoration(
             color: c.card,
@@ -4812,6 +4813,10 @@ class _ChatViewState extends State<ChatView> {
         items: items,
         startIndex: start < 0 ? 0 : start,
         messageActions: _imageMessageActions(pairs),
+        metadata: MediaMetadata.listFor(
+          pairs,
+          enabled: context.read<ThemeController>().mediaMetadataEnabled,
+        ),
       ),
     );
   }
@@ -7781,11 +7786,7 @@ class _ChatViewState extends State<ChatView> {
     final actionActive = _vm.hasActiveChatAction;
     final wideGroupHeader = _usesWideGroupHeader;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.paddingOf(context).top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: widget.headerColor ?? c.navBar,
         border: widget.showHeaderDivider
@@ -8192,11 +8193,7 @@ class _ChatViewState extends State<ChatView> {
     final c = context.colors;
     final count = _selectedMessageIds.length;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.paddingOf(context).top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),
@@ -9235,7 +9232,7 @@ class _ChatViewState extends State<ChatView> {
       final fullInfo = await TdClient.shared.query(
         communityFullInfoRequest(preview.id),
       );
-      for (final peer in fullInfo.objects('peers') ?? const []) {
+      for (final peer in communityCatalogEntries(fullInfo)) {
         final chatId = peer.int64('chat_id');
         if (chatId == null) continue;
         try {

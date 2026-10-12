@@ -9,8 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chat/video_playback_queue.dart';
 import 'package:mithka/chat/video_player_view.dart';
 import 'package:mithka/l10n/app_localizations.dart';
+import 'package:mithka/media/media_metadata_dialog.dart';
 import 'package:mithka/media/video_view_compatibility.dart';
 import 'package:mithka/tdlib/td_models.dart';
+import 'package:mithka/theme/theme_controller.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Used only to install a deterministic fake for the public video_player API.
 // ignore: depend_on_referenced_packages
@@ -400,6 +403,104 @@ void main() {
       }
     },
   );
+
+  testWidgets('the metadata row follows the preference into the desktop menu', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 620);
+    final previousPlatform = VideoPlayerPlatform.instance;
+    final fakePlatform = _ReusableSurfaceVideoPlatform();
+    VideoPlayerPlatform.instance = fakePlatform;
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      SharedPreferences.setMockInitialValues(const {});
+      final theme = ThemeController(await SharedPreferences.getInstance());
+      addTearDown(theme.dispose);
+      final sourcePath = File('pubspec.yaml').absolute.path;
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [AppLocalizations.delegate],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ChangeNotifierProvider<ThemeController>.value(
+            value: theme,
+            child: Scaffold(
+              body: VideoPlayerView(
+                video: TdFileRef(id: 940, localPath: sourcePath),
+                width: 1920,
+                height: 1080,
+                onClose: () {},
+                onSwitchMode: (_) {},
+                onVolumeChanged: (_) {},
+                streamQuery: _completedVideoQuery(sourcePath),
+              ),
+            ),
+          ),
+        ),
+      );
+      await _pumpUntilInitialized(tester, fakePlatform);
+
+      await tester.tap(_semanticsWidget('More'));
+      await tester.pump(const Duration(milliseconds: 180));
+      final metadata = find.byKey(const ValueKey('video-more-metadata'));
+      expect(metadata, findsOneWidget);
+      // A setting changed while this menu is already mounted must rebuild the
+      // row without waiting for a playback tick or another menu-open action.
+      theme.mediaMetadataEnabled = false;
+      await tester.pump();
+      expect(metadata, findsNothing);
+      theme.mediaMetadataEnabled = true;
+      await tester.pump();
+      expect(metadata, findsOneWidget);
+      // The row is last, so the traversal has to stop there too.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'video-more-menu-action-5',
+      );
+
+      await tester.tap(metadata);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(MediaMetadataDialog), findsOneWidget);
+      expect(find.text('1920 × 1080'), findsOneWidget);
+      // The player opened this file itself, so it is the one path the probe may
+      // read — never the loopback URI it streams through otherwise.
+      expect(
+        tester
+            .widget<MediaMetadataDialog>(find.byType(MediaMetadataDialog))
+            .metadata
+            .localPath,
+        sourcePath,
+      );
+      // The probe reads a pubspec, not a video, and fails closed.
+      expect(find.text('Media metadata'), findsOneWidget);
+      await tester.tap(find.text('OK'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(MediaMetadataDialog), findsNothing);
+
+      theme.mediaMetadataEnabled = false;
+      await tester.pump();
+      await tester.tap(_semanticsWidget('More'));
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(metadata, findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'video-more-menu-action-3',
+        reason: 'a hidden row must not keep a focus node in the traversal',
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      VideoPlayerPlatform.instance = previousPlatform;
+      debugDefaultTargetPlatformOverride = null;
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    }
+  });
 }
 
 Finder _semanticsWidget(String label) => find.byWidgetPredicate(

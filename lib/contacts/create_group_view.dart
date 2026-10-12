@@ -19,6 +19,7 @@ import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
+import 'contact_users.dart';
 
 class CreateGroupView extends StatefulWidget {
   const CreateGroupView({super.key});
@@ -49,26 +50,7 @@ class _CreateGroupViewState extends State<CreateGroupView> {
 
   Future<void> _loadContacts() async {
     try {
-      final res = await _client.query({'@type': 'getContacts'});
-      final ids = res.int64Array('user_ids') ?? const <int>[];
-      final loaded = <Contact>[];
-      for (final id in ids.take(300)) {
-        try {
-          final user = await _client.query({'@type': 'getUser', 'user_id': id});
-          loaded.add(
-            Contact(
-              id: id,
-              name: TDParse.userName(user),
-              username: user.obj('usernames')?.str('editable_username'),
-              statusText: TDParse.userStatus(user),
-              photo: TDParse.smallPhoto(user.obj('profile_photo')),
-            ),
-          );
-        } catch (_) {}
-      }
-      loaded.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
+      final loaded = await fetchSortedContacts(_client, limit: 300);
       if (!mounted) return;
       setState(() {
         _contacts = loaded;
@@ -133,11 +115,7 @@ class _CreateGroupViewState extends State<CreateGroupView> {
     final c = context.colors;
     final canCreate = _selected.isNotEmpty && !_creating;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),

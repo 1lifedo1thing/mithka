@@ -1479,6 +1479,8 @@
     <string name="generalForwardRichMarkdownHint">Offer to send Markdown-formatted text (like AI replies) as rich text</string>
     <string name="generalKeepChatContextPaneClosed">Keep the group side panel closed</string>
     <string name="generalKeepChatContextPaneClosedHint">On tablet and desktop, a group or channel opens without the member and announcement panel on the right. The chat header button still opens it</string>
+    <string name="generalMediaMetadata">Show media metadata</string>
+    <string name="generalMediaMetadataHint">Adds an image and video viewer menu entry listing resolution, size, duration, codec, frame rate and MIME type.</string>
     <string name="generalSaveCapturedPhotos">Save captured photos to the system album</string>
     <string name="generalSaveCapturedPhotosHint">When off, photos are taken with the in-app camera and never reach the album.</string>
     <string name="generalSendMessageWithEnter">Send messages with Enter</string>
@@ -1945,6 +1947,17 @@
     <string name="loginWithQrCode">Log in with QR code</string>
     <string name="mainTabResizeSidebar">Resize sidebar</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">Bitrate</string>
+    <string name="mediaMetadataCodec">Codec</string>
+    <string name="mediaMetadataDuration">Duration</string>
+    <string name="mediaMetadataFrameRate">Frame rate</string>
+    <string name="mediaMetadataMime">MIME type</string>
+    <string name="mediaMetadataName">Name</string>
+    <string name="mediaMetadataResolution">Resolution</string>
+    <string name="mediaMetadataSize">Size</string>
+    <string name="mediaMetadataTitle">Media metadata</string>
+    <string name="mediaMetadataType">Type</string>
+    <string name="mediaMetadataViewInfo">Media info</string>
     <string name="mediaSendPreviewStartTimestampSeconds">Start timestamp (seconds)</string>
     <string name="mediaSendPreviewTitle">Media preview</string>
     <string name="mediaSendPreviewTrimVideo">Trim video</string>

@@ -1479,6 +1479,8 @@
     <string name="generalForwardRichMarkdownHint">Ofrecer enviar texto con Markdown (como respuestas de IA) como texto enriquecido</string>
     <string name="generalKeepChatContextPaneClosed">Mantener cerrado el panel lateral del grupo</string>
     <string name="generalKeepChatContextPaneClosedHint">En tabletas y escritorio, un grupo o canal se abre sin el panel de miembros y anuncios de la derecha. El botón de la cabecera del chat lo abre igual</string>
+    <string name="generalMediaMetadata">Mostrar metadatos de medios</string>
+    <string name="generalMediaMetadataHint">Añade en el menú del visor de imágenes y vídeo una entrada con resolución, tamaño, duración, códec, velocidad de fotogramas y tipo MIME.</string>
     <string name="generalSaveCapturedPhotos">Guardar las fotos tomadas en el álbum del sistema</string>
     <string name="generalSaveCapturedPhotosHint">Al desactivarlo, las fotos se toman con la cámara integrada y nunca llegan al álbum.</string>
     <string name="generalSendMessageWithEnter">Enviar mensajes con Enter</string>
@@ -1945,6 +1947,17 @@
     <string name="loginWithQrCode">Iniciar sesión con código QR</string>
     <string name="mainTabResizeSidebar">Cambiar tamaño de la barra lateral</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">Tasa de bits</string>
+    <string name="mediaMetadataCodec">Códec</string>
+    <string name="mediaMetadataDuration">Duración</string>
+    <string name="mediaMetadataFrameRate">Fotogramas por segundo</string>
+    <string name="mediaMetadataMime">Tipo MIME</string>
+    <string name="mediaMetadataName">Nombre</string>
+    <string name="mediaMetadataResolution">Resolución</string>
+    <string name="mediaMetadataSize">Tamaño</string>
+    <string name="mediaMetadataTitle">Metadatos de medios</string>
+    <string name="mediaMetadataType">Tipo</string>
+    <string name="mediaMetadataViewInfo">Info de medios</string>
     <string name="mediaSendPreviewStartTimestampSeconds">Marca de tiempo de inicio (segundos)</string>
     <string name="mediaSendPreviewTitle">Vista previa multimedia</string>
     <string name="mediaSendPreviewTrimVideo">Recortar vídeo</string>

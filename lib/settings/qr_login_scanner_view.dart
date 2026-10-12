@@ -5,6 +5,7 @@ import 'package:mithka/l10n/app_localizations.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../components/app_icons.dart';
+import '../components/scanner_circle_button.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../platform/camera_permission.dart';
@@ -200,7 +201,7 @@ class _QrLoginScannerViewState extends State<QrLoginScannerView>
               children: [
                 ValueListenableBuilder<MobileScannerState>(
                   valueListenable: _controller,
-                  builder: (context, state, _) => _CircleButton(
+                  builder: (context, state, _) => ScannerCircleButton(
                     icon: HeroAppIcons.camera,
                     onTap: !_accepting && state.isInitialized && state.isRunning
                         ? _switchCamera
@@ -210,7 +211,7 @@ class _QrLoginScannerViewState extends State<QrLoginScannerView>
                 const SizedBox(width: AppSpacing.lg),
                 ValueListenableBuilder<MobileScannerState>(
                   valueListenable: _controller,
-                  builder: (context, state, _) => _CircleButton(
+                  builder: (context, state, _) => ScannerCircleButton(
                     icon: HeroAppIcons.flash,
                     active: state.torchState == TorchState.on,
                     onTap:
@@ -228,7 +229,7 @@ class _QrLoginScannerViewState extends State<QrLoginScannerView>
           Positioned(
             left: 28,
             right: 28,
-            bottom: MediaQuery.of(context).padding.bottom + 34,
+            bottom: MediaQuery.paddingOf(context).bottom + 34,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -394,45 +395,6 @@ class _ScannerOverlay extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _CircleButton extends StatelessWidget {
-  const _CircleButton({
-    required this.icon,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final AppIconData icon;
-  final VoidCallback? onTap;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: active ? AppTheme.brand : const Color(0x66000000),
-          shape: BoxShape.circle,
-          border: Border.all(color: const Color(0x33FFFFFF)),
-        ),
-        child: Center(
-          child: AppIcon(
-            icon,
-            size: 22,
-            color: onTap == null
-                ? const Color(0x66FFFFFF)
-                : const Color(0xFFFFFFFF),
-          ),
-        ),
-      ),
     );
   }
 }

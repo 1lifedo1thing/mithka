@@ -1580,18 +1580,8 @@ class _ChannelMomentsViewState extends State<ChannelMomentsView> {
         });
         if (properties.boolean('can_get_message_thread') == false) return null;
       } catch (_) {}
-      final thread = await TdClient.shared.query({
-        '@type': 'getMessageThread',
-        'chat_id': post.channel.id,
-        'message_id': post.message.id,
-      });
-      final chatId = thread.int64('chat_id');
-      final threadId = thread.int64('message_thread_id');
-      if (chatId == null || threadId == null || threadId == 0) return null;
-      final target = ChannelPostThreadTarget(
-        chatId: chatId,
-        messageThreadId: threadId,
-      );
+      final target = await _fetchChannelPostThreadTarget(post);
+      if (target == null) return null;
       post.threadTarget = target;
       shouldNotify = true;
       return target;
@@ -2647,11 +2637,7 @@ class _ChannelMomentsSearchViewState extends State<ChannelMomentsSearchView> {
   Widget _header() {
     final c = context.colors;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.navBar,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),
@@ -2982,18 +2968,8 @@ class _ChannelPostDetailViewState extends State<ChannelPostDetailView> {
   Future<ChannelPostThreadTarget?> _resolveThreadTarget() async {
     if (_target != null) return _target;
     try {
-      final thread = await TdClient.shared.query({
-        '@type': 'getMessageThread',
-        'chat_id': post.channel.id,
-        'message_id': post.message.id,
-      });
-      final chatId = thread.int64('chat_id');
-      final threadId = thread.int64('message_thread_id');
-      if (chatId == null || threadId == null || threadId == 0) return null;
-      final target = ChannelPostThreadTarget(
-        chatId: chatId,
-        messageThreadId: threadId,
-      );
+      final target = await _fetchChannelPostThreadTarget(post);
+      if (target == null) return null;
       post.threadTarget = target;
       _target = target;
       return target;
@@ -3721,16 +3697,11 @@ class _ChannelPostComposerViewState extends State<ChannelPostComposerView> {
     final c = context.colors;
     return Container(
       padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
+        top: topChromeInsetOf(context),
         left: AppSpacing.xxl,
         right: AppSpacing.xxl,
       ),
-      height:
-          MediaQuery.of(context).padding.top +
-          iPadWindowChromeInsetOf(context) +
-          AppMetric.composerHeaderHeight,
+      height: topChromeInsetOf(context) + AppMetric.composerHeaderHeight,
       color: c.groupedBackground,
       child: Row(
         children: [
@@ -6518,4 +6489,20 @@ class MomentsViewModel extends ChangeNotifier {
       ..sort((a, b) => b.order.compareTo(a.order));
     notifyListeners();
   }
+}
+
+/// The discussion thread holding [post]'s comments, or null when TDLib
+/// reports none.
+Future<ChannelPostThreadTarget?> _fetchChannelPostThreadTarget(
+  ChannelPost post,
+) async {
+  final thread = await TdClient.shared.query({
+    '@type': 'getMessageThread',
+    'chat_id': post.channel.id,
+    'message_id': post.message.id,
+  });
+  final chatId = thread.int64('chat_id');
+  final threadId = thread.int64('message_thread_id');
+  if (chatId == null || threadId == null || threadId == 0) return null;
+  return ChannelPostThreadTarget(chatId: chatId, messageThreadId: threadId);
 }

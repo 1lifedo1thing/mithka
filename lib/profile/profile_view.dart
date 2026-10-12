@@ -282,9 +282,7 @@ class _ProfileViewState extends State<ProfileView> {
         Padding(
           padding: EdgeInsets.fromLTRB(
             20,
-            MediaQuery.of(context).padding.top +
-                iPadWindowChromeInsetOf(context) +
-                8,
+            topChromeInsetOf(context) + 8,
             16,
             20,
           ),

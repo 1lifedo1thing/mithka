@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:ui';
 
@@ -11,6 +10,7 @@ import '../components/app_icons.dart';
 import '../components/photo_avatar.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
+import 'call_elapsed_text.dart';
 import 'group_call_controller.dart';
 
 class GroupCallScreen extends StatefulWidget {
@@ -46,7 +46,13 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
                         ? _joiningState(session)
                         : _participantGrid(participants, hasVideo: hasVideo),
                   ),
-                  _GroupCallDuration(startedAt: session.startedAt),
+                  CallElapsedText(
+                    startedAt: session.startedAt,
+                    style: const TextStyle(
+                      color: Color(0xFFFFFFFF),
+                      fontSize: 17,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   _controls(),
                   const SizedBox(height: 24),
@@ -362,70 +368,6 @@ class _GroupCallScreenState extends State<GroupCallScreen> {
           },
         ),
       ),
-    );
-  }
-}
-
-/// Elapsed call time, ticking on its own. Owning the timer here is what keeps
-/// the 1 Hz tick from rebuilding the whole screen — the participant getter, the
-/// backdrop and every video tile in the grid — once a second for the whole call.
-class _GroupCallDuration extends StatefulWidget {
-  const _GroupCallDuration({required this.startedAt});
-
-  final DateTime? startedAt;
-
-  @override
-  State<_GroupCallDuration> createState() => _GroupCallDurationState();
-}
-
-class _GroupCallDurationState extends State<_GroupCallDuration> {
-  Timer? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _syncTicker();
-  }
-
-  @override
-  void didUpdateWidget(covariant _GroupCallDuration oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.startedAt != widget.startedAt) _syncTicker();
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  void _syncTicker() {
-    _ticker?.cancel();
-    _ticker = null;
-    if (widget.startedAt == null) return;
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final startedAt = widget.startedAt;
-    final seconds = startedAt == null
-        ? 0
-        : DateTime.now().difference(startedAt).inSeconds.clamp(0, 359999);
-    final hours = seconds ~/ 3600;
-    final minutes = (seconds % 3600) ~/ 60;
-    final remainder = seconds % 60;
-    final text = hours > 0
-        ? '${hours.toString().padLeft(2, '0')}:'
-              '${minutes.toString().padLeft(2, '0')}:'
-              '${remainder.toString().padLeft(2, '0')}'
-        : '${minutes.toString().padLeft(2, '0')}:'
-              '${remainder.toString().padLeft(2, '0')}';
-    return Text(
-      text,
-      style: const TextStyle(color: Colors.white, fontSize: 17),
     );
   }
 }

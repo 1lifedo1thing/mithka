@@ -1182,7 +1182,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
     bool compact = false,
   }) {
     final theme = context.watch<ThemeController>();
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
     return ValueListenableBuilder<double?>(
       valueListenable: _splitSidebarWidth,
       builder: (context, requestedWidth, _) {
@@ -1682,7 +1682,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
   }
 
   bool _usesTabletSplit(BuildContext context) {
-    return usesAdaptiveSplitLayout(MediaQuery.of(context).size);
+    return usesAdaptiveSplitLayout(MediaQuery.sizeOf(context));
   }
 
   // `usesDesktopShellLayout` ignores the size it is handed, so reading
@@ -2394,8 +2394,12 @@ class _MainBottomBar extends StatelessWidget {
             Expanded(
               child: AppInteractiveSurface(
                 key: ValueKey('bottom-tab-${items[i].index}'),
+                // Match the selection indicator's corner radius so the tap
+                // ripple, hover tint, and highlight share one slot shape. A
+                // full stadium would clip the label's corners (see
+                // LiquidGlassBottomBar).
                 borderRadius: glass
-                    ? BorderRadius.circular(AppRadius.pill)
+                    ? BorderRadius.circular(AppRadius.control)
                     : BorderRadius.zero,
                 semanticLabel: items[i].label.l10n(context),
                 selected: selection == i,

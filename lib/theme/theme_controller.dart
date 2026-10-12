@@ -976,24 +976,7 @@ class ThemeController extends ChangeNotifier {
     // the retired opt-out preference so an older `false` value cannot keep a
     // selected theme from applying to the interface.
     _prefs.remove(_scopedThemeKey(_legacyUseTelegramThemeForUiKey));
-    _customMessageBubbleBackground = _decodeCustomMessageBubbleBackground(
-      _scopedThemeKey(_customMessageBubbleBackgroundKey),
-    );
-    _messageBubblesEnabled =
-        _prefs.getBool(_scopedThemeKey(_messageBubblesEnabledKey)) ?? true;
-    _messageBubbleBackground = MessageBubbleBackground.fromStorage(
-      _prefs.getString(_scopedThemeKey(_messageBubbleBackgroundKey)),
-    );
-    _messageBubbleApplicationScope = MessageBubbleApplicationScope.values
-        .firstWhere(
-          (scope) =>
-              scope.name ==
-              _prefs.getString(
-                _scopedThemeKey(_messageBubbleApplicationScopeKey),
-              ),
-          orElse: () => MessageBubbleApplicationScope.allMessages,
-        );
-    _repairMissingCustomMessageBubble();
+    _loadScopedMessageBubbleSettings();
     if (hasCloudTheme &&
         (_prefs.containsKey(_preCloudThemeModeKey) ||
             _prefs.containsKey(_preCloudThemeBrandKey))) {
@@ -1155,6 +1138,8 @@ class ThemeController extends ChangeNotifier {
         _prefs.getBool(_preserveSenderWhenRepeatingKey) ?? true;
     // Markdown detection is heuristic, so rich-text forwarding stays opt-in.
     _forwardRichMarkdown = _prefs.getBool(_forwardRichMarkdownKey) ?? false;
+    // Viewer media facts are on by default, like the Swift Nagram setting.
+    _mediaMetadataEnabled = _prefs.getBool(_mediaMetadataEnabledKey) ?? true;
     _quickRepliesEnabled = _prefs.getBool(_quickRepliesEnabledKey) ?? true;
     final storedQuickReactions = _prefs.getStringList(_quickReactionsKey);
     _quickReactions = storedQuickReactions == null
@@ -1271,6 +1256,7 @@ class ThemeController extends ChangeNotifier {
   static const _showSavedMessagesIdentityKey = 'showSavedMessagesIdentity';
   static const _preserveSenderWhenRepeatingKey = 'preserveSenderWhenRepeating';
   static const _forwardRichMarkdownKey = 'forwardRichMarkdown';
+  static const _mediaMetadataEnabledKey = 'mediaMetadataEnabled';
   static const _quickRepliesEnabledKey = 'quickRepliesEnabled';
   static const _quickReactionsKey = 'quickReactions';
   static const _groupImageMessagesKey = 'groupImageMessages';
@@ -1359,6 +1345,7 @@ class ThemeController extends ChangeNotifier {
   bool _showSavedMessagesIdentity = false;
   bool _preserveSenderWhenRepeating = true;
   bool _forwardRichMarkdown = false;
+  bool _mediaMetadataEnabled = true;
   bool _quickRepliesEnabled = true;
   late List<QuickReactionChoice> _quickReactions;
   bool _groupImageMessages = true;
@@ -1592,6 +1579,27 @@ class ThemeController extends ChangeNotifier {
     }
   }
 
+  void _loadScopedMessageBubbleSettings() {
+    _customMessageBubbleBackground = _decodeCustomMessageBubbleBackground(
+      _scopedThemeKey(_customMessageBubbleBackgroundKey),
+    );
+    _messageBubblesEnabled =
+        _prefs.getBool(_scopedThemeKey(_messageBubblesEnabledKey)) ?? true;
+    _messageBubbleBackground = MessageBubbleBackground.fromStorage(
+      _prefs.getString(_scopedThemeKey(_messageBubbleBackgroundKey)),
+    );
+    _messageBubbleApplicationScope = MessageBubbleApplicationScope.values
+        .firstWhere(
+          (scope) =>
+              scope.name ==
+              _prefs.getString(
+                _scopedThemeKey(_messageBubbleApplicationScopeKey),
+              ),
+          orElse: () => MessageBubbleApplicationScope.allMessages,
+        );
+    _repairMissingCustomMessageBubble();
+  }
+
   void _repairMissingCustomMessageBubble() {
     final custom = _customMessageBubbleBackground;
     if (custom == null) {
@@ -1622,24 +1630,7 @@ class ThemeController extends ChangeNotifier {
     _lightCloudTheme = _decodeTheme(_scopedThemeKey(_lightCloudThemeKey));
     _darkCloudTheme = _decodeTheme(_scopedThemeKey(_darkCloudThemeKey));
     _prefs.remove(_scopedThemeKey(_legacyUseTelegramThemeForUiKey));
-    _customMessageBubbleBackground = _decodeCustomMessageBubbleBackground(
-      _scopedThemeKey(_customMessageBubbleBackgroundKey),
-    );
-    _messageBubblesEnabled =
-        _prefs.getBool(_scopedThemeKey(_messageBubblesEnabledKey)) ?? true;
-    _messageBubbleBackground = MessageBubbleBackground.fromStorage(
-      _prefs.getString(_scopedThemeKey(_messageBubbleBackgroundKey)),
-    );
-    _messageBubbleApplicationScope = MessageBubbleApplicationScope.values
-        .firstWhere(
-          (scope) =>
-              scope.name ==
-              _prefs.getString(
-                _scopedThemeKey(_messageBubbleApplicationScopeKey),
-              ),
-          orElse: () => MessageBubbleApplicationScope.allMessages,
-        );
-    _repairMissingCustomMessageBubble();
+    _loadScopedMessageBubbleSettings();
     AppTheme.applyBrand(_brandColor);
   }
 
@@ -1824,6 +1815,9 @@ class ThemeController extends ChangeNotifier {
   bool get showSavedMessagesIdentity => _showSavedMessagesIdentity;
   bool get preserveSenderWhenRepeating => _preserveSenderWhenRepeating;
   bool get forwardRichMarkdown => _forwardRichMarkdown;
+
+  /// Shows the metadata row in the photo and video viewers' menus.
+  bool get mediaMetadataEnabled => _mediaMetadataEnabled;
   bool get quickRepliesEnabled => _quickRepliesEnabled;
   List<QuickReactionChoice> get quickReactions =>
       List.unmodifiable(_quickReactions);
@@ -2713,6 +2707,13 @@ class ThemeController extends ChangeNotifier {
     if (_forwardRichMarkdown == value) return;
     _forwardRichMarkdown = value;
     _prefs.setBool(_forwardRichMarkdownKey, value);
+    notifyListeners();
+  }
+
+  set mediaMetadataEnabled(bool value) {
+    if (_mediaMetadataEnabled == value) return;
+    _mediaMetadataEnabled = value;
+    _prefs.setBool(_mediaMetadataEnabledKey, value);
     notifyListeners();
   }
 

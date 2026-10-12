@@ -26,6 +26,7 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../platform/keyboard_modifiers.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
@@ -1554,11 +1555,7 @@ class _SearchViewState extends State<SearchView> {
   Widget _header() {
     final c = context.colors;
     return Container(
-      padding: EdgeInsets.only(
-        top:
-            MediaQuery.of(context).padding.top +
-            iPadWindowChromeInsetOf(context),
-      ),
+      padding: EdgeInsets.only(top: topChromeInsetOf(context)),
       decoration: BoxDecoration(
         color: c.listHeaderTint,
         border: Border(bottom: BorderSide(color: c.divider, width: 0.5)),
@@ -2177,7 +2174,7 @@ class _SearchViewModel extends ChangeNotifier {
       } catch (_) {}
       if (!_isCurrent(tab, runId, trimmed)) return;
 
-      final handle = _usernameOf(trimmed);
+      final handle = telegramUsernameFromQuery(trimmed);
       if (handle != null) {
         try {
           final chat = await TdClient.shared.query({
@@ -2379,20 +2376,6 @@ class _SearchViewModel extends ChangeNotifier {
     _loading.clear();
     super.dispose();
   }
-
-  static final RegExp _handleLink = RegExp(
-    r'(?:https?://)?(?:t\.me|telegram\.me)/(@?[A-Za-z0-9_]+)',
-    caseSensitive: false,
-  );
-  static final RegExp _handleShape = RegExp(r'^[A-Za-z0-9_]{3,32}$');
-
-  String? _usernameOf(String q) {
-    var s = q.trim();
-    final link = _handleLink.firstMatch(s);
-    if (link != null) s = link.group(1)!;
-    if (s.startsWith('@')) s = s.substring(1);
-    return _handleShape.hasMatch(s) ? s : null;
-  }
 }
 
 class _SearchHit {
@@ -2531,7 +2514,7 @@ class _SearchHit {
     final music = message.music;
     if (music?.performer?.isNotEmpty == true) pieces.add(music!.performer!);
     if (message.voice != null && message.voice!.duration > 0) {
-      pieces.add(_duration(message.voice!.duration));
+      pieces.add(formatMediaDuration(message.voice!.duration));
     }
     if (sourceTitle.isNotEmpty) pieces.add(sourceTitle);
     final text = message.text.trim();
@@ -2570,12 +2553,6 @@ class _SearchHit {
     if (bytes >= 1 << 20) return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
     if (bytes >= 1 << 10) return '${(bytes / (1 << 10)).toStringAsFixed(0)} KB';
     return '$bytes B';
-  }
-
-  static String _duration(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
   }
 }
 

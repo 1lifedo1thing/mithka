@@ -16,22 +16,10 @@ extension TdJson on Map<String, dynamic> {
 
   String? str(String key) => this[key] as String?;
 
-  int? integer(String key) {
-    final v = this[key];
-    if (v is int) return v;
-    if (v is double) return v.toInt();
-    if (v is String) return int.tryParse(v);
-    return null;
-  }
+  int? integer(String key) => jsonInt(this[key]);
 
   /// TDLib serializes int64 as strings; parse those transparently.
-  int? int64(String key) {
-    final v = this[key];
-    if (v is int) return v;
-    if (v is double) return v.toInt();
-    if (v is String) return int.tryParse(v);
-    return null;
-  }
+  int? int64(String key) => jsonInt(this[key]);
 
   bool? boolean(String key) {
     final v = this[key];
@@ -40,13 +28,7 @@ extension TdJson on Map<String, dynamic> {
     return null;
   }
 
-  double? dbl(String key) {
-    final v = this[key];
-    if (v is double) return v;
-    if (v is int) return v.toDouble();
-    if (v is String) return double.tryParse(v);
-    return null;
-  }
+  double? dbl(String key) => jsonDouble(this[key]);
 
   Map<String, dynamic>? obj(String key) {
     final v = this[key];
@@ -62,14 +44,22 @@ extension TdJson on Map<String, dynamic> {
   List<int>? int64Array(String key) {
     final v = this[key];
     if (v is! List) return null;
-    return v
-        .map<int?>((e) {
-          if (e is int) return e;
-          if (e is double) return e.toInt();
-          if (e is String) return int.tryParse(e);
-          return null;
-        })
-        .whereType<int>()
-        .toList();
+    return v.map(jsonInt).whereType<int>().toList();
   }
+}
+
+/// A JSON number, or a numeric string such as a TDLib int64, as an [int].
+int? jsonInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+/// A JSON number, or a numeric string, as a [double].
+double? jsonDouble(Object? value) {
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
 }

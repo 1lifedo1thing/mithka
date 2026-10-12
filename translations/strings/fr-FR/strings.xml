@@ -1479,6 +1479,8 @@
     <string name="generalForwardRichMarkdownHint">Proposer d’envoyer le texte Markdown (réponses IA) en texte enrichi</string>
     <string name="generalKeepChatContextPaneClosed">Garder le panneau latéral du groupe fermé</string>
     <string name="generalKeepChatContextPaneClosedHint">Sur tablette et ordinateur, un groupe ou un canal s’ouvre sans le panneau des membres et de l’annonce à droite. Le bouton de l’en-tête du chat l’ouvre toujours</string>
+    <string name="generalMediaMetadata">Afficher les métadonnées des médias</string>
+    <string name="generalMediaMetadataHint">Ajoute dans le menu de la visionneuse d'images et de vidéos une entrée listant résolution, taille, durée, codec, fréquence d'images et type MIME.</string>
     <string name="generalSaveCapturedPhotos">Enregistrer les photos prises dans l’album système</string>
     <string name="generalSaveCapturedPhotosHint">Désactivé, les photos sont prises avec l’appareil photo intégré et n’arrivent jamais dans l’album.</string>
     <string name="generalSendMessageWithEnter">Envoyer avec Entrée</string>
@@ -1945,6 +1947,17 @@
     <string name="loginWithQrCode">Se connecter avec un QR code</string>
     <string name="mainTabResizeSidebar">Redimensionner la barre latérale</string>
     <string name="markdownLabel">Markdown</string>
+    <string name="mediaMetadataBitrate">Débit</string>
+    <string name="mediaMetadataCodec">Codec</string>
+    <string name="mediaMetadataDuration">Durée</string>
+    <string name="mediaMetadataFrameRate">Fréquence d'images</string>
+    <string name="mediaMetadataMime">Type MIME</string>
+    <string name="mediaMetadataName">Nom</string>
+    <string name="mediaMetadataResolution">Résolution</string>
+    <string name="mediaMetadataSize">Taille</string>
+    <string name="mediaMetadataTitle">Métadonnées du média</string>
+    <string name="mediaMetadataType">Type</string>
+    <string name="mediaMetadataViewInfo">Infos média</string>
     <string name="mediaSendPreviewStartTimestampSeconds">Horodatage de début (secondes)</string>
     <string name="mediaSendPreviewTitle">Aperçu des médias</string>
     <string name="mediaSendPreviewTrimVideo">Découper la vidéo</string>

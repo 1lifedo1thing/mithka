@@ -7,6 +7,7 @@ import 'package:mithka/l10n/app_localizations.dart';
 
 import '../components/app_icons.dart';
 import '../components/ui_components.dart';
+import '../media/media_metadata.dart';
 import '../theme/app_theme.dart';
 
 class VideoNoteCaptureResult {
@@ -250,10 +251,8 @@ class _VideoNoteRecorderViewState extends State<VideoNoteRecorderView>
     }
   }
 
-  String get _elapsedLabel {
-    final seconds = _elapsed.inSeconds.clamp(0, 60);
-    return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
-  }
+  String get _elapsedLabel =>
+      formatMediaDuration(_elapsed.inSeconds.clamp(0, 60));
 
   @override
   Widget build(BuildContext context) {

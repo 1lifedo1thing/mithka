@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' show Brightness, Theme;
 import 'package:flutter/widgets.dart';
 
 import '../app/desktop_image_preview_window.dart';
+import '../media/media_metadata.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_motion.dart';
 import 'full_image_viewer.dart';
@@ -14,11 +15,15 @@ bool imagePreviewCanUseIndependentWindow({
   Future<void> Function(int index)? onPrimaryAction,
   Future<void> Function(int index)? onMore,
   ImageViewerMessageActions? messageActions,
+  List<MediaMetadata?> metadata = const [],
 }) =>
     primaryActionLabel == null &&
     onPrimaryAction == null &&
     onMore == null &&
-    messageActions == null;
+    messageActions == null &&
+    // The native window has no menu, so a gallery that carries media facts
+    // would silently drop them there.
+    metadata.isEmpty;
 
 /// Opens the selected image in an independent native window on desktop.
 ///
@@ -32,6 +37,7 @@ Future<void> openImagePreview(
   Future<void> Function(int index)? onPrimaryAction,
   Future<void> Function(int index)? onMore,
   ImageViewerMessageActions? messageActions,
+  List<MediaMetadata?> metadata = const [],
 }) async {
   if (items.isEmpty) return;
   final index = startIndex.clamp(0, items.length - 1);
@@ -40,6 +46,7 @@ Future<void> openImagePreview(
     onPrimaryAction: onPrimaryAction,
     onMore: onMore,
     messageActions: messageActions,
+    metadata: metadata,
   )) {
     final opened = await DesktopImagePreviewWindowService.instance.open(
       items,
@@ -59,6 +66,7 @@ Future<void> openImagePreview(
         onPrimaryAction: onPrimaryAction,
         onMore: onMore,
         messageActions: messageActions,
+        metadata: metadata,
       ),
     ),
   );

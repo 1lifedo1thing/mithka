@@ -118,6 +118,7 @@ flutter config --enable-swift-package-manager
 flutter precache --macos
 flutter pub get
 flutter build macos --release --config-only \
+  --dart-define="I_DONT_FUCKING_CARE_ABOUT_TOS=false" \
   --build-name="$APP_VERSION" \
   --build-number="$APP_BUILD_NUMBER" \
   --dart-define="GIT_COMMIT=$GIT_COMMIT" \

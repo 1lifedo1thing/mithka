@@ -85,30 +85,6 @@ class _GroupManagementViewState extends State<GroupManagementView> {
 
   Map<String, bool> _permissions = _defaultPermissions;
 
-  static const _permissionLabels = <String, String>{
-    'can_send_basic_messages':
-        AppStringKeys.groupManagementPermissionSendMessages,
-    'can_send_photos': AppStringKeys.groupManagementPermissionSendPhotos,
-    'can_send_videos': AppStringKeys.groupManagementPermissionSendVideos,
-    'can_send_documents': AppStringKeys.groupManagementPermissionSendFiles,
-    'can_send_voice_notes': AppStringKeys.groupManagementPermissionSendVoice,
-    'can_send_video_notes':
-        AppStringKeys.groupManagementPermissionSendVideoMessages,
-    'can_send_audios': AppStringKeys.groupManagementPermissionSendMusic,
-    'can_send_polls': AppStringKeys.groupManagementPermissionSendPolls,
-    'can_send_other_messages':
-        AppStringKeys.groupManagementPermissionSendStickersAndGifs,
-    'can_add_link_previews':
-        AppStringKeys.groupManagementPermissionLinkPreviews,
-    'can_react_to_messages':
-        AppStringKeys.groupManagementPermissionSendReactions,
-    'can_edit_tag': AppStringKeys.groupManagementPermissionEditOwnTag,
-    'can_invite_users': AppStringKeys.addMembersInviteMembersTitle,
-    'can_pin_messages': AppStringKeys.groupManagementPermissionPinMessages,
-    'can_change_info': AppStringKeys.groupManagementPermissionEditGroupInfo,
-    'can_create_topics': AppStringKeys.groupManagementPermissionCreateTopics,
-  };
-
   static const _defaultPermissions = <String, bool>{
     'can_send_basic_messages': true,
     'can_send_photos': true,
@@ -607,10 +583,13 @@ class _GroupManagementViewState extends State<GroupManagementView> {
                           [
                             // can_create_topics is a member right only in
                             // forum supergroups; hide it everywhere else.
-                            for (final entry in _permissionLabels.entries.where(
-                              (e) => e.key != 'can_create_topics' || _isForum,
-                            )) ...[
-                              if (entry.key != _permissionLabels.keys.first)
+                            for (final entry
+                                in chatPermissionLabelKeys.entries.where(
+                                  (e) =>
+                                      e.key != 'can_create_topics' || _isForum,
+                                )) ...[
+                              if (entry.key !=
+                                  chatPermissionLabelKeys.keys.first)
                                 _divider(),
                               _switchRow(
                                 entry.value.l10n(context),
