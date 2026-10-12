@@ -26,9 +26,11 @@ import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/country_flag.dart';
 import '../components/ui_components.dart';
+import '../profile/profile_proxy_button.dart';
 import '../settings/account_backup_view.dart';
 import '../settings/api_credentials_view.dart';
 import '../settings/proxy_config.dart';
+import '../settings/proxy_status.dart';
 import '../settings/proxy_view.dart';
 import '../tdlib/td_client.dart';
 import '../theme/app_motion.dart';
@@ -90,7 +92,6 @@ class _LoginViewState extends State<LoginView> {
   int _resendRemainingSeconds = 0;
   final FocusNode _phoneFocus = FocusNode();
   final FocusNode _emailFocus = FocusNode();
-  ProxyConfig? _proxy;
   int _restorableBackupCount = 0;
   bool _backupConsent = false;
   bool _backupSupported = false;
@@ -108,7 +109,6 @@ class _LoginViewState extends State<LoginView> {
   @override
   void initState() {
     super.initState();
-    _loadProxy();
     unawaited(_loadBotEndpoint());
     if (Platform.isIOS || Platform.isAndroid) {
       unawaited(_initializeBackupConsent());
@@ -134,11 +134,6 @@ class _LoginViewState extends State<LoginView> {
       c.dispose();
     }
     super.dispose();
-  }
-
-  Future<void> _loadProxy() async {
-    final proxy = await ProxyConfig.load();
-    if (mounted) setState(() => _proxy = proxy);
   }
 
   Future<void> _loadBotEndpoint() async {
@@ -1295,62 +1290,33 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  /// The sidebar's 代理 shortcut, unchanged — same widget, same 代理 page, same
+  /// status badge. The login screen only adds the quick-disable press.
   Widget _proxyIconButton() {
-    final c = context.colors;
-    final enabled = _proxy?.isUsable ?? false;
-    return Tooltip(
-      message: AppStrings.t(AppStringKeys.proxyTitle),
-      child: AppInteractiveSurface(
-        semanticLabel: AppStrings.t(AppStringKeys.proxyTitle),
-        onTap: _openProxySetup,
-        onLongPress: enabled ? _disableProxy : null,
-        onSecondaryTap: enabled ? _disableProxy : null,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              AppIcon(
-                HeroAppIcons.globe,
-                size: 25,
-                color: enabled ? AppTheme.brand : c.textPrimary,
-              ),
-              if (enabled)
-                Positioned(
-                  right: -2,
-                  top: -2,
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: AppTheme.brand,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: c.background, width: 1.2),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    return ProfileProxyButton(
+      onTap: _openProxySettings,
+      onLongPress: _disableProxy,
+      onSecondaryTap: _disableProxy,
     );
   }
 
-  Future<void> _openProxySetup() async {
-    final changed = await Navigator.of(context).push<bool>(
+  Future<void> _openProxySettings() async {
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => const ProxyEditView(allowOfflineSave: true),
+        builder: (_) => const ProxyView(),
       ),
     );
-    if (changed == true) await _loadProxy();
+    // The page reports its own mutations to ProxyStatusController while it is
+    // open; the refresh on the way back covers the time it spent open, when a
+    // reconnect may have moved the link without a pushed state arriving.
+    unawaited(ProxyStatusController.shared.refresh());
   }
 
   Future<void> _disableProxy() async {
     await ProxyConfig.disable();
     unawaited(TdClient.shared.applySavedProxyToActive());
-    await _loadProxy();
+    unawaited(ProxyStatusController.shared.refresh());
   }
 
   void _showCountrySheet() {

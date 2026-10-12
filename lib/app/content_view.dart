@@ -45,6 +45,9 @@ class ContentView extends StatelessWidget {
     final step = context.watch<AuthManager>().step;
     final Widget child = switch (step) {
       AuthReady() => const MainTabView(),
+      // A real cold start (and a logout) paints the splash. AuthReloading is a
+      // re-read of an already-running client — account switch or add account —
+      // and the login surface is what the user asked for, so it stays on screen.
       AuthInitializing() || AuthLoggingOut() => const SplashView(),
       _ => const LoginView(),
     };

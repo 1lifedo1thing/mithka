@@ -1,12 +1,14 @@
 //
 //  profile_proxy_button.dart
 //
-//  The sidebar's 代理 shortcut, between 设置 and the day/night switch. The glyph
-//  doubles as the status light, the way Telegram's own clients do it: the
-//  globe turns brand-coloured once a proxy is switched on, and a corner badge
-//  says what the link is doing — a green dot while it carries traffic, a
-//  spinner while it is being reached, a red dot when there is no network to
-//  reach it with, a grey dot while a saved proxy sits switched off.
+//  The 代理 shortcut — the sidebar puts it between 设置 and the day/night
+//  switch, and the login screen carries the same glyph in its top-right
+//  action row. The glyph doubles as the status light, the way Telegram's own
+//  clients do it: the globe turns brand-coloured once a proxy is switched
+//  on, and a corner badge says what the link is doing — a green dot while it
+//  carries traffic, a spinner while it is being reached, a red dot when
+//  there is no network to reach it with, a grey dot while a saved proxy sits
+//  switched off.
 //
 
 import 'package:flutter/material.dart';
@@ -37,11 +39,23 @@ String proxyStatusLabel(ProxyIndicator indicator) {
 }
 
 class ProfileProxyButton extends StatefulWidget {
-  const ProfileProxyButton({super.key, required this.onTap});
+  const ProfileProxyButton({
+    super.key,
+    required this.onTap,
+    this.onLongPress,
+    this.onSecondaryTap,
+  });
 
   /// Opens the 代理 page. The owner keeps the navigation, like the sibling
   /// entries in the same bar.
   final VoidCallback onTap;
+
+  /// Optional quick disable, held by the login screen: long-pressing (or
+  /// right-clicking) the globe with a proxy enabled switches it off without
+  /// walking into the 代理 page. Absent on the sidebar, whose long-press slot
+  /// is free.
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSecondaryTap;
 
   @override
   State<ProfileProxyButton> createState() => _ProfileProxyButtonState();
@@ -71,6 +85,10 @@ class _ProfileProxyButtonState extends State<ProfileProxyButton> {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
+          onSecondaryTapUp: widget.onSecondaryTap == null
+              ? null
+              : (_) => widget.onSecondaryTap!(),
           child: Tooltip(
             message: label,
             child: SizedBox(

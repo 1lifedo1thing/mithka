@@ -12,7 +12,9 @@ void main() {
       final login = File('lib/auth/login_view.dart').readAsStringSync();
 
       expect(topics, contains('onSecondaryTap: onLongPress'));
-      expect(login, contains('onSecondaryTap: enabled ? _disableProxy : null'));
+      // The login proxy entry routes both presses through the shared
+      // ProfileProxyButton; the secondary action must survive the delegation.
+      expect(login, contains('onSecondaryTap: _disableProxy'));
     },
   );
 }
