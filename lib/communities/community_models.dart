@@ -34,6 +34,7 @@ class CommunitySummary {
     required this.haveAccess,
     required this.isAdministrator,
     required this.canEditChatList,
+    this.canChangeInfo = false,
     this.photo,
     this.collapsed = false,
   });
@@ -60,6 +61,7 @@ class CommunitySummary {
           isCreator ||
           (rights?.boolean('can_edit_chat_list') ?? false) ||
           (object.obj('permissions')?.boolean('can_edit_chat_list') ?? false),
+      canChangeInfo: isCreator || (rights?.boolean('can_change_info') ?? false),
       photo: TDParse.smallPhoto(object.obj('photo')),
       collapsed: serverCollapsed ?? collapsed,
     );
@@ -70,6 +72,7 @@ class CommunitySummary {
   bool haveAccess;
   bool isAdministrator;
   bool canEditChatList;
+  bool canChangeInfo;
   TdFileRef? photo;
   bool collapsed;
 
@@ -78,6 +81,7 @@ class CommunitySummary {
     haveAccess = other.haveAccess;
     isAdministrator = other.isAdministrator;
     canEditChatList = other.canEditChatList;
+    canChangeInfo = other.canChangeInfo;
     photo = other.photo;
   }
 }
