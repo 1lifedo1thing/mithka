@@ -1266,6 +1266,11 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
                                         unread: _unread.countFor(
                                           theme.unreadBadgeMode,
                                         ),
+                                        // The system glass bar measures itself
+                                        // against the window bottom, not this
+                                        // sidebar column; draw the app glass
+                                        // whose indicator follows the tabs.
+                                        useNativeGlass: false,
                                       ),
                                     ),
                                   ),
@@ -2261,6 +2266,7 @@ class _MainBottomBar extends StatelessWidget {
     required this.items,
     required this.unread,
     this.chatListController,
+    this.useNativeGlass = true,
   });
   final int selection;
   final ValueChanged<int> onSelect;
@@ -2268,6 +2274,13 @@ class _MainBottomBar extends StatelessWidget {
   final List<_MainTabItem> items;
   final int unread;
   final ChatListController? chatListController;
+
+  /// The system glass bar is a window-bottom bar: UIKit paints its selection
+  /// capsule to its own slot metrics, so a split shell hosting it inside a
+  /// narrow sidebar column misplaces the highlight over the tabs. Split-shell
+  /// callers opt out to draw the app-owned glass bar instead, whose indicator
+  /// follows the actual tab slots.
+  final bool useNativeGlass;
 
   /// Label size the bar is laid out around. The icon block above it keeps its
   /// size at every text scale, so only this line's growth is added to the bar.
@@ -2364,7 +2377,10 @@ class _MainBottomBar extends StatelessWidget {
         ),
       );
     }
-    if (glass && !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    if (glass &&
+        useNativeGlass &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS) {
       return NativeBottomTabBar(
         items: [
           for (final item in items)
