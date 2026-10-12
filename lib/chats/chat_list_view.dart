@@ -1001,7 +1001,6 @@ class _ChatListViewState extends State<ChatListView>
   StreamSubscription? _activeSlotSub;
   ChatListConnectionStatus _connectionStatus =
       ChatListConnectionStatus.connecting;
-  int _connectionRefreshGeneration = 0;
   int? _openSwipeChat;
   bool _showPlusMenu = false;
   bool _showFilterMenu = false;
@@ -1065,10 +1064,9 @@ class _ChatListViewState extends State<ChatListView>
         .updatesOf('updateConnectionState')
         .listen(_applyConnectionUpdate);
     _activeSlotSub = TdClient.shared.subscribeActiveSlotChanges().listen((_) {
-      _setConnectionStatus(ChatListConnectionStatus.connecting);
-      unawaited(_refreshConnectionStatus());
+      _refreshConnectionStatus();
     });
-    unawaited(_refreshConnectionStatus());
+    _refreshConnectionStatus();
   }
 
   @override
@@ -1224,27 +1222,25 @@ class _ChatListViewState extends State<ChatListView>
     setState(() => _connectionStatus = status);
   }
 
-  Future<void> _refreshConnectionStatus() async {
-    final generation = ++_connectionRefreshGeneration;
-    final slot = TdClient.shared.activeSlot;
-    try {
-      final state = await TdClient.shared.queryForSlot({
-        '@type': 'getConnectionState',
-      }, slot);
-      if (!mounted ||
-          generation != _connectionRefreshGeneration ||
-          slot != TdClient.shared.activeSlot) {
-        return;
-      }
-      _setConnectionStatus(chatListConnectionStatusForTdState(state.type));
-    } catch (_) {
-      if (!mounted ||
-          generation != _connectionRefreshGeneration ||
-          slot != TdClient.shared.activeSlot) {
-        return;
-      }
-      _setConnectionStatus(ChatListConnectionStatus.disconnected);
-    }
+  /// Seeds the header from the last connection state TDLib reported for the
+  /// active account.
+  ///
+  /// `updateConnectionState` is push-only and TDLib sends it just once per
+  /// change, so a view that mounts after the account settled would otherwise
+  /// have nothing to read. There is no request to ask with: TDLib has no
+  /// `getConnectionState`, and `getCurrentState` would serialise the whole
+  /// account to answer about one field. An unknown answer stays `connecting` —
+  /// never `disconnected`, which would claim a state TDLib never reported.
+  void _refreshConnectionStatus() {
+    if (!mounted) return;
+    final stateType = TdClient.shared.latestConnectionStateUpdate
+        ?.obj('state')
+        ?.type;
+    _setConnectionStatus(
+      stateType == null
+          ? ChatListConnectionStatus.connecting
+          : chatListConnectionStatusForTdState(stateType),
+    );
   }
 
   Future<void> _openChat(ChatSummary chat, {bool focusComposer = false}) async {

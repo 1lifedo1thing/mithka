@@ -222,7 +222,6 @@ Map<String, dynamic> _response(Map<String, dynamic> request) =>
         'has_forum_tabs': false,
         'status': {'@type': 'chatMemberStatusMember'},
       },
-      'getConnectionState' => {'@type': 'connectionStateReady'},
       'getForumTopics' => {
         '@type': 'forumTopics',
         'topics': [

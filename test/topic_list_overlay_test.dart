@@ -27,7 +27,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   late StreamController<Map<String, dynamic>> updates;
   final requests = <Map<String, dynamic>>[];
-  setUpAll(() {
+  setUpAll(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('mithka/share_intent'),
@@ -45,6 +45,14 @@ void main() {
         updates: updates.stream,
       ),
     );
+    // Real TDLib reports the connection state as soon as a client exists and
+    // then only when it changes; the chat-list header reads that report rather
+    // than asking, so the fake has to say it once here.
+    updates.add({
+      '@type': 'updateConnectionState',
+      'state': {'@type': 'connectionStateReady'},
+    });
+    await Future<void>.delayed(Duration.zero);
   });
   setUp(() {
     requests.clear();
@@ -255,7 +263,6 @@ Map<String, dynamic> _response(Map<String, dynamic> request) =>
         'has_forum_tabs': false,
         'status': {'@type': 'chatMemberStatusMember'},
       },
-      'getConnectionState' => {'@type': 'connectionStateReady'},
       'getForumTopics' => {
         '@type': 'forumTopics',
         'topics': [
