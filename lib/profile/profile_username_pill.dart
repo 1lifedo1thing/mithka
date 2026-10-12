@@ -44,67 +44,79 @@ bool _pillColorsAreDistinct(Color a, Color b) {
 }
 
 class ProfileUsernamePill extends StatelessWidget {
-  const ProfileUsernamePill({super.key, required this.username});
+  const ProfileUsernamePill({super.key, required this.username, this.onTap});
 
   final String username;
+
+  /// Called with the normalized username (no `@`, no surrounding whitespace)
+  /// when the pill is tapped. Null keeps the pill purely informational.
+  final ValueChanged<String>? onTap;
 
   @override
   Widget build(BuildContext context) {
     final normalized = username.trim().replaceFirst(RegExp(r'^@+'), '');
     final palette = profileUsernamePillPalette(context.colors);
-    return Semantics(
-      label: '@$normalized',
-      container: true,
-      child: ExcludeSemantics(
-        child: Container(
-          key: const ValueKey('profileUsernamePill'),
-          constraints: const BoxConstraints(minHeight: 20),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(999)),
-          child: Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  key: const ValueKey('profileUsernamePillAt'),
-                  color: palette.capFill,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  child: Text(
-                    '@',
-                    style: TextStyle(
-                      color: palette.capInk,
-                      fontSize: 13,
-                      height: 1.15,
-                      fontWeight: context.appFontWeight(AppTextWeight.semibold),
-                    ),
-                  ),
-                ),
-                Flexible(
-                  child: Container(
-                    key: const ValueKey('profileUsernamePillValue'),
-                    color: palette.bodyFill,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap == null ? null : () => onTap!(normalized),
+      child: Semantics(
+        label: '@$normalized',
+        container: true,
+        child: ExcludeSemantics(
+          child: Container(
+            key: const ValueKey('profileUsernamePill'),
+            constraints: const BoxConstraints(minHeight: 20),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(999)),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    key: const ValueKey('profileUsernamePillAt'),
+                    color: palette.capFill,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
+                      horizontal: 6,
                       vertical: 2,
                     ),
                     child: Text(
-                      normalized,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      '@',
                       style: TextStyle(
-                        color: palette.bodyInk,
+                        color: palette.capInk,
                         fontSize: 13,
                         height: 1.15,
-                        fontWeight: context.appFontWeight(AppTextWeight.medium),
+                        fontWeight: context.appFontWeight(
+                          AppTextWeight.semibold,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Flexible(
+                    child: Container(
+                      key: const ValueKey('profileUsernamePillValue'),
+                      color: palette.bodyFill,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        normalized,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.bodyInk,
+                          fontSize: 13,
+                          height: 1.15,
+                          fontWeight: context.appFontWeight(
+                            AppTextWeight.medium,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

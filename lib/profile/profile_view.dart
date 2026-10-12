@@ -22,6 +22,7 @@ import '../auth/auth_manager.dart';
 import '../call/calls_view.dart';
 import '../chat/chat_wallpaper.dart';
 import '../chat/custom_emoji.dart';
+import '../chat/link_handler.dart';
 import '../chat/shared_media_view.dart';
 import '../components/app_icons.dart';
 import '../components/confirm_dialog.dart';
@@ -384,7 +385,15 @@ class _ProfileViewState extends State<ProfileView> {
                             children: [
                               for (final identity in identities)
                                 identity.startsWith('@')
-                                    ? ProfileUsernamePill(username: identity)
+                                    ? ProfileUsernamePill(
+                                        username: identity,
+                                        onTap: (username) => unawaited(
+                                          openLink(
+                                            context,
+                                            'https://t.me/$username',
+                                          ),
+                                        ),
+                                      )
                                     : Text(
                                         identity,
                                         style: TextStyle(
