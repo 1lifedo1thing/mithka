@@ -2720,6 +2720,13 @@ abstract final class AppStringKeys {
       'stickerStudioCustomEmojiThumbnailRemove';
   static const stickerStudioDelete = 'stickerStudioDelete';
   static const stickerStudioDeleteFailed = 'stickerStudioDeleteFailed';
+  static const stickerStudioDone = 'stickerStudioDone';
+  static const stickerStudioLinkCopied = 'stickerStudioLinkCopied';
+  static const stickerStudioLinkInvalid = 'stickerStudioLinkInvalid';
+  static const stickerStudioLinkPrefixEmoji = 'stickerStudioLinkPrefixEmoji';
+  static const stickerStudioLinkPrefixStickers =
+      'stickerStudioLinkPrefixStickers';
+  static const stickerStudioMaskBadge = 'stickerStudioMaskBadge';
   static const stickerStudioDeleteMessage = 'stickerStudioDeleteMessage';
   static const stickerStudioDeleteTitle = 'stickerStudioDeleteTitle';
   static const stickerStudioEmpty = 'stickerStudioEmpty';
@@ -2743,18 +2750,30 @@ abstract final class AppStringKeys {
       'stickerStudioMaskPlacementValue';
   static const stickerStudioMatchingEmojiHint =
       'stickerStudioMatchingEmojiHint';
+  static const stickerStudioNameAvailable = 'stickerStudioNameAvailable';
+  static const stickerStudioNameChecking = 'stickerStudioNameChecking';
   static const stickerStudioNameUnavailable = 'stickerStudioNameUnavailable';
   static const stickerStudioNewSet = 'stickerStudioNewSet';
   static const stickerStudioNoFile = 'stickerStudioNoFile';
+  static const stickerStudioOpenLink = 'stickerStudioOpenLink';
   static const stickerStudioRemove = 'stickerStudioRemove';
   static const stickerStudioRefresh = 'stickerStudioRefresh';
   static const stickerStudioRemoveMessage = 'stickerStudioRemoveMessage';
+  static const stickerStudioRemoveSelectedFailed =
+      'stickerStudioRemoveSelectedFailed';
+  static const stickerStudioRemoveSelectedMessage =
+      'stickerStudioRemoveSelectedMessage';
+  static const stickerStudioRemoveSelectedTitle =
+      'stickerStudioRemoveSelectedTitle';
   static const stickerStudioRemoveSticker = 'stickerStudioRemoveSticker';
   static const stickerStudioRemoveThumbnail = 'stickerStudioRemoveThumbnail';
   static const stickerStudioRename = 'stickerStudioRename';
+  static const stickerStudioReorderHint = 'stickerStudioReorderHint';
   static const stickerStudioRepaint = 'stickerStudioRepaint';
   static const stickerStudioSave = 'stickerStudioSave';
   static const stickerStudioScale = 'stickerStudioScale';
+  static const stickerStudioSelectedCount = 'stickerStudioSelectedCount';
+  static const stickerStudioSelectHint = 'stickerStudioSelectHint';
   static const stickerStudioSetLimit = 'stickerStudioSetLimit';
   static const stickerStudioSetThumbnail = 'stickerStudioSetThumbnail';
   static const stickerStudioSetTitle = 'stickerStudioSetTitle';
