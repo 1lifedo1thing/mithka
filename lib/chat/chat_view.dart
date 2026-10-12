@@ -116,6 +116,7 @@ import 'media_library_saver.dart';
 import 'media_send_preview_view.dart';
 import 'media_spoiler.dart';
 import 'message_action_menu.dart';
+import 'message_action_menu_presentation.dart';
 import 'message_bubble.dart';
 import 'message_bubble_repository_view.dart';
 import 'message_quote_selection_dialog.dart';
@@ -1225,6 +1226,9 @@ class _ChatViewState extends State<ChatView> {
   String _reactionTab = 'standard'; // 'standard' or a custom-emoji pack id
   MessageReactionAvailability? _actionReactionAvailability;
   int _actionReactionAvailabilityGeneration = 0;
+  Offset?
+  _actionAnchor; // overlay-space point the HUD grows from / collapses to
+  Widget? _actionOverlaySnapshot; // last visible overlay, replayed during exit
   int _lastCount = 0;
   bool _didInitialScroll = false; // one-time entry positioning has run
   bool _showJumpDown = false; // scrolled up → show jump-to-bottom button
@@ -3923,6 +3927,8 @@ class _ChatViewState extends State<ChatView> {
     setState(() {
       _actionTarget = null;
       _actionRect = null;
+      // Multi-select replaces the HUD outright; there is no exit to replay.
+      _actionOverlaySnapshot = null;
       _clearMobileTextSelectionState();
       _actionSource = MessageActionSource.normal;
       _reactionExpanded = false;
@@ -6470,7 +6476,9 @@ class _ChatViewState extends State<ChatView> {
                         ),
                         if (_desktopStickerSetId != null)
                           _desktopStickerSetPanel(_desktopStickerSetId!),
-                        if (_actionTarget != null && !_isSelecting)
+                        if ((_actionTarget != null ||
+                                _actionOverlaySnapshot != null) &&
+                            !_isSelecting)
                           _actionMenuOverlay(),
                       ],
                     ),
@@ -9630,6 +9638,9 @@ class _ChatViewState extends State<ChatView> {
           ? _desktopQuote
           : null;
       _actionRect = overlayRect;
+      // The HUD's enter grows out of the pressed message and its exit
+      // collapses back into it.
+      _actionAnchor = overlayRect?.center;
       _mobileTextSelectionAreaKey = enableMobileTextSelection
           ? GlobalKey<SelectionAreaState>()
           : null;
@@ -10060,6 +10071,71 @@ class _ChatViewState extends State<ChatView> {
   ) => _sendReaction(() => _vm.toggleReaction(message, reaction));
 
   Widget _actionMenuOverlay() {
+    final liveTarget = _actionTarget;
+    if (liveTarget != null) {
+      // Capture the fully configured surfaces this frame. Every close path
+      // clears the live state immediately, and the presentation replays this
+      // snapshot while the exit animation runs — otherwise the collapsing HUD
+      // would show the already-cleared state instead of the closing menu.
+      _actionOverlaySnapshot = _actionOverlayContent(liveTarget);
+    }
+    final content = _actionOverlaySnapshot;
+    if (content == null) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: ChatActionOverlayGestureLayer(
+        selectionAreaKey: _mobileTextSelectionMessageId == null
+            ? null
+            : _mobileTextSelectionAreaKey,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                key: const ValueKey('message-action-dismiss-layer'),
+                behavior: HitTestBehavior.opaque,
+                onTap: _dismissActionOverlay,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned.fill(
+              child: MessageActionMenuPresentation(
+                visible: liveTarget != null,
+                anchor: _actionAnchor,
+                onExitComplete: _handleActionOverlayExitComplete,
+                child: content,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Clears the live action state, handing the closing overlay its snapshot to
+  /// replay during the exit. A second dismiss while the exit is still running
+  /// finds no live target and leaves the running reverse alone.
+  void _dismissActionOverlay() {
+    if (_actionTarget == null) return;
+    setState(() {
+      _actionTarget = null;
+      _actionRect = null;
+      _lastActionPointerGlobalPosition = null;
+      _clearMobileTextSelectionState();
+      _actionSource = MessageActionSource.normal;
+      _reactionExpanded = false;
+    });
+  }
+
+  /// The exit animation landed: drop the snapshot and unmount the overlay. A
+  /// late report for a menu that has since re-opened (or closed again) is
+  /// stale — only a snapshot from the reported close is released here.
+  void _handleActionOverlayExitComplete() {
+    if (!mounted || _actionTarget != null || _actionOverlaySnapshot == null) {
+      return;
+    }
+    setState(() => _actionOverlaySnapshot = null);
+  }
+
+  Widget _actionOverlayContent(ChatMessage target) {
     final overlayBox =
         _actionOverlayKey.currentContext?.findRenderObject() as RenderBox?;
     final screenSize = overlayBox?.hasSize == true
@@ -10070,9 +10146,10 @@ class _ChatViewState extends State<ChatView> {
     final screenH = screenSize.height;
     final topSafe = safeArea.top + 8;
     final bottomSafe = screenH - safeArea.bottom - 8;
-    final outgoing = _actionTarget!.isOutgoing;
+    final outgoing = target.isOutgoing;
     final rect = _actionRect;
-    final showActionMenu = !_reactionExpanded;
+    final expandedReactions = _reactionExpanded;
+    final showActionMenu = !expandedReactions;
     final desktopMenu = isDesktopTargetPlatform(Theme.of(context).platform);
     final mobileDropdown =
         !desktopMenu &&
@@ -10083,27 +10160,27 @@ class _ChatViewState extends State<ChatView> {
         verticalMenu && rect != null && rect.width == 0 && rect.height == 0;
     final reactionAvailability = _actionReactionAvailability;
     final showReactions = messageActionShowsReactionControls(
-      isCall: _actionTarget!.isCall,
+      isCall: target.isCall,
       availability: reactionAvailability,
     );
     final actionMenu = MessageActionMenu(
-      message: _actionTarget!,
-      isPinned: _vm.pinnedMessage?.id == _actionTarget!.id,
+      message: target,
+      isPinned: _vm.pinnedMessage?.id == target.id,
       allowForwarding: _vm.canForwardContent,
       allowTranslation: _hasAvailableTranslationOption,
       allowQuote: _vm.canQuoteText,
       hasSelectedQuote: _actionQuote != null,
       allowSuggestedPostOffer:
           _vm.isDirectMessagesGroup && !_vm.isAdministeredDirectMessagesGroup,
-      allowHideSender: _canHideSender(_actionTarget!),
+      allowHideSender: _canHideSender(target),
       source: _actionSource,
       showingOriginalTranslation: _showOriginalTranslationMessageIds.contains(
-        _actionTarget!.id,
+        target.id,
       ),
       layout: verticalMenu
           ? MessageActionMenuLayout.vertical
           : MessageActionMenuLayout.grid,
-      onSelect: (action) => _perform(action, _actionTarget!),
+      onSelect: (action) => _perform(action, target),
     );
 
     // Desktop treats the strip as the menu's upper storey and places the pair
@@ -10113,7 +10190,7 @@ class _ChatViewState extends State<ChatView> {
     final desktopStrip =
         desktopMenu &&
         !_reactionExpanded &&
-        !_actionTarget!.isCall &&
+        !target.isCall &&
         (reactionAvailability == null || reactionAvailability.canAdd);
     final desktopStripH = desktopStrip
         ? MenuReactionBar.height + _menuReactionGap
@@ -10177,90 +10254,64 @@ class _ChatViewState extends State<ChatView> {
           )
         : Offset.zero;
 
-    void dismiss() => setState(() {
-      _actionTarget = null;
-      _actionRect = null;
-      _lastActionPointerGlobalPosition = null;
-      _clearMobileTextSelectionState();
-      _actionSource = MessageActionSource.normal;
-      _reactionExpanded = false;
-    });
-
-    return Positioned.fill(
-      child: ChatActionOverlayGestureLayer(
-        selectionAreaKey: _mobileTextSelectionMessageId == null
-            ? null
-            : _mobileTextSelectionAreaKey,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: GestureDetector(
-                key: const ValueKey('message-action-dismiss-layer'),
-                behavior: HitTestBehavior.opaque,
-                onTap: dismiss,
-                child: const SizedBox.expand(),
-              ),
+    return Stack(
+      children: [
+        // Call logs and other special messages aren't reactable — no strip.
+        if (showReactions)
+          Positioned(
+            top: desktopMenu ? desktopOrigin.dy : reactionTop,
+            left: desktopMenu ? desktopOrigin.dx : 10,
+            right: desktopMenu ? null : 10,
+            child: AnimatedBuilder(
+              animation: EmojiStore.shared,
+              builder: (context, _) {
+                final availability = reactionAvailability!;
+                if (expandedReactions) {
+                  final picker = _expandedReactionPicker(availability);
+                  return desktopMenu
+                      ? picker
+                      : Align(alignment: align, child: picker);
+                }
+                final reactions = _quickReactionChoices(availability);
+                if (desktopMenu) {
+                  return SizedBox(
+                    width: verticalMenuWidth,
+                    child: MenuReactionBar(
+                      reactions: reactions,
+                      onReaction: _reactQuick,
+                      onExpand: () => setState(() => _reactionExpanded = true),
+                    ),
+                  );
+                }
+                return Align(
+                  alignment: align,
+                  child: QuickReactionBar(
+                    reactions: reactions,
+                    onReaction: _reactQuick,
+                    onExpand: () => setState(() => _reactionExpanded = true),
+                  ),
+                );
+              },
             ),
-            // Call logs and other special messages aren't reactable — no strip.
-            if (showReactions)
-              Positioned(
-                top: desktopMenu ? desktopOrigin.dy : reactionTop,
-                left: desktopMenu ? desktopOrigin.dx : 10,
-                right: desktopMenu ? null : 10,
-                child: AnimatedBuilder(
-                  animation: EmojiStore.shared,
-                  builder: (context, _) {
-                    final availability = reactionAvailability!;
-                    if (_reactionExpanded) {
-                      final picker = _expandedReactionPicker(availability);
-                      return desktopMenu
-                          ? picker
-                          : Align(alignment: align, child: picker);
-                    }
-                    final reactions = _quickReactionChoices(availability);
-                    if (desktopMenu) {
-                      return SizedBox(
-                        width: verticalMenuWidth,
-                        child: MenuReactionBar(
-                          reactions: reactions,
-                          onReaction: _reactQuick,
-                          onExpand: () =>
-                              setState(() => _reactionExpanded = true),
-                        ),
-                      );
-                    }
-                    return Align(
-                      alignment: align,
-                      child: QuickReactionBar(
-                        reactions: reactions,
-                        onReaction: _reactQuick,
-                        onExpand: () =>
-                            setState(() => _reactionExpanded = true),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            if (showActionMenu)
-              Positioned(
-                top: desktopMenu
-                    ? desktopOrigin.dy + desktopStripH
-                    : pointerAnchored
-                    ? pointerMenuOrigin.dy
-                    : menuTop,
-                left: desktopMenu
-                    ? desktopOrigin.dx
-                    : pointerAnchored
-                    ? pointerMenuOrigin.dx
-                    : 10,
-                right: desktopMenu || pointerAnchored ? null : 10,
-                child: desktopMenu || pointerAnchored
-                    ? boundedActionMenu
-                    : Align(alignment: align, child: boundedActionMenu),
-              ),
-          ],
-        ),
-      ),
+          ),
+        if (showActionMenu)
+          Positioned(
+            top: desktopMenu
+                ? desktopOrigin.dy + desktopStripH
+                : pointerAnchored
+                ? pointerMenuOrigin.dy
+                : menuTop,
+            left: desktopMenu
+                ? desktopOrigin.dx
+                : pointerAnchored
+                ? pointerMenuOrigin.dx
+                : 10,
+            right: desktopMenu || pointerAnchored ? null : 10,
+            child: desktopMenu || pointerAnchored
+                ? boundedActionMenu
+                : Align(alignment: align, child: boundedActionMenu),
+          ),
+      ],
     );
   }
 
