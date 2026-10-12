@@ -12,33 +12,6 @@ Iterable<TextSpan> _textSpans(InlineSpan span) sync* {
   }
 }
 
-/// Regression probes for the reported "profile bio links sometimes do not
-/// respond" — the bio swaps from empty to loaded while the widget stays
-/// mounted, which is the timing real profile pages hit.
-class _TapProbe {
-  static const linkKey = ValueKey('probe-target');
-  int hits = 0;
-  bool openLinkCalled = false;
-
-  Widget build({
-    required String text,
-    required List<MessageTextEntity> entities,
-  }) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => TelegramRichText(
-            key: linkKey,
-            text: text,
-            entities: entities,
-            style: const TextStyle(fontSize: 15),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 void main() {
   // The bio loads after the page mounts: an empty bio renders first, the
   // fetched full info replaces it in place. Every frame in between must leave
@@ -47,25 +20,16 @@ void main() {
     tester,
   ) async {
     const bio = 'read https://t.me/mithka first';
-    const entities = <MessageTextEntity>[];
-    var openLinkCount = 0;
-
-    // Track openLink through the span recognizer by tapping and observing the
-    // navigation attempt (openLink runs TDLib, unavailable in tests; the
-    // gesture landing is what this probe verifies).
+    // This probe verifies recognizer attachment. Production tap routing is
+    // exercised separately with a recording TDLib proxy.
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Column(
-              children: [
-                const TelegramRichText(key: ValueKey('bio'), text: ''),
-                Builder(
-                  builder: (context) =>
-                      FilledButton(onPressed: () {}, child: const Text('noop')),
-                ),
-              ],
-            ),
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TelegramRichText(key: ValueKey('bio'), text: ''),
+              SizedBox.shrink(),
+            ],
           ),
         ),
       ),
@@ -73,22 +37,13 @@ void main() {
 
     // Swap in the loaded bio the way the profile page does.
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Column(
-              children: [
-                TelegramRichText(
-                  key: const ValueKey('bio'),
-                  text: bio,
-                  entities: entities,
-                ),
-                Builder(
-                  builder: (context) =>
-                      FilledButton(onPressed: () {}, child: const Text('noop')),
-                ),
-              ],
-            ),
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TelegramRichText(key: ValueKey('bio'), text: bio),
+              SizedBox.shrink(),
+            ],
           ),
         ),
       ),
@@ -113,11 +68,9 @@ void main() {
   ) async {
     const bio = 'read https://t.me/mithka first';
 
-    Widget host() => MaterialApp(
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: TelegramRichText(key: const ValueKey('bio'), text: bio),
-        ),
+    Widget host() => const MaterialApp(
+      home: Scaffold(
+        body: TelegramRichText(key: ValueKey('bio'), text: bio),
       ),
     );
 
