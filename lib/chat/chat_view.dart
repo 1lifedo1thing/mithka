@@ -30,7 +30,9 @@ import '../app/video_split_controller.dart';
 import '../auth/account_store.dart';
 import '../auth/telegram_country_names.dart';
 import '../call/call_manager.dart';
-import '../channels/topic_chat_view.dart';
+import '../channels/topic_list_actions.dart';
+import '../channels/topic_list_host.dart';
+import '../channels/topic_list_row.dart';
 import '../channels/topic_navigation.dart';
 import '../chats/search_token_views.dart';
 import '../communities/community_models.dart';
@@ -57,7 +59,6 @@ import '../settings/business_tools_views.dart';
 import '../settings/hidden_sender_store.dart';
 import '../settings/quick_reaction_settings_view.dart';
 import '../settings/sensitive_content_controller.dart';
-import '../settings/topic_group_display_mode.dart';
 import '../settings/translation_api.dart';
 import '../settings/translation_controller.dart';
 import '../tdlib/forum_topic_index.dart';
@@ -102,6 +103,7 @@ import 'chat_wallpaper.dart';
 import 'checklist_composer_view.dart';
 import 'custom_emoji.dart';
 import 'emoji_store.dart';
+import 'forum_topic_transcript.dart';
 import 'forward_markdown.dart';
 import 'forward_options.dart';
 import 'group_remark_controller.dart';
@@ -970,7 +972,6 @@ class ChatView extends StatefulWidget {
     this.trailingPane,
     this.trailingPaneWidth = 0,
     this.requestComposerFocusOnReady = false,
-    this.onOpenTopicMode,
     this.onOpenTopicTranscript,
     this.onChatKindResolved,
     this.onInfoPressed,
@@ -983,7 +984,7 @@ class ChatView extends StatefulWidget {
   final String title;
 
   /// When set, the transcript renders this single forum topic as an ordinary
-  /// chat (see ThemeController.forumTopicsAsGroupChat).
+  /// chat (topics always fold into the chat transcript now).
   final int? forumTopicId;
   final int? initialMessageId;
   final ChatMessage? seedMessage;
@@ -996,11 +997,10 @@ class ChatView extends StatefulWidget {
   final Widget? trailingPane;
   final double trailingPaneWidth;
   final bool requestComposerFocusOnReady;
-  final ValueChanged<int?>? onOpenTopicMode;
 
   /// Lets an owning shell switch this chat to a topic transcript (or the
-  /// whole chat for null) when topics show as a regular group, so the new
-  /// transcript is built with the shell's current wiring.
+  /// whole chat for null), so the new transcript is built with the shell's
+  /// current wiring.
   final ValueChanged<int?>? onOpenTopicTranscript;
   final ValueChanged<ChatKind>? onChatKindResolved;
   final VoidCallback? onInfoPressed;
@@ -1532,6 +1532,7 @@ class _ChatViewState extends State<ChatView> {
       onActivateResult: _openSearchResult,
     )..addListener(_onSearchChanged);
     _vm.addListener(_onModel);
+    _vm.addListener(_publishTopicList);
     _setScrollTarget(widget.initialMessageId);
     _vm.onAppear();
     _readSyncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -1569,6 +1570,119 @@ class _ChatViewState extends State<ChatView> {
         _sessionKey.accountSlot,
         widget.chatId,
       );
+
+  // The split shell's topic-list relay: while this transcript lives in a
+  // sidebar-placement shell, its topic list is handed to the shell, which
+  // overlays it on the chat list column the way Telegram iOS does. The shell
+  // owns that pane, so topic switches keep its scroll position.
+  TopicListHost? _shellTopicListHost;
+  TopicListAttachment? _publishedAttachment;
+  bool _topicListOverlaid = false;
+
+  /// Wide split shells overlay this transcript's topic list on the chat list
+  /// column, so the in-pane rail stays out of the conversation there.
+  void _syncTopicListHostScope() {
+    _shellTopicListHost =
+        TopicListPlacementScope.of(context) == TopicListPlacement.sidebar
+        ? context.read<TopicListHost?>()
+        : null;
+  }
+
+  /// Publishes (or retracts) this transcript's topic list with the shell's
+  /// relay. Publishing an unchanged list is a no-op, so the shell's pane —
+  /// and its scroll position — survives every topic switch.
+  void _publishTopicList() {
+    if (!mounted) return;
+    final host = _shellTopicListHost;
+    // Forums hand their topic list to the shell the way Telegram iOS does;
+    // bot-topic chats keep the in-pane rail they already had. A pane rebuilt
+    // for another topic of the same forum inherits the outgoing attachment's
+    // verdict, because its fresh view model only learns isForum after an
+    // async getChat — without the handoff the shell would drop the overlay
+    // mid-switch and lose the pane's scroll. A fresh pane for a chat whose
+    // topics the shared index already knows is equally a forum: the index
+    // only fills from forum topic traffic, so it is evidence enough to keep
+    // the list on the chat list column while getChat is still in flight.
+    final prior = host?.attachment;
+    final takesOverForumList = prior?.chatId == widget.chatId;
+    final indexKnowsTopics = ForumTopicIndex.shared.knowsTopics(
+      _vm.accountSlot,
+      widget.chatId,
+    );
+    final overlaid =
+        host != null &&
+        (takesOverForumList || _vm.isForum || indexKnowsTopics) &&
+        !_vm.hasForumTabs;
+    _topicListOverlaid = overlaid;
+    final attachment = overlaid ? _topicListAttachment() : null;
+    final previous = _publishedAttachment;
+    if (attachment != null &&
+        previous != null &&
+        previous.sameContent(attachment)) {
+      return;
+    }
+    _publishedAttachment = attachment;
+    // The shell's sidebar listens to the host; publishing mid-build would
+    // mark an already-built ancestor dirty.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (attachment != null) {
+        if (mounted) host?.publish(attachment);
+        return;
+      }
+      if (previous != null) host?.unpublish(previous);
+    });
+  }
+
+  TopicListAttachment _topicListAttachment() => TopicListAttachment(
+    chatId: widget.chatId,
+    title: _vm.peerTitle.isEmpty ? widget.title : _vm.peerTitle,
+    usesSquareAvatar: _vm.isGroup || _vm.isChannel,
+    photo: _vm.peerPhoto,
+    topics: _topicListRows(),
+    selectedTopicId: widget.forumTopicId,
+    onSelect: _openTopicTranscript,
+    onCreateTopic: _vm.canCreateForumTopics ? _openCreateTopicDialog : null,
+    onTopicMenu: _showTopicRowMenu,
+  );
+
+  /// The rows handed to the shell. A pane rebuilt for another topic seeds
+  /// from the shared index first, which knows identities and counters but
+  /// not previews; the rows already published for this chat fill those in so
+  /// the overlay never flashes to bare rows mid-switch.
+  List<TopicNavigationItem> _topicListRows() {
+    final prior = _shellTopicListHost?.attachment;
+    final previousRows = prior?.chatId == widget.chatId
+        ? {for (final item in prior!.topics) item.id: item}
+        : null;
+    return [
+      for (final topic in _vm.forumTopics)
+        _topicNavigationItem(topic, prior: previousRows?[topic.id]),
+    ];
+  }
+
+  TopicNavigationItem _topicNavigationItem(
+    ForumTopicOption topic, {
+    TopicNavigationItem? prior,
+  }) => TopicNavigationItem(
+    id: topic.id,
+    name: topic.name,
+    iconCustomEmojiId: topic.iconCustomEmojiId,
+    iconColor: topic.iconColor,
+    unreadCount: topic.unreadCount,
+    isMuted: topic.isMuted,
+    isPinned: topic.isPinned || (prior?.isPinned ?? false),
+    isGeneral: topic.isGeneral || (prior?.isGeneral ?? false),
+    isClosed: topic.isClosed || (prior?.isClosed ?? false),
+    lastPreview: topic.lastPreview.isNotEmpty
+        ? topic.lastPreview
+        : prior?.lastPreview ?? '',
+    lastSender: topic.lastPreview.isNotEmpty
+        ? topic.lastSender
+        : prior?.lastSender,
+    lastMessageDate: topic.lastMessageDate != 0
+        ? topic.lastMessageDate
+        : prior?.lastMessageDate ?? 0,
+  );
 
   @override
   void didChangeDependencies() {
@@ -1621,6 +1735,8 @@ class _ChatViewState extends State<ChatView> {
       );
     }
     _scheduleHandoffRefresh();
+    _syncTopicListHostScope();
+    _publishTopicList();
   }
 
   int? _handoffMessageId() {
@@ -4162,6 +4278,14 @@ class _ChatViewState extends State<ChatView> {
     _search
       ..removeListener(_onSearchChanged)
       ..dispose();
+    final topicListHost = _shellTopicListHost;
+    final publishedTopicList = _publishedAttachment;
+    if (topicListHost != null && publishedTopicList != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => topicListHost.unpublish(publishedTopicList),
+      );
+    }
+    _vm.removeListener(_publishTopicList);
     _vm.removeListener(_onModel);
     _vm.onDisappear();
     _vm.dispose();
@@ -4204,6 +4328,71 @@ class _ChatViewState extends State<ChatView> {
           ),
           Expanded(child: Divider(color: c.linkBlue, height: 1, thickness: 1)),
         ],
+      ),
+    );
+  }
+
+  /// The section marker above the first message of a topic run, in the forum
+  /// transcript that mixes every topic together.
+  ///
+  /// Telegram iOS renders this as a tappable header naming the topic the
+  /// messages below belong to, so the list stays attributable without opening
+  /// each topic. Tapping it opens that topic's own transcript, matching the
+  /// topic list's navigation.
+  Widget _topicSectionHeader(int topicId) {
+    final c = context.colors;
+    final display = _topicSectionDisplay(topicId);
+    final plate = servicePlateBackground(c);
+    final foreground = servicePlateForeground(plate);
+    return Padding(
+      key: ValueKey('forum-topic-section-$topicId'),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Center(
+        child: GestureDetector(
+          key: ValueKey('forum-topic-section-tap-$topicId'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openTopicTranscript(topicId),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: plate,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (display.isGeneral && _vm.peerTitle.isNotEmpty)
+                  PhotoAvatar(
+                    title: _vm.peerTitle,
+                    photo: _vm.peerPhoto,
+                    size: 16,
+                    square: true,
+                    allowAnimation: false,
+                  )
+                else
+                  TopicIconSurface(
+                    size: 16,
+                    iconCustomEmojiId: display.iconCustomEmojiId,
+                    tint: display.iconColor == 0
+                        ? foreground
+                        : Color(0xFF000000 | (display.iconColor & 0xFFFFFF)),
+                  ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    display.name,
+                    key: ValueKey('forum-topic-section-label-$topicId'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyle.caption(foreground),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                AppIcon(HeroAppIcons.chevronRight, size: 11, color: foreground),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -4669,6 +4858,86 @@ class _ChatViewState extends State<ChatView> {
     if (index < 0 || index >= messages.length) return false;
     if (index == 0) return true;
     return messages[index].date - messages[index - 1].date > _separatorGap;
+  }
+
+  /// Whether the transcript mixes every topic into one list: a forum opened
+  /// without a specific topic. Telegram iOS sections that list by topic so
+  /// each message stays attributable; a single-topic transcript is already
+  /// scoped and needs no sections. Bot-topic chats are deliberately out: they
+  /// are not forums, and their unscoped transcript is an ordinary bot chat
+  /// whose messages would all fall back to General.
+  bool get _showsForumTopicSections =>
+      _vm.isForum && !_vm.isForumTopicTranscript;
+
+  /// The topic [message] belongs to. TDLib omits `topic_id` on General
+  /// messages, which is why the fallback is the General topic id and not null.
+  int _topicSectionId(ChatMessage message) =>
+      message.forumTopicId ?? generalForumTopicId;
+
+  /// The display data for a topic section header.
+  ///
+  /// The loaded topic page carries the name and icon; a topic outside that
+  /// page still resolves through the shared index, which live topic traffic
+  /// keeps current. Both can miss for a topic this session never listed, so
+  /// the label falls back to a generic one — the icon and the tap target keep
+  /// the message attributable either way.
+  ({String name, int iconCustomEmojiId, int iconColor, bool isGeneral})
+  _topicSectionDisplay(int topicId) {
+    final isGeneral = topicId == generalForumTopicId;
+    final topic = _topicById(topicId);
+    if (topic != null) {
+      return (
+        name: topic.name,
+        iconCustomEmojiId: topic.iconCustomEmojiId,
+        iconColor: topic.iconColor,
+        isGeneral: isGeneral,
+      );
+    }
+    final indexed = ForumTopicIndex.shared.entryFor(
+      _sessionKey.accountSlot,
+      widget.chatId,
+      topicId,
+    );
+    if (indexed != null) {
+      return (
+        name: indexed.name,
+        iconCustomEmojiId: indexed.iconCustomEmojiId,
+        iconColor: indexed.iconColor,
+        isGeneral: isGeneral,
+      );
+    }
+    return (
+      name: isGeneral
+          ? AppStringKeys.generalTitle.l10n(context)
+          : AppStringKeys.topicChatTopicTitle.l10n(context),
+      iconCustomEmojiId: 0,
+      iconColor: 0,
+      isGeneral: isGeneral,
+    );
+  }
+
+  /// Whether a topic section header belongs above [index].
+  ///
+  /// Mirrors Telegram iOS: the header marks the boundary where the topic
+  /// changes, so a run of same-topic messages carries exactly one header.
+  /// Service messages never carry one — a join/pin event is not attributable
+  /// to a topic — and they do not break a run either: the comparison skips
+  /// back over them, because TDLib reports them without a topic and a naive
+  /// read would file them under General and repeat the header after them.
+  /// The very first attributable message starts a section, since nothing
+  /// above it can carry one.
+  bool _needsTopicSeparator(int index, {List<ChatMessage>? messages}) {
+    if (!_showsForumTopicSections) return false;
+    messages ??= _vm.messages;
+    if (index < 0 || index >= messages.length) return false;
+    final message = messages[index];
+    if (message.isService) return false;
+    var previous = index - 1;
+    while (previous >= 0 && messages[previous].isService) {
+      previous--;
+    }
+    if (previous < 0) return true;
+    return _topicSectionId(message) != _topicSectionId(messages[previous]);
   }
 
   bool _isRepeatTail(int index) {
@@ -6503,27 +6772,20 @@ class _ChatViewState extends State<ChatView> {
         !usesSplitSelectionLayout(MediaQuery.sizeOf(context))) {
       return child;
     }
+    // A sidebar-placement shell paints this chat's topic list over its chat
+    // list column; the conversation pane keeps its full width there.
+    if (_topicListOverlaid) return child;
     return TopicNavigationLayout(
       topics: [
-        for (final topic in _vm.forumTopics)
-          TopicNavigationItem(
-            id: topic.id,
-            name: topic.name,
-            iconCustomEmojiId: topic.iconCustomEmojiId,
-            iconColor: topic.iconColor,
-            unreadCount: topic.unreadCount,
-            isMuted: topic.isMuted,
-          ),
+        for (final topic in _vm.forumTopics) _topicNavigationItem(topic),
       ],
       selectedTopicId: widget.forumTopicId,
       hasForumTabs: _vm.hasForumTabs,
-      onSelected: (id) {
-        if (_topicsFoldedIntoChat) {
-          _openTopicTranscript(id);
-          return;
-        }
-        if (id != null) unawaited(_openTopicMode(id));
-      },
+      onSelected: _openTopicTranscript,
+      onCreateTopic: _vm.canCreateForumTopics ? _openCreateTopicDialog : null,
+      onTopicMenu: _showTopicRowMenu,
+      generalAvatarTitle: _vm.peerTitle.isEmpty ? widget.title : _vm.peerTitle,
+      generalAvatarPhoto: _vm.peerPhoto,
       child: child,
     );
   }
@@ -7498,7 +7760,7 @@ class _ChatViewState extends State<ChatView> {
       onMessageSent: _onComposerMessageSent,
       onPanelGeometryChanged: _onComposerPanelGeometryChanged,
       onMediaSendTapped: _onComposerMediaSendTapped,
-      onBotTopicCreated: _openTopicMode,
+      onBotTopicCreated: _openTopicTranscript,
     );
   }
 
@@ -7874,9 +8136,18 @@ class _ChatViewState extends State<ChatView> {
                       key: const ValueKey('chatHeaderTopics'),
                       label: AppStringKeys.topicChatAllTopics.l10n(context),
                       icon: HeroAppIcons.hashtag,
-                      onTap: () => _topicsFoldedIntoChat
-                          ? unawaited(_showTopicSelector())
-                          : unawaited(_openTopicMode()),
+                      onTap: () {
+                        // A shell overlay the user dismissed comes back from
+                        // the header; other shells pick from the sheet.
+                        final host = _topicListOverlaid
+                            ? _shellTopicListHost
+                            : null;
+                        if (host != null && host.listHidden) {
+                          host.showList();
+                          return;
+                        }
+                        unawaited(_showTopicSelector());
+                      },
                     ),
                   ],
                 ],
@@ -7900,13 +8171,9 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
-  /// Whether topics have a dedicated surface (topic feed mode).
-  bool get _topicsFoldedIntoChat =>
-      _topicsKnown && context.read<ThemeController>().forumTopicsAsGroupChat;
-
   /// Topics keep their dedicated surface — header chevron, topic picker, and
-  /// the # header action — whenever the chat is a topic chat. In flattened
-  /// mode the picker switches between topic transcripts instead of modes.
+  /// the # header action — whenever the chat is a topic chat. The picker
+  /// switches between topic transcripts.
   bool get _showsTopicSurfaces => _topicsKnown;
 
   /// The join screen and a restricted peer both render the chat header over a
@@ -8004,25 +8271,6 @@ class _ChatViewState extends State<ChatView> {
     return content;
   }
 
-  ChatSummary _topicChatSummary() => ChatSummary(
-    id: widget.chatId,
-    title: _vm.peerTitle,
-    lastMessage: '',
-    lastMessageId: 0,
-    date: 0,
-    unreadCount: _vm.unreadCount,
-    order: 0,
-    isMuted: _vm.isMuted,
-    kind: _vm.peerIsBot
-        ? ChatKind.bot
-        : _vm.isChannel
-        ? ChatKind.channel
-        : ChatKind.group,
-    photo: _vm.peerPhoto,
-    isForum: _vm.isForum,
-    supportsBotTopics: _vm.supportsBotTopics,
-  );
-
   /// Opens a topic, or the whole chat for null, as the ordinary chat
   /// transcript (topics-as-group setting). Replaces this transcript in place
   /// so the navigation stack stays flat. An owning shell rebuilds the
@@ -8073,45 +8321,196 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
-  Future<void> _openTopicMode([int? threadId]) async {
-    // With topics shown as a regular group there is no topic feed: open the
-    // requested topic as an ordinary transcript instead.
-    if (_topicsFoldedIntoChat) {
-      if (threadId != null) _openTopicTranscript(threadId);
-      return;
+  // MARK: - Topic moderation (Telegram iOS parity)
+
+  ForumTopicOption? _topicById(int? id) {
+    if (id == null) return null;
+    for (final topic in _vm.forumTopics) {
+      if (topic.id == id) return topic;
     }
-    await TopicGroupDisplayPreference.set(TopicGroupDisplayMode.channel);
-    if (!mounted) return;
-    final onOpenTopicMode = widget.onOpenTopicMode;
-    if (onOpenTopicMode != null) {
-      onOpenTopicMode(threadId);
-      return;
-    }
-    final chat = _topicChatSummary();
-    _prepareExitState();
-    if (ChatPane.replace(
-      context,
-      (onBack) => TopicChatView(
-        chat: chat,
-        initialThreadId: threadId,
-        hasForumTabs: _vm.hasForumTabs,
-        headerHeight: widget.headerHeight,
-        headerColor: widget.headerColor,
-        onBack: onBack,
+    return null;
+  }
+
+  /// Telegram iOS offers topic creation right from the topic list.
+  Future<void> _openCreateTopicDialog() async {
+    final draft = await showDialog<TopicDraft>(
+      context: context,
+      builder: (dialogContext) => TopicDraftDialog(
+        title: AppStrings.t(AppStringKeys.groupAdministrationNewTopic),
+        initialName: '',
+        initialColor:
+            topicIconColors[_vm.forumTopics.length % topicIconColors.length],
+        initialCustomEmojiId: 0,
+        canChangeColor: true,
       ),
-    )) {
-      return;
-    }
-    unawaited(
-      replaceWithAppChatRoute<void, void>(
+    );
+    if (!mounted || draft == null || draft.name.isEmpty) return;
+    try {
+      final created = await _vm.createForumTopic(
+        name: draft.name,
+        iconColor: draft.color,
+        iconCustomEmojiId: draft.customEmojiId,
+      );
+      // Open the fresh topic the way iOS does after creation.
+      if (mounted && created != null && created != 0) {
+        _openTopicTranscript(created);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      showToast(
         context,
-        AppChatPageRoute<void>(
-          builder: (_) => TopicChatView(
-            chat: chat,
-            initialThreadId: threadId,
-            hasForumTabs: _vm.hasForumTabs,
-          ),
+        AppStrings.t(
+          AppStringKeys.groupAdministrationCouldnTCreateTopicValue1,
+          {'value1': error},
         ),
+      );
+    }
+  }
+
+  Future<void> _editTopic(ForumTopicOption topic) async {
+    if (topic.isGeneral) return;
+    final draft = await showDialog<TopicDraft>(
+      context: context,
+      builder: (dialogContext) => TopicDraftDialog(
+        title: AppStrings.t(AppStringKeys.groupAdministrationEditTopic),
+        initialName: topic.name,
+        initialColor: topic.iconColor == 0
+            ? topicIconColors.first
+            : topic.iconColor,
+        initialCustomEmojiId: topic.iconCustomEmojiId,
+        canChangeColor: false,
+      ),
+    );
+    if (!mounted || draft == null || draft.name.isEmpty) return;
+    try {
+      await _vm.editForumTopic(
+        forumTopicId: topic.id,
+        name: draft.name,
+        iconCustomEmojiId: draft.customEmojiId,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showToast(
+        context,
+        AppStrings.t(AppStringKeys.groupAdministrationCouldnTEditTopicValue1, {
+          'value1': error,
+        }),
+      );
+    }
+  }
+
+  Future<void> _deleteTopic(ForumTopicOption topic) async {
+    if (topic.isGeneral || !_vm.canDeleteTopic(topic)) return;
+    final ok = await confirmDialog(
+      context,
+      title: AppStrings.t(
+        AppStringKeys.groupAdministrationDeleteTopicAndMessages,
+        {'value1': topic.name},
+      ),
+      confirmText: AppStringKeys.chatDelete,
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    // The dialog can stay open across a rights change, a revocation or an
+    // account switch; re-verify the current state before anything
+    // destructive is sent.
+    final current = _topicById(topic.id);
+    if (current == null || !_vm.canDeleteTopic(current)) return;
+    try {
+      await _vm.deleteForumTopic(current.id);
+      if (widget.forumTopicId == topic.id) {
+        _openTopicTranscript(null);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      showToast(
+        context,
+        AppStrings.t(
+          AppStringKeys.groupAdministrationCouldnTDeleteTopicValue1,
+          {'value1': error},
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleTopicPinned(ForumTopicOption topic) async {
+    try {
+      await _vm.setForumTopicPinned(topic.id, pinned: !topic.isPinned);
+    } catch (error) {
+      if (!mounted) return;
+      showToast(
+        context,
+        AppStrings.t(AppStringKeys.groupAdministrationCouldnTPinTopicValue1, {
+          'value1': error,
+        }),
+      );
+    }
+  }
+
+  Future<void> _toggleTopicMuted(ForumTopicOption topic) async {
+    try {
+      await _vm.setForumTopicMuted(topic.id, muted: !topic.isMuted);
+    } catch (error) {
+      if (!mounted) return;
+      showToast(
+        context,
+        topicActionErrorText(
+          AppStrings.t(AppStringKeys.topicChatMuteFailed),
+          error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleTopicClosed(ForumTopicOption topic) async {
+    try {
+      await _vm.setForumTopicClosed(topic.id, closed: !topic.isClosed);
+    } catch (error) {
+      if (!mounted) return;
+      showToast(
+        context,
+        topicActionErrorText(
+          AppStrings.t(AppStringKeys.topicPostContentActionFailed),
+          error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _markTopicRead(ForumTopicOption topic) =>
+      _vm.markForumTopicRead(topic);
+
+  /// The topic row's context menu (iOS swipe action / long press). Destructive
+  /// and management items only appear while the account holds the right;
+  /// mute and mark-read stay available to everyone.
+  Future<void> _showTopicRowMenu(
+    TopicNavigationItem item,
+    Offset? globalPosition,
+  ) async {
+    final topic = _topicById(item.id);
+    if (topic == null) return;
+    // The creator deletion carve-out depends on the topic's live history
+    // (at most 11 messages, none from other users), so probe before the menu
+    // is offered. Rights-based eligibility is already known synchronously.
+    if (!topic.isGeneral &&
+        _vm.canDeleteForumTopics != true &&
+        _vm.creatorOfTopic(topic)) {
+      await _vm.ensureTopicCreatorDeletable(topic.id);
+      if (!mounted) return;
+    }
+    await showTopicRowMenuSheet(
+      context: context,
+      topic: item,
+      actions: topicRowActions(
+        topic: item,
+        canManage: _vm.canManageTopics,
+        canDelete: _vm.canDeleteTopic(topic),
+        onMarkRead: () => _markTopicRead(topic),
+        onTogglePinned: () => _toggleTopicPinned(topic),
+        onToggleMuted: () => _toggleTopicMuted(topic),
+        onEdit: () => _editTopic(topic),
+        onToggleClosed: () => _toggleTopicClosed(topic),
+        onDelete: () => _deleteTopic(topic),
       ),
     );
   }
@@ -8177,11 +8576,7 @@ class _ChatViewState extends State<ChatView> {
                     ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                if (context.read<ThemeController>().forumTopicsAsGroupChat) {
-                  _openTopicTranscript(topic?.id);
-                  return;
-                }
-                _openTopicMode(topic?.id);
+                _openTopicTranscript(topic?.id);
               },
             );
           },
@@ -9361,6 +9756,8 @@ class _ChatViewState extends State<ChatView> {
             KeyedSubtree(key: _unreadKey, child: _unreadDivider()),
           if (_needsSeparator(messageIndex, messages: messages))
             TimeSeparator(unix: message.date),
+          if (_needsTopicSeparator(messageIndex, messages: messages))
+            _topicSectionHeader(_topicSectionId(message)),
           // Anchor the message itself: unread/date separators can disappear
           // between visits and must not shift the restored reading position.
           TranscriptEntryBoundary(
@@ -9791,7 +10188,8 @@ class _ChatViewState extends State<ChatView> {
         startsNewSection: (index) =>
             _startsTranscriptPivotSection(messages, index) ||
             _needsSeparator(index, messages: messages) ||
-            _needsUnreadDivider(index, messages: messages),
+            _needsUnreadDivider(index, messages: messages) ||
+            _needsTopicSeparator(index, messages: messages),
       );
       run.addAll(messages.sublist(i + 1, j));
       entries.add(_TranscriptEntry(run, i));
@@ -9814,7 +10212,8 @@ class _ChatViewState extends State<ChatView> {
           startsNewSection: (index) =>
               _startsTranscriptPivotSection(messages, index) ||
               _needsSeparator(index, messages: messages) ||
-              _needsUnreadDivider(index, messages: messages),
+              _needsUnreadDivider(index, messages: messages) ||
+              _needsTopicSeparator(index, messages: messages),
         );
         run.addAll(messages.sublist(i + 1, j));
         entries.add(_TranscriptEntry(run, i));
@@ -9833,7 +10232,8 @@ class _ChatViewState extends State<ChatView> {
         final next = messages[j];
         if (_startsTranscriptPivotSection(messages, j) ||
             _needsSeparator(j, messages: messages) ||
-            _needsUnreadDivider(j, messages: messages)) {
+            _needsUnreadDivider(j, messages: messages) ||
+            _needsTopicSeparator(j, messages: messages)) {
           break;
         }
         if (!areMessagesInSameMediaAlbum(group.last, next)) break;

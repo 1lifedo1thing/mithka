@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app/app_navigator.dart';
-import '../channels/forum_topic_browser_view.dart';
 import '../chat/chat_view.dart';
 import '../chats/chat_row_view.dart';
 import '../components/app_icons.dart';
@@ -19,7 +18,6 @@ import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/ui_components.dart';
 import '../l10n/app_localizations.dart';
-import '../settings/topic_group_display_mode.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -488,27 +486,6 @@ class _CommunityViewState extends State<CommunityView> {
     if (onChatSelected != null) {
       onChatSelected(chat);
       return;
-    }
-    if (chat.supportsTopics) {
-      final mode = await TopicGroupDisplayPreference.load();
-      if (!mounted) return;
-      final topicsAsChat = context
-          .read<ThemeController>()
-          .forumTopicsAsGroupChat;
-      if (!mode.isChat && !topicsAsChat) {
-        unawaited(
-          pushAppChatRoute(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ForumTopicBrowserView(
-                chats: [..._currentChats, ..._currentViewableChats],
-                initialChat: chat,
-              ),
-            ),
-          ),
-        );
-        return;
-      }
     }
     if (!mounted) return;
     unawaited(

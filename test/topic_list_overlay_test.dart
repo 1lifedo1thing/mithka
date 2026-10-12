@@ -24,9 +24,17 @@ import 'package:mithka/theme/theme_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Forum chats always open as ordinary chat transcripts; the old topic
+// feed surface is gone. Wide split shells take that transcript's topic list
+// and paint it over the chat list column the way Telegram iOS does; phones
+// pick topics from the header sheet instead.
+
 void main() {
   late StreamController<Map<String, dynamic>> updates;
   final requests = <Map<String, dynamic>>[];
+  // When set, the next getChat blocks until completed: the in-flight
+  // metadata state a fresh pane opens with.
+  Completer<void>? gateGetChat;
   setUpAll(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -39,6 +47,11 @@ void main() {
         accountSlot: 0,
         query: (request) async {
           requests.add(request);
+          if (request['@type'] == 'getChat' && gateGetChat != null) {
+            final gate = gateGetChat;
+            gateGetChat = null;
+            await gate!.future;
+          }
           return _response(request);
         },
         send: (_) async {},
@@ -58,13 +71,15 @@ void main() {
     requests.clear();
     clearChatMemoryCaches();
     ForumTopicIndex.shared.clear();
+    topicCount = 12;
+    gateGetChat = null;
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
     await updates.close();
   });
 
-  testWidgets('tablet topic chat overlays its topic list on the chat list', (
+  testWidgets('tablet forum chat overlays its topic list on the chat list', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -75,26 +90,29 @@ void main() {
         ChatListSelection.fromChat(_chat()),
       );
       await _settle(tester);
-      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
-      await _settle(tester);
 
+      // No topic feed surface: the chat transcript owns the topic data and the
+      // shell paints it over the chat list column, exactly filling it.
+      expect(find.byType(TopicChatView), findsNothing);
+      expect(find.byType(ChatView), findsOneWidget);
       final sidebar = tester.getRect(find.byType(ChatListView));
-      // The list covers the chat list column (tab bar included) instead of
-      // carving a rail out of the conversation pane.
-      final overlay = tester.getRect(
+      final list = tester.getRect(
         find.byKey(const ValueKey('topic-navigation-left')),
       );
-      expect(overlay.left, sidebar.left);
-      expect(overlay.right, sidebar.right);
-      expect(overlay.top, sidebar.top);
-      expect(overlay.bottom, greaterThan(sidebar.bottom));
-      expect(tester.getRect(find.byType(TopicChatView)).left, sidebar.right);
+      expect(list.left, sidebar.left);
+      expect(list.right, sidebar.right);
+      expect(list.top, sidebar.top);
+      // The overlay's chevron steps aside to reveal the chat list beneath.
+      expect(find.byKey(const ValueKey('topic-list-back')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('topic-list-back')));
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
+      // The chat header brings the overlay back — no picker sheet needed.
+      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
+      await _settle(tester);
       expect(
-        find.descendant(
-          of: find.byType(TopicChatView),
-          matching: find.byKey(const ValueKey('topic-navigation-left')),
-        ),
-        findsNothing,
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
       );
       // Unread counters stay round dots, never row-height strips.
       final badge = tester.getSize(
@@ -108,7 +126,7 @@ void main() {
     }
   });
 
-  testWidgets('overlay rows select topics and back reveals the chat list', (
+  testWidgets('overlay rows switch topic transcripts without a route', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -119,11 +137,18 @@ void main() {
         ChatListSelection.fromChat(_chat()),
       );
       await _settle(tester);
-      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
-      await _settle(tester);
 
+      final navigator = Navigator.of(
+        tester.element(find.byType(ChatView)),
+        rootNavigator: true,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('topic-navigation-item-88')),
+      );
+      await _settle(tester);
       await tester.tap(find.byKey(const ValueKey('topic-navigation-item-88')));
       await _settle(tester);
+      expect(tester.widget<ChatView>(find.byType(ChatView)).forumTopicId, 88);
       expect(
         requests.lastWhere(
           (request) => request['@type'] == 'getForumTopicHistory',
@@ -134,13 +159,98 @@ void main() {
         find.byKey(const ValueKey('topic-navigation-left')),
         findsOneWidget,
       );
+      expect(navigator.canPop(), isFalse);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
-      await tester.tap(find.byKey(const ValueKey('topic-list-back')));
+  testWidgets('switching topics keeps the overlay scroll position', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      topicCount = 40;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
       await _settle(tester);
-      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
-      expect(find.byType(TopicChatView), findsOneWidget);
-      // The topic surface offers the list again from its header.
-      await tester.tap(find.byKey(const ValueKey('topic-header-list')));
+
+      ScrollableState overlayList() => tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('topic-navigation-left')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+
+      // Scroll the overlay well past its top and pick a row from there.
+      await tester.drag(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        const Offset(0, -600),
+      );
+      await _settle(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('topic-navigation-item-95')),
+      );
+      await _settle(tester);
+      final before = overlayList().position.pixels;
+      expect(before, greaterThan(300));
+
+      await tester.tap(find.byKey(const ValueKey('topic-navigation-item-95')));
+      await _settle(tester);
+      expect(tester.widget<ChatView>(find.byType(ChatView)).forumTopicId, 95);
+      // The shell owns the pane, so swapping the transcript underneath
+      // keeps the overlay's scroll exactly where the user left it.
+      expect(overlayList().position.pixels, before);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('topic switch keeps the overlay while its getChat is in flight', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      topicCount = 12;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      // The first visit fills the shared topic index.
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
+
+      // A topic transcript opens a fresh pane whose own getChat is still on
+      // the wire; its view model cannot know isForum yet. The shared index
+      // keeps the list overlaid so no in-pane rail flashes during the wait.
+      final gate = Completer<void>();
+      gateGetChat = gate;
+      await tester.tap(find.byKey(const ValueKey('topic-navigation-item-78')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        find.byKey(const ValueKey('topic-list-back')),
+        findsOneWidget,
+        reason: 'the overlay owns the topic list, not an in-pane rail',
+      );
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+        reason: 'exactly one topic list exists while metadata loads',
+      );
+
+      gate.complete();
       await _settle(tester);
       expect(
         find.byKey(const ValueKey('topic-navigation-left')),
@@ -153,7 +263,58 @@ void main() {
     }
   });
 
-  testWidgets('macOS topic overlay follows resizing and owner replacement', (
+  testWidgets('overlay re-show keeps the scroll position', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      topicCount = 40;
+      await _setSurfaceSize(tester, const Size(1180, 820));
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      ScrollableState overlayList() => tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('topic-navigation-left')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+
+      await tester.drag(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        const Offset(0, -600),
+      );
+      await _settle(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('topic-navigation-item-95')),
+      );
+      await _settle(tester);
+      final before = overlayList().position.pixels;
+      expect(before, greaterThan(300));
+
+      // Dismiss to the chat list, then bring the overlay back: the host owns
+      // the offset, so the list re-enters where the user left it.
+      await tester.tap(find.byKey(const ValueKey('topic-list-back')));
+      await _settle(tester);
+      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
+      await tester.pump();
+      await _settle(tester);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
+      expect(overlayList().position.pixels, before);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('macOS forum rail follows resizing without losing the chat', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
@@ -164,26 +325,31 @@ void main() {
         ChatListSelection.fromChat(_chat()),
       );
       await _settle(tester);
-      await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
-      await _settle(tester);
-      expect(find.byKey(const ValueKey('topic-list-back')), findsOneWidget);
       expect(
-        tester.getRect(find.byType(TopicChatView)).left,
-        tester.getRect(find.byType(ChatListView)).right,
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
       );
 
+      // A desktop shell keeps the split layout at any width, so the rail
+      // stays with the transcript instead of collapsing.
       tester.view.physicalSize = const Size(500, 820);
       await _settle(tester);
-      expect(find.byKey(const ValueKey('topic-list-back')), findsNothing);
-      expect(find.byType(TopicChatView), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
+      expect(find.byType(ChatView), findsOneWidget);
 
       tester.view.physicalSize = const Size(1180, 820);
       await _settle(tester);
-      expect(find.byKey(const ValueKey('topic-list-back')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('topic-header-chat-mode')));
-      await _settle(tester);
-      expect(find.byType(ChatView), findsOneWidget);
-      expect(find.byKey(const ValueKey('topic-list-back')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('topic-navigation-left')),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<ChatView>(find.byType(ChatView)).forumTopicId,
+        isNull,
+      );
       expect(tester.takeException(), isNull);
       await _disposeShell(tester);
     } finally {
@@ -191,21 +357,23 @@ void main() {
     }
   });
 
-  testWidgets('phones keep the inline topic strip', (tester) async {
+  testWidgets('phones pick a topic from the header sheet', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     try {
       await _setSurfaceSize(tester, const Size(390, 844));
       await _pumpMainShell(tester);
       ChatDeepLinkController.shared.openChat(chatId: -42, title: 'Forum');
       await _settle(tester);
+      expect(find.byType(ChatView), findsOneWidget);
+      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
+
       await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
       await _settle(tester);
-      expect(find.byType(TopicChatView), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('topic-navigation-top')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const ValueKey('topic-navigation-left')), findsNothing);
+      expect(find.text('Topic 1'), findsOneWidget);
+      await tester.tap(find.text('Topic 1'));
+      await _settle(tester);
+      expect(find.byType(TopicChatView), findsNothing);
+      expect(tester.widget<ChatView>(find.byType(ChatView)).forumTopicId, 78);
       expect(tester.takeException(), isNull);
       await _disposeShell(tester);
     } finally {
@@ -213,6 +381,8 @@ void main() {
     }
   });
 }
+
+var topicCount = 12;
 
 ChatSummary _chat() => ChatSummary(
   id: -42,
@@ -266,7 +436,7 @@ Map<String, dynamic> _response(Map<String, dynamic> request) =>
       'getForumTopics' => {
         '@type': 'forumTopics',
         'topics': [
-          for (var index = 0; index < 12; index++)
+          for (var index = 0; index < topicCount; index++)
             {
               '@type': 'forumTopic',
               'info': {
@@ -304,7 +474,6 @@ Future<void> _pumpMainShell(
 }) async {
   SharedPreferences.setMockInitialValues({
     'showChannelsTab': false,
-    'forumTopicsAsGroupChat': false,
     'showMomentsTab': false,
     'communitiesEnabled': false,
   });

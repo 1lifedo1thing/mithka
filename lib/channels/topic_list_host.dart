@@ -9,13 +9,12 @@
 
 import 'package:flutter/widgets.dart';
 
-import '../chat/custom_emoji.dart';
 import '../components/app_icons.dart';
 import '../components/photo_avatar.dart';
-import '../components/ui_components.dart';
 import '../l10n/app_localizations.dart';
 import '../tdlib/td_models.dart';
 import '../theme/app_theme.dart';
+import 'topic_list_row.dart';
 import 'topic_navigation.dart';
 
 /// Where a topic surface should paint its topic list.
@@ -57,6 +56,8 @@ class TopicListAttachment {
     required this.topics,
     required this.selectedTopicId,
     required this.onSelect,
+    this.onCreateTopic,
+    this.onTopicMenu,
   });
 
   final int chatId;
@@ -67,6 +68,11 @@ class TopicListAttachment {
   final int? selectedTopicId;
   final ValueChanged<int?> onSelect;
 
+  /// Null when the user lacks the right to create topics: the overlay then
+  /// hides its '+' exactly like the inline rail does.
+  final VoidCallback? onCreateTopic;
+  final TopicRowMenuRequest? onTopicMenu;
+
   /// Publishing an equal list must not re-notify the shell: the topic
   /// surface listens to the host, so a needless notify would loop.
   bool sameContent(TopicListAttachment other) {
@@ -75,20 +81,12 @@ class TopicListAttachment {
         usesSquareAvatar != other.usesSquareAvatar ||
         photo != other.photo ||
         selectedTopicId != other.selectedTopicId ||
+        (onCreateTopic == null) != (other.onCreateTopic == null) ||
         topics.length != other.topics.length) {
       return false;
     }
     for (var i = 0; i < topics.length; i++) {
-      final a = topics[i];
-      final b = other.topics[i];
-      if (a.id != b.id ||
-          a.name != b.name ||
-          a.iconCustomEmojiId != b.iconCustomEmojiId ||
-          a.iconColor != b.iconColor ||
-          a.unreadCount != b.unreadCount ||
-          a.isMuted != b.isMuted) {
-        return false;
-      }
+      if (!topics[i].sameDisplay(other.topics[i])) return false;
     }
     return true;
   }
@@ -104,6 +102,30 @@ class TopicListHost extends ChangeNotifier {
   /// The user dismissed the overlay to reach the chat list underneath.
   bool get listHidden => _listHidden;
 
+  /// Overlay scroll offsets by chat, so a pane swap or an overlay re-show
+  /// re-enters the list where the user left it instead of at the top. The
+  /// overlay pane is torn down whenever the shell drops it, so its scroll
+  /// position has to live here — the host outlives every pane.
+  final Map<int, double> _topicListOffsets = {};
+
+  /// The recorded overlay scroll offset for [chatId]; 0 when none.
+  double topicListOffset(int chatId) => _topicListOffsets[chatId] ?? 0;
+
+  /// Records the overlay's current scroll offset for [chatId].
+  void storeTopicListOffset(int chatId, double offset) {
+    if (_topicListOffsets[chatId] == offset) return;
+    _topicListOffsets[chatId] = offset;
+  }
+
+  /// Bounds the retained offsets: a session visits a handful of forums.
+  static const _topicListOffsetCapacity = 16;
+
+  void _evictTopicListOffsets() {
+    while (_topicListOffsets.length > _topicListOffsetCapacity) {
+      _topicListOffsets.remove(_topicListOffsets.keys.first);
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -114,7 +136,10 @@ class TopicListHost extends ChangeNotifier {
     if (_disposed) return;
     final fresh = _attachment?.chatId != attachment.chatId;
     _attachment = attachment;
-    if (fresh) _listHidden = false;
+    if (fresh) {
+      _listHidden = false;
+      _evictTopicListOffsets();
+    }
     notifyListeners();
   }
 
@@ -141,15 +166,54 @@ class TopicListHost extends ChangeNotifier {
 }
 
 /// The chat-list overlay: the group's topic list with live unread counters.
-class ForumTopicListPane extends StatelessWidget {
+class ForumTopicListPane extends StatefulWidget {
   const ForumTopicListPane({super.key, required this.host});
 
   final TopicListHost host;
 
   @override
+  State<ForumTopicListPane> createState() => _ForumTopicListPaneState();
+}
+
+class _ForumTopicListPaneState extends State<ForumTopicListPane> {
+  late final ScrollController _scroll = ScrollController();
+  var _restoredOffset = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_storeOffset);
+  }
+
+  void _storeOffset() {
+    final chatId = widget.host.attachment?.chatId;
+    if (chatId == null || !_scroll.hasClients) return;
+    widget.host.storeTopicListOffset(chatId, _scroll.position.pixels);
+  }
+
+  @override
+  void dispose() {
+    _storeOffset();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final attachment = host.attachment;
+    final attachment = widget.host.attachment;
     if (attachment == null) return const SizedBox.shrink();
+    if (!_restoredOffset) {
+      // Restore once the list has attached; a later frame cannot be 0-frame.
+      _restoredOffset = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scroll.hasClients) return;
+        _scroll.jumpTo(
+          widget.host
+              .topicListOffset(attachment.chatId)
+              .clamp(0.0, _scroll.position.maxScrollExtent),
+        );
+      });
+    }
     final c = context.colors;
     return Container(
       key: const ValueKey('topic-navigation-left'),
@@ -169,7 +233,7 @@ class ForumTopicListPane extends StatelessWidget {
                   GestureDetector(
                     key: const ValueKey('topic-list-back'),
                     behavior: HitTestBehavior.opaque,
-                    onTap: host.hideList,
+                    onTap: widget.host.hideList,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm,
@@ -216,104 +280,58 @@ class ForumTopicListPane extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
+                  if (attachment.onCreateTopic != null)
+                    GestureDetector(
+                      key: const ValueKey('topic-list-create'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: attachment.onCreateTopic,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        child: AppIcon(
+                          HeroAppIcons.plus,
+                          size: 22,
+                          color: AppTheme.brand,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: AppSpacing.md),
                 ],
               ),
             ),
           ),
           Expanded(
             child: ListView.builder(
+              controller: _scroll,
               padding: const EdgeInsets.symmetric(vertical: 6),
               itemCount: attachment.topics.length + 1,
               itemBuilder: (context, index) {
                 final topic = index == 0 ? null : attachment.topics[index - 1];
-                return _TopicListRow(
+                return TopicListRowView(
                   topic: topic,
                   selected: topic?.id == attachment.selectedTopicId,
-                  onTap: () => host.select(topic?.id),
+                  onTap: () => widget.host.select(topic?.id),
+                  onLongPress: topic == null || attachment.onTopicMenu == null
+                      ? null
+                      : () => attachment.onTopicMenu!(topic, null),
+                  onSecondaryTapDown:
+                      topic == null || attachment.onTopicMenu == null
+                      ? null
+                      : (details) => attachment.onTopicMenu!(
+                          topic,
+                          details.globalPosition,
+                        ),
+                  generalAvatarTitle: attachment.title,
+                  generalAvatarPhoto: attachment.photo,
+                  usesSquareAvatar: attachment.usesSquareAvatar,
                 );
               },
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TopicListRow extends StatelessWidget {
-  const _TopicListRow({
-    required this.topic,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final TopicNavigationItem? topic;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final item = topic;
-    final name = item?.name ?? AppStringKeys.topicChatAllFilter.l10n(context);
-    final iconId = item?.iconCustomEmojiId ?? 0;
-    final rawColor = item?.iconColor ?? 0;
-    final tint = rawColor == 0
-        ? AppTheme.brand
-        : Color(0xFF000000 | (rawColor & 0xFFFFFF));
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: name,
-      child: GestureDetector(
-        key: ValueKey('topic-navigation-item-${topic?.id ?? "all"}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          color: selected ? c.searchFill : null,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: tint.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
-                ),
-                child: iconId != 0
-                    ? CustomEmojiView(id: iconId, size: 24)
-                    : AppIcon(
-                        HeroAppIcons.hashtag,
-                        color: selected ? AppTheme.brand : tint,
-                        size: 20,
-                      ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? AppTheme.brand : c.textPrimary,
-                  ),
-                ),
-              ),
-              if (item != null && item.unreadCount > 0) ...[
-                const SizedBox(width: 8),
-                UnreadBadge(
-                  key: ValueKey('topic-navigation-unread-${item.id}'),
-                  count: item.unreadCount,
-                  muted: item.isMuted,
-                ),
-              ],
-            ],
-          ),
-        ),
       ),
     );
   }

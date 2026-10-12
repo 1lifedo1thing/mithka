@@ -694,6 +694,7 @@ class ChatMessage {
     required this.text,
     required this.date,
     this.chatId,
+    this.forumTopicId,
     this.senderName,
     this.senderIsChat = false,
     this.isService = false,
@@ -788,6 +789,11 @@ class ChatMessage {
   String text;
   final int date;
   int? chatId;
+
+  /// The forum topic this message belongs to, from TDLib's `message.topic_id`.
+  /// Null outside forums and for messages TDLib reports without a topic (the
+  /// General topic); the chat view's topic sections resolve General from it.
+  final int? forumTopicId;
   String? senderName;
   bool senderIsChat;
   bool isService;
@@ -1637,6 +1643,14 @@ abstract final class TDParse {
         ? replyTo?.int64('message_id')
         : null;
 
+    // Which forum topic this message belongs to. TDLib reports it as a
+    // MessageTopic: messageTopicForum carries the forum topic id, while
+    // messageTopicThread is a non-forum thread this view never sections.
+    final topicRef = message.obj('topic_id');
+    final forumTopicId = topicRef?.type == 'messageTopicForum'
+        ? topicRef?.integer('forum_topic_id')
+        : null;
+
     final parsedEntities = messageTextEntities(content);
     final interactionInfo = message.obj('interaction_info');
     final replyInfo = interactionInfo?.obj('reply_info');
@@ -1668,6 +1682,7 @@ abstract final class TDParse {
         text: displayText,
         date: date,
         chatId: chatId,
+        forumTopicId: forumTopicId,
         isService: service,
         isCall: isCall,
         callIsVideo: callIsVideo,
