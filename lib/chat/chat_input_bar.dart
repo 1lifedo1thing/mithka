@@ -562,6 +562,7 @@ class _ChatInputBarState extends State<ChatInputBar>
 
   final _controller = EmojiTextEditingController();
   final _focus = FocusNode();
+  static const _composerTapRegionGroupId = 'mithka.composer';
   final _panelSearch = TextEditingController();
   final List<OutgoingAttachment> _pendingClipboardAttachments = [];
   final _desktopActionOwner = Object();
@@ -3339,7 +3340,14 @@ class _ChatInputBarState extends State<ChatInputBar>
     );
     // Without its own layer the composer shares one with the chat wallpaper, so
     // a keystroke or a typing update re-records the full-screen gradient too.
-    return RepaintBoundary(child: bar);
+    // On a phone the whole bar joins the field's tap region group: taps on the
+    // send button, attachments entry or panel strips count as inside, so the
+    // app-wide outside-tap keyboard dismissal leaves the keyboard open.
+    return RepaintBoundary(
+      child: desktopComposer
+          ? bar
+          : TextFieldTapRegion(groupId: _composerTapRegionGroupId, child: bar),
+    );
   }
 
   Widget _inlineBotResultMenu() {
@@ -5199,10 +5207,33 @@ class _ChatInputBarState extends State<ChatInputBar>
                                     controller: _controller,
                                     focusNode: _focus,
                                     onTap: _handleEmptyInputTap,
+                                    // Pressing the IME send key must not
+                                    // collapse the keyboard: the default
+                                    // EditableText.onEditingComplete drops
+                                    // focus for "completion actions" like
+                                    // send, and the field is re-focused after
+                                    // the message is sent, so on Android the
+                                    // keyboard visibly collapses and reopens.
+                                    // A no-op keeps the composer focused.
+                                    onEditingComplete: () {},
                                     minLines: desktop ? null : 1,
                                     maxLines: desktop ? null : 4,
                                     expands: desktop,
                                     keyboardType: TextInputType.multiline,
+                                    // On a phone the send button, attachments
+                                    // entry and other composer controls sit
+                                    // outside the field's own tap region.
+                                    // Without a shared group the app-wide
+                                    // outside-tap dismissal treats a tap on
+                                    // them as "outside", collapsing the
+                                    // keyboard right before the send path
+                                    // re-focuses the field — the keyboard
+                                    // visibly collapses and reopens on every
+                                    // message. Grouping the whole bar with
+                                    // the field keeps composer taps inside.
+                                    groupId: desktop
+                                        ? EditableText
+                                        : _composerTapRegionGroupId,
                                     textInputAction: desktop
                                         ? TextInputAction.newline
                                         : widget.enterToSend
