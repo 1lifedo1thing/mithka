@@ -16,16 +16,6 @@ import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'search_token_suggestions.dart';
 
-/// Keeps the floating panels inside the search field's tap region.
-///
-/// The app dismisses the keyboard on pointer downs outside the focused field,
-/// and the field reads `focusNode.hasFocus` to decide whether its filter hints
-/// or suggestion list are shown at all — so a panel left outside the region
-/// would collapse on the press and its rows could never be tapped. Grouping it
-/// with the field makes the taps land inside, the way the composer's own
-/// suggestion menus already behave.
-const desktopSearchTapGroupId = 'mithka.desktopSearch';
-
 /// One token the field understands, offered before anything is typed.
 class SearchTokenHint {
   const SearchTokenHint({

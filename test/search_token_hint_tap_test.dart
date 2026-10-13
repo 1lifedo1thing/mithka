@@ -157,4 +157,43 @@ void main() {
 
     expect(controller.focusNode.hasFocus, isFalse);
   });
+
+  testWidgets(
+    'selection toolbar stays inside the search tap region',
+    (tester) async {
+      final controller = await pumpField(tester);
+      final field = find.byKey(
+        const ValueKey('desktop-title-bar-search-input'),
+      );
+      await tester.enterText(field, 'Selected text');
+      await tester.pumpAndSettle();
+      final editable = tester.state<EditableTextState>(
+        find.byType(EditableText),
+      );
+      editable.widget.controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 8,
+      );
+      await tester.pump();
+      editable.showToolbar();
+      await tester.pumpAndSettle();
+      final cut = find.text('Cut');
+      expect(cut, findsOneWidget);
+      final press = await tester.startGesture(tester.getCenter(cut));
+      await tester.pump();
+      expect(
+        controller.focusNode.hasFocus,
+        isTrue,
+        reason: 'selection actions must not trigger outside-tap dismissal',
+      );
+      await press.up();
+      await tester.pumpAndSettle();
+      expect(controller.textController.text, ' text');
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+      TargetPlatform.linux,
+    }),
+  );
 }

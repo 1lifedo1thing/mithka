@@ -598,7 +598,6 @@ class DesktopInlineSearchField extends StatelessWidget {
         // would leave the chip overflowing a still-narrow field for the length
         // of the transition.
         child: TextFieldTapRegion(
-          groupId: desktopSearchTapGroupId,
           child: Container(
             key: const ValueKey('desktop-title-bar-search'),
             width: widthFor(controller),
@@ -655,7 +654,6 @@ class DesktopInlineSearchField extends StatelessWidget {
                     key: const ValueKey('desktop-title-bar-search-input'),
                     controller: controller.textController,
                     focusNode: controller.focusNode,
-                    groupId: desktopSearchTapGroupId,
                     autocorrect: false,
                     textInputAction: TextInputAction.search,
                     style: TextStyle(fontSize: 13, color: c.textPrimary),
@@ -862,7 +860,6 @@ class DesktopInlineSearchPanel extends StatelessWidget {
   Widget _panelShell(BuildContext context, {required Widget child}) {
     final c = context.colors;
     return TextFieldTapRegion(
-      groupId: desktopSearchTapGroupId,
       child: Container(
         key: const ValueKey('desktop-inline-search-panel'),
         width: width,
