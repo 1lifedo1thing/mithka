@@ -992,6 +992,7 @@
     <string name="chatListMarkUnread">Mark as unread</string>
     <string name="chatListNoChats">No chats yet</string>
     <string name="chatListScanQrCode">Scan QR Code</string>
+    <string name="chatListArchive">Archive</string>
     <string name="chatListUnarchive">Unarchive</string>
     <string name="chatListUnpin">Unpin</string>
     <string name="chatLoadingTopics">Loading topics</string>

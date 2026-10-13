@@ -357,6 +357,7 @@ class HeroAppIcons {
   static const idBadge = AppIconData(HeroiconsOutline.identification);
   static const image = AppIconData(HeroiconsOutline.photo);
   static const images = AppIconData(HeroiconsOutline.photo);
+  static const archiveBox = AppIconData(HeroiconsOutline.archiveBox);
   static const inbox = AppIconData(HeroiconsOutline.inbox);
   static const language = AppIconData(HeroiconsOutline.language);
   static const key = AppIconData(HeroiconsOutline.key);

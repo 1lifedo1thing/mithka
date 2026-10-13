@@ -964,6 +964,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.binding.setSurfaceSize(const Size(640, 420));
     var separateRequests = 0;
+    var archiveRequests = 0;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(extensions: [AppColors.light]),
@@ -978,6 +979,7 @@ void main() {
           onToggleRead: () {},
           onOpenSeparateWindow: () => separateRequests++,
           onToggleMute: () {},
+          onArchive: () => archiveRequests++,
           onDeleteOrLeave: () {},
         ),
       ),
@@ -1008,7 +1010,76 @@ void main() {
       find.byKey(const ValueKey('desktop-chat-context-separate')),
     );
     expect(separateRequests, 1);
+
+    await tester.tap(
+      find.byKey(const ValueKey('desktop-chat-context-archive')),
+    );
+    expect(archiveRequests, 1);
   });
+
+  testWidgets(
+    'desktop context menu archive dispatches addChatToList/chatListArchive to the pinned owner',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(640, 420));
+      final accounts = _FakeAccounts(clients: {0: 10, 1: 20});
+      final requestsByClient = <int, List<Map<String, dynamic>>>{};
+      accounts.responders[10] = (request) async {
+        requestsByClient.putIfAbsent(10, () => []).add(request);
+        return const {'@type': 'ok'};
+      };
+      accounts.responders[20] = (request) async {
+        requestsByClient.putIfAbsent(20, () => []).add(request);
+        return const {'@type': 'ok'};
+      };
+      final model = ChatListViewModel();
+      addTearDown(model.dispose);
+      final chat = _chat();
+      final owner = accounts.pinActiveOwner();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(extensions: [AppColors.light]),
+          home: DesktopChatContextMenu(
+            anchor: const Offset(632, 412),
+            isPinned: false,
+            hasUnread: true,
+            isMuted: false,
+            deleteOrLeaveLabel: AppStringKeys.chatDelete,
+            onDismiss: () {},
+            onTogglePin: () {},
+            onToggleRead: () {},
+            onToggleMute: () {},
+            onArchive: () => model.archive(chat, owner: owner),
+            onDeleteOrLeave: () {},
+          ),
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('desktop-chat-context-archive')),
+      );
+      await tester.pump();
+      expect(requestsByClient[10], [
+        {
+          '@type': 'addChatToList',
+          'chat_id': 42,
+          'chat_list': {'@type': 'chatListArchive'},
+        },
+      ]);
+      expect(requestsByClient[20], isNull);
+
+      // If the active account changes before the menu item is invoked, the
+      // pinned owner is no longer current and nothing is sent to either slot.
+      accounts.switchTo(1);
+      await tester.tap(
+        find.byKey(const ValueKey('desktop-chat-context-archive')),
+      );
+      await tester.pump();
+      expect(requestsByClient[10], hasLength(1));
+      expect(requestsByClient[20], isNull);
+    },
+  );
 
   testWidgets('hold-and-drag rows reserve long press for swipe actions', (
     tester,
@@ -1098,6 +1169,173 @@ void main() {
       moreOrLessEquals(initialX),
     );
   });
+
+  testWidgets('chat preview offers archive and dismisses before invoking', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final theme = ThemeController(await SharedPreferences.getInstance());
+    addTearDown(theme.dispose);
+    final accounts = _FakeAccounts(clients: {0: 10});
+    final requests = <Map<String, dynamic>>[];
+    accounts.responders[10] = (request) async {
+      requests.add(request);
+      return const {'@type': 'ok'};
+    };
+    final model = ChatListViewModel();
+    addTearDown(model.dispose);
+    final chat = _chat();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ThemeController>.value(
+        value: theme,
+        child: MaterialApp(
+          theme: ThemeData(
+            brightness: Brightness.light,
+            extensions: [AppColors.light],
+          ),
+          home: Builder(
+            builder: (context) => GestureDetector(
+              key: const ValueKey('show-preview'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                final owner = accounts.pinActiveOwner();
+                unawaited(
+                  showChatListPreview(
+                    context,
+                    chat: chat,
+                    accounts: accounts,
+                    loadMessages: () async => [chat.lastChatMessage!],
+                    actions: [
+                      ChatListPreviewAction(
+                        label: AppStringKeys.chatListArchive,
+                        icon: HeroAppIcons.archiveBox,
+                        onSelected: () => model.archive(chat, owner: owner),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('show-preview')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('chat-list-preview-card')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text(AppStrings.t(AppStringKeys.chatListArchive)));
+    // While the dismissal transition is still in flight, the archive request
+    // has not been sent yet.
+    await tester.pump();
+    expect(requests, isEmpty);
+
+    await tester.pumpAndSettle();
+    expect(requests, [
+      {
+        '@type': 'addChatToList',
+        'chat_id': 42,
+        'chat_list': {'@type': 'chatListArchive'},
+      },
+    ]);
+    expect(accounts.requestOwners, [10]);
+    expect(find.byKey(const ValueKey('chat-list-preview-card')), findsNothing);
+  });
+
+  testWidgets(
+    'preview archive is suppressed when account ownership changes during delayed dismissal',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final theme = ThemeController(await SharedPreferences.getInstance());
+      addTearDown(theme.dispose);
+      final accounts = _FakeAccounts(clients: {0: 10, 1: 20});
+      final requestsByClient = <int, List<Map<String, dynamic>>>{};
+      accounts.responders[10] = (request) async {
+        requestsByClient.putIfAbsent(10, () => []).add(request);
+        return const {'@type': 'ok'};
+      };
+      accounts.responders[20] = (request) async {
+        requestsByClient.putIfAbsent(20, () => []).add(request);
+        return const {'@type': 'ok'};
+      };
+      final model = ChatListViewModel();
+      addTearDown(model.dispose);
+      final chat = _chat();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<ThemeController>.value(
+          value: theme,
+          child: MaterialApp(
+            theme: ThemeData(
+              brightness: Brightness.light,
+              extensions: [AppColors.light],
+            ),
+            home: Builder(
+              builder: (context) => GestureDetector(
+                key: const ValueKey('show-preview'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final owner = accounts.pinActiveOwner();
+                  unawaited(
+                    showChatListPreview(
+                      context,
+                      chat: chat,
+                      accounts: accounts,
+                      loadMessages: () async => [chat.lastChatMessage!],
+                      actions: [
+                        ChatListPreviewAction(
+                          label: AppStringKeys.chatListArchive,
+                          icon: HeroAppIcons.archiveBox,
+                          onSelected: () => model.archive(chat, owner: owner),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 1. Account switch during the reverse transition after selecting Archive.
+      await tester.tap(find.byKey(const ValueKey('show-preview')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.t(AppStringKeys.chatListArchive)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      accounts.switchTo(1);
+      await tester.pumpAndSettle();
+
+      expect(requestsByClient, isEmpty);
+      expect(
+        find.byKey(const ValueKey('chat-list-preview-card')),
+        findsNothing,
+      );
+
+      // 2. Same-slot client replacement during the reverse transition.
+      await tester.tap(find.byKey(const ValueKey('show-preview')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.t(AppStringKeys.chatListArchive)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      final replacement = accounts.replaceClient(1);
+      accounts.responders[replacement] = (request) async {
+        requestsByClient.putIfAbsent(replacement, () => []).add(request);
+        return const {'@type': 'ok'};
+      };
+      await tester.pumpAndSettle();
+
+      expect(requestsByClient, isEmpty);
+    },
+  );
 
   testWidgets('preview action dismisses before invoking its callback', (
     tester,
