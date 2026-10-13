@@ -3339,7 +3339,14 @@ class _ChatInputBarState extends State<ChatInputBar>
     );
     // Without its own layer the composer shares one with the chat wallpaper, so
     // a keystroke or a typing update re-records the full-screen gradient too.
-    return RepaintBoundary(child: bar);
+    // On a phone the whole bar joins the field's tap region group: taps on the
+    // send button, attachments entry or panel strips count as inside, so the
+    // app-wide outside-tap keyboard dismissal leaves the keyboard open.
+    // Keep the framework's default group so selection handles and the
+    // selection toolbar remain inside the same region too.
+    return RepaintBoundary(
+      child: desktopComposer ? bar : TextFieldTapRegion(child: bar),
+    );
   }
 
   Widget _inlineBotResultMenu() {
@@ -5199,6 +5206,17 @@ class _ChatInputBarState extends State<ChatInputBar>
                                     controller: _controller,
                                     focusNode: _focus,
                                     onTap: _handleEmptyInputTap,
+                                    // Submit from editing completion without
+                                    // onSubmitted: Flutter restarts the input
+                                    // connection after a completion action
+                                    // whenever onSubmitted is present, even
+                                    // when onEditingComplete retains focus.
+                                    onEditingComplete: () {
+                                      _controller.clearComposing();
+                                      if (!desktop && widget.enterToSend) {
+                                        unawaited(_sendCurrentText());
+                                      }
+                                    },
                                     minLines: desktop ? null : 1,
                                     maxLines: desktop ? null : 4,
                                     expands: desktop,
@@ -5208,9 +5226,6 @@ class _ChatInputBarState extends State<ChatInputBar>
                                         : widget.enterToSend
                                         ? TextInputAction.send
                                         : TextInputAction.newline,
-                                    onSubmitted: !desktop && widget.enterToSend
-                                        ? (_) => unawaited(_sendCurrentText())
-                                        : null,
                                     inputFormatters:
                                         widget.enterToSend &&
                                             Theme.of(context).platform ==
