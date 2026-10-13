@@ -12,11 +12,12 @@ Map<String, dynamic> _topic(
   int lastReadInbox = 0,
   int muteFor = 0,
   int iconColor = 0,
+  int chatId = -100,
 }) => {
   '@type': 'forumTopic',
   'info': {
     '@type': 'forumTopicInfo',
-    'chat_id': -100,
+    'chat_id': chatId,
     'forum_topic_id': id,
     'name': name,
     'icon_color': iconColor,
@@ -119,6 +120,29 @@ void main() {
     ]);
     ForumTopicIndex.shared.observe(0, _newMessage(5, chatId: -100));
     expect(ForumTopicIndex.shared.entryFor(0, -100, 1)?.unreadCount, 1);
+  });
+
+  test('an unattributed bot-chat message never lands in General', () {
+    // A private chat with a topics-enabled bot has no General topic (id 1
+    // errors with TOPIC_ID_INVALID) and its messages always carry an explicit
+    // topic reference. A positive chat id is a user dialog; a bot chat's
+    // unattributed traffic must be dropped, not filed under a bucket that
+    // cannot exist.
+    ForumTopicIndex.shared.storeAll(0, 700, [
+      ForumTopicIndexEntry.fromTopic(
+        _topic(61474, lastMessageId: 4, chatId: 700),
+      )!,
+    ]);
+    ForumTopicIndex.shared.observe(0, _newMessage(5, chatId: 700));
+    expect(ForumTopicIndex.shared.entryFor(0, 700, 1), isNull);
+    expect(ForumTopicIndex.shared.entryFor(0, 700, 61474)?.unreadCount, 0);
+
+    // An explicitly-attributed message still lands in its own topic.
+    ForumTopicIndex.shared.observe(
+      0,
+      _newMessage(6, chatId: 700, topicId: 61474),
+    );
+    expect(ForumTopicIndex.shared.entryFor(0, 700, 61474)?.unreadCount, 1);
   });
 
   test('already-read and already-counted arrivals do not invent unread', () {

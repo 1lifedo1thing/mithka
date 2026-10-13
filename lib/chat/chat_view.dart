@@ -4863,16 +4863,21 @@ class _ChatViewState extends State<ChatView> {
   /// Whether the transcript mixes every topic into one list: a forum opened
   /// without a specific topic. Telegram iOS sections that list by topic so
   /// each message stays attributable; a single-topic transcript is already
-  /// scoped and needs no sections. Bot-topic chats are deliberately out: they
-  /// are not forums, and their unscoped transcript is an ordinary bot chat
-  /// whose messages would all fall back to General.
+  /// scoped and needs no sections. A topics-enabled bot's chat mixes the
+  /// same way when opened without a topic — its messages carry explicit
+  /// topic ids and no General bucket exists, so the headers attribute them
+  /// exactly like a forum's.
   bool get _showsForumTopicSections =>
-      _vm.isForum && !_vm.isForumTopicTranscript;
+      (_vm.isForum || _vm.supportsBotTopics) && !_vm.isForumTopicTranscript;
 
-  /// The topic [message] belongs to. TDLib omits `topic_id` on General
-  /// messages, which is why the fallback is the General topic id and not null.
-  int _topicSectionId(ChatMessage message) =>
-      message.forumTopicId ?? generalForumTopicId;
+  /// The topic [message] belongs to, or null when it is attributable to
+  /// none. TDLib omits `topic_id` on General messages of a forum supergroup,
+  /// which is why the fallback is the General topic id there. A bot topic
+  /// chat has no General topic, so an unattributed message (topics traffic
+  /// predating the bot's toggle, say) belongs to no section rather than to a
+  /// bucket that cannot exist.
+  int? _topicSectionId(ChatMessage message) =>
+      message.forumTopicId ?? (_vm.isForum ? generalForumTopicId : null);
 
   /// The display data for a topic section header.
   ///
@@ -4924,20 +4929,25 @@ class _ChatViewState extends State<ChatView> {
   /// to a topic — and they do not break a run either: the comparison skips
   /// back over them, because TDLib reports them without a topic and a naive
   /// read would file them under General and repeat the header after them.
-  /// The very first attributable message starts a section, since nothing
-  /// above it can carry one.
+  /// A bot chat's unattributed messages are the same: no header, no run
+  /// break. The very first attributable message starts a section, since
+  /// nothing above it can carry one.
   bool _needsTopicSeparator(int index, {List<ChatMessage>? messages}) {
     if (!_showsForumTopicSections) return false;
     messages ??= _vm.messages;
     if (index < 0 || index >= messages.length) return false;
     final message = messages[index];
     if (message.isService) return false;
+    final sectionId = _topicSectionId(message);
+    if (sectionId == null) return false;
     var previous = index - 1;
-    while (previous >= 0 && messages[previous].isService) {
+    while (previous >= 0 &&
+        (messages[previous].isService ||
+            _topicSectionId(messages[previous]) == null)) {
       previous--;
     }
     if (previous < 0) return true;
-    return _topicSectionId(message) != _topicSectionId(messages[previous]);
+    return sectionId != _topicSectionId(messages[previous]);
   }
 
   bool _isRepeatTail(int index) {
@@ -9757,7 +9767,7 @@ class _ChatViewState extends State<ChatView> {
           if (_needsSeparator(messageIndex, messages: messages))
             TimeSeparator(unix: message.date),
           if (_needsTopicSeparator(messageIndex, messages: messages))
-            _topicSectionHeader(_topicSectionId(message)),
+            _topicSectionHeader(_topicSectionId(message)!),
           // Anchor the message itself: unread/date separators can disappear
           // between visits and must not shift the restored reading position.
           TranscriptEntryBoundary(

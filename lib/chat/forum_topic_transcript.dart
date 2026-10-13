@@ -18,11 +18,23 @@ int? forumTopicIdOfRawMessage(Map<String, dynamic> raw) {
   return topic.integer('forum_topic_id');
 }
 
-/// Whether [raw] belongs to the forum topic [forumTopicId]. A message that
-/// carries no topic reference is part of the General topic.
-bool rawMessageBelongsToForumTopic(Map<String, dynamic> raw, int forumTopicId) {
+/// Whether [raw] belongs to the forum topic [forumTopicId].
+///
+/// The no-topic-id ⇒ General fallback exists only in forum supergroups, where
+/// TDLib omits `topic_id` on General-topic messages. A private chat with a
+/// topics-enabled bot has NO General topic (id 1 errors with
+/// TOPIC_ID_INVALID) and every one of its messages carries an explicit
+/// `topic_id`, so the fallback must never fire there — an unattributed bot
+/// message belongs to no topic rather than to a bucket that cannot exist.
+bool rawMessageBelongsToForumTopic(
+  Map<String, dynamic> raw,
+  int forumTopicId, {
+  bool isGeneralFallbackAllowed = true,
+}) {
   final topic = raw.obj('topic_id');
-  if (topic == null) return forumTopicId == generalForumTopicId;
+  if (topic == null) {
+    return isGeneralFallbackAllowed && forumTopicId == generalForumTopicId;
+  }
   return forumTopicIdOfRawMessage(raw) == forumTopicId;
 }
 

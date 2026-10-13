@@ -40,6 +40,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// When set, the fixtures describe a plain supergroup instead of a forum.
 var groupChat = false;
 
+/// When set, the fixtures describe a private chat with a topics-enabled bot
+/// (positive chat id, chatTypePrivate, no General topic) instead of a forum
+/// supergroup. Its history carries only explicit topic references: legacy
+/// pre-toggle text has none and must stay unattributed.
+var botTopicChat = false;
+
 final List<Map<String, dynamic>> _mixedHistory = [
   _message(10, 'In topic A', topicId: 78),
   _message(11, 'Still topic A', topicId: 78),
@@ -48,6 +54,27 @@ final List<Map<String, dynamic>> _mixedHistory = [
   _message(14, 'Also general'),
   _message(15, 'Unlisted topic', topicId: 99),
 ];
+
+/// A bot chat's transcript, oldest first: two attributed topics, a service
+/// event, and a message from topic 61999, which the topic page does not
+/// list. Legacy pre-toggle text has no topic reference and must stay
+/// unattributed.
+final List<Map<String, dynamic>> _botTopicHistory = [
+  _botMessage(10, 'Legacy text'),
+  _botMessage(11, 'In bot topic 61474', topicId: 61474),
+  _botMessage(12, 'Still bot topic 61474', topicId: 61474),
+  _botServiceMessage(13),
+  _botMessage(14, 'In bot topic 61753', topicId: 61753),
+  _botMessage(15, 'Unlisted bot topic', topicId: 61999),
+];
+
+Map<String, dynamic> _historyMessage(int id, String text, {int? topicId}) =>
+    botTopicChat
+    ? _botMessage(id, text, topicId: topicId)
+    : _message(id, text, topicId: topicId);
+
+List<Map<String, dynamic>> get _transcriptHistory =>
+    botTopicChat ? _botTopicHistory : _mixedHistory;
 
 void main() {
   final requests = <Map<String, dynamic>>[];
@@ -82,6 +109,7 @@ void main() {
     clearChatMemoryCaches();
     ForumTopicIndex.shared.clear();
     groupChat = false;
+    botTopicChat = false;
   });
   tearDownAll(() async {
     await TdClient.shared.closeProxy();
@@ -309,6 +337,132 @@ void main() {
       groupChat = false;
     }
   });
+
+  testWidgets('a bot topic transcript sections by its real topics', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    botTopicChat = true;
+    try {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1180, 820);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      // The unscoped bot transcript is the mixed surface.
+      expect(tester.widget<ChatView>(find.byType(ChatView)).forumTopicId, null);
+
+      // One header per attributed topic run, named after the topic — the
+      // page lists both 61474 and 61753.
+      expect(
+        find.byKey(const ValueKey('forum-topic-section-61474')),
+        findsOneWidget,
+        reason: 'the run of 61474 messages carries exactly one header',
+      );
+      expect(_headerLabel(tester, 61474), 'Bot Topic A');
+      expect(
+        find.byKey(const ValueKey('forum-topic-section-61753')),
+        findsOneWidget,
+      );
+      expect(_headerLabel(tester, 61753), 'Bot Topic B');
+
+      // A message from topic 61999, which the page does not list, gets a
+      // generic label instead of General — and its own attributed section.
+      expect(
+        find.byKey(const ValueKey('forum-topic-section-61999')),
+        findsOneWidget,
+      );
+      expect(
+        _headerLabel(tester, 61999),
+        'Topic',
+        reason: 'unlisted topics fall back to a generic label, not General',
+      );
+
+      // No General header can exist: the chat has no such topic, so neither
+      // the legacy unattributed text nor the service event produces one.
+      expect(find.byKey(const ValueKey('forum-topic-section-1')), findsNothing);
+
+      // Ordering: headers sit above their own run, oldest first.
+      final headers = tester
+          .widgetList<Padding>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is Padding &&
+                  widget.key is ValueKey<String> &&
+                  (widget.key as ValueKey<String>).value.startsWith(
+                    'forum-topic-section-',
+                  ),
+            ),
+          )
+          .map((widget) => (widget.key as ValueKey<String>).value)
+          .toList();
+      expect(headers, [
+        'forum-topic-section-61474',
+        'forum-topic-section-61753',
+        'forum-topic-section-61999',
+      ]);
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      botTopicChat = false;
+    }
+  });
+
+  testWidgets('a bot topic section header opens that topic transcript', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    botTopicChat = true;
+    try {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1180, 820);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await _pumpMainShell(tester);
+      tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
+        ChatListSelection.fromChat(_chat()),
+      );
+      await _settle(tester);
+
+      await tester.tap(
+        find.byKey(const ValueKey('forum-topic-section-tap-61474')),
+      );
+      await _settle(tester);
+
+      // The tap rebuilt the pane for the typed topic destination; the
+      // scoped transcript is one topic already, so no sections remain.
+      expect(
+        tester.widget<ChatView>(find.byType(ChatView)).forumTopicId,
+        61474,
+      );
+      expect(
+        find.byKey(const ValueKey('forum-topic-section-61474')),
+        findsNothing,
+      );
+      // The scoped history request went out for the tapped topic only.
+      expect(
+        requests.where((request) => request['@type'] == 'getForumTopicHistory'),
+        isNotEmpty,
+      );
+      expect(
+        requests
+            .where((request) => request['@type'] == 'getForumTopicHistory')
+            .every((request) => request['forum_topic_id'] == 61474),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+      await _disposeShell(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      botTopicChat = false;
+    }
+  });
 }
 
 /// The label a rendered section header shows.
@@ -321,26 +475,45 @@ String _headerLabel(WidgetTester tester, int topicId) =>
     '';
 
 ChatSummary _chat() => ChatSummary(
-  id: -42,
-  title: 'Forum',
+  id: botTopicChat ? 700 : -42,
+  title: botTopicChat ? 'Topic Bot' : 'Forum',
   lastMessage: '',
   lastMessageId: 0,
   date: 0,
   unreadCount: 0,
   order: 1,
   isMuted: false,
-  kind: ChatKind.group,
-  isForum: !groupChat,
+  kind: botTopicChat ? ChatKind.privateChat : ChatKind.group,
+  isForum: !groupChat && !botTopicChat,
+  peerUserId: botTopicChat ? 42 : null,
 );
 
 Map<String, dynamic> _message(int id, String text, {int? topicId}) =>
     <String, dynamic>{
       '@type': 'message',
       'id': id,
-      'chat_id': -42,
+      'chat_id': botTopicChat ? 700 : -42,
       'date': id,
       'is_outgoing': false,
       'sender_id': {'@type': 'messageSenderUser', 'user_id': 7},
+      if (topicId != null)
+        'topic_id': {'@type': 'messageTopicForum', 'forum_topic_id': topicId},
+      'content': {
+        '@type': 'messageText',
+        'text': {'@type': 'formattedText', 'text': text},
+      },
+    };
+
+/// A topics-enabled bot's message: TDLib carries an explicit forum topic
+/// reference on every one of these (the sender is the bot's user).
+Map<String, dynamic> _botMessage(int id, String text, {int? topicId}) =>
+    <String, dynamic>{
+      '@type': 'message',
+      'id': id,
+      'chat_id': 700,
+      'date': id,
+      'is_outgoing': false,
+      'sender_id': {'@type': 'messageSenderUser', 'user_id': 42},
       if (topicId != null)
         'topic_id': {'@type': 'messageTopicForum', 'forum_topic_id': topicId},
       'content': {
@@ -360,83 +533,164 @@ Map<String, dynamic> _serviceMessage(int id) => <String, dynamic>{
   'content': {'@type': 'messagePinMessage', 'message_id': id - 1},
 };
 
+/// A pin event in the bot chat: no topic reference either.
+Map<String, dynamic> _botServiceMessage(int id) => <String, dynamic>{
+  '@type': 'message',
+  'id': id,
+  'chat_id': 700,
+  'date': id,
+  'is_outgoing': false,
+  'sender_id': {'@type': 'messageSenderUser', 'user_id': 42},
+  'content': {'@type': 'messagePinMessage', 'message_id': id - 1},
+};
+
 Map<String, dynamic> _response(Map<String, dynamic> request) =>
     switch (request['@type']) {
-      'getChat' => {
-        '@type': 'chat',
-        'id': request['chat_id'],
-        'title': groupChat ? 'Group' : 'Forum',
-        'view_as_topics': !groupChat,
-        'type': {
-          '@type': 'chatTypeSupergroup',
-          'supergroup_id': 42,
-          'is_channel': false,
-        },
-        'permissions': {
-          '@type': 'chatPermissions',
-          'can_send_basic_messages': true,
-        },
+      'getChat' =>
+        botTopicChat
+            ? {
+                '@type': 'chat',
+                'id': 700,
+                'title': 'Topic Bot',
+                'type': {'@type': 'chatTypePrivate', 'user_id': 42},
+                'permissions': {
+                  '@type': 'chatPermissions',
+                  'can_send_basic_messages': true,
+                },
+              }
+            : {
+                '@type': 'chat',
+                'id': request['chat_id'],
+                'title': groupChat ? 'Group' : 'Forum',
+                'view_as_topics': !groupChat,
+                'type': {
+                  '@type': 'chatTypeSupergroup',
+                  'supergroup_id': 42,
+                  'is_channel': false,
+                },
+                'permissions': {
+                  '@type': 'chatPermissions',
+                  'can_send_basic_messages': true,
+                },
+              },
+      'getUser' => {
+        '@type': 'user',
+        'id': request['user_id'],
+        if (botTopicChat) ...<String, dynamic>{
+          'first_name': 'Topic',
+          'last_name': 'Bot',
+          'type': {'@type': 'userTypeBot', 'has_topics': true},
+        } else
+          'first_name': 'Author',
       },
-      'getSupergroup' => {
-        '@type': 'supergroup',
-        'id': 42,
-        'is_forum': !groupChat,
-        'has_forum_tabs': false,
-        'status': {'@type': 'chatMemberStatusMember'},
-      },
+      'getSupergroup' =>
+        botTopicChat
+            // A user dialog has no supergroup; ChatViewModel only asks for one
+            // when the chat type resolved to a supergroup.
+            ? {'@type': 'error', 'message': 'chat not found', 'code': 400}
+            : {
+                '@type': 'supergroup',
+                'id': 42,
+                'is_forum': !groupChat,
+                'has_forum_tabs': false,
+                'status': {'@type': 'chatMemberStatusMember'},
+              },
       'getConnectionState' => {'@type': 'connectionStateReady'},
-      'getForumTopics' => {
-        '@type': 'forumTopics',
-        'topics': [
-          {
-            '@type': 'forumTopic',
-            'info': {
-              '@type': 'forumTopicInfo',
-              'chat_id': -42,
-              'forum_topic_id': 1,
-              'name': 'General',
-              'is_general': true,
-            },
-            'last_message': _message(12, 'In general'),
-          },
-          {
-            '@type': 'forumTopic',
-            'info': {
-              '@type': 'forumTopicInfo',
-              'chat_id': -42,
-              'forum_topic_id': 78,
-              'name': 'Topic A',
-            },
-            'last_message': _message(11, 'Still topic A', topicId: 78),
-          },
-          {
-            '@type': 'forumTopic',
-            'info': {
-              '@type': 'forumTopicInfo',
-              'chat_id': -42,
-              'forum_topic_id': 79,
-              'name': 'Topic B',
-              'icon_color': 0x00FF8800,
-            },
-            'last_message': _message(9, 'In topic B', topicId: 79),
-          },
-          // Topic 99 is deliberately absent: the transcript shows a message
-          // from it, so the header has to fall back to a generic label.
-        ],
-      },
+      'getForumTopics' =>
+        botTopicChat
+            ? {
+                // No is_general entry: a topics-enabled bot's chat has no
+                // General topic at all.
+                '@type': 'forumTopics',
+                'topics': [
+                  {
+                    '@type': 'forumTopic',
+                    'info': {
+                      '@type': 'forumTopicInfo',
+                      'chat_id': 700,
+                      'forum_topic_id': 61474,
+                      'name': 'Bot Topic A',
+                    },
+                    'last_message': _botMessage(
+                      12,
+                      'Still bot topic 61474',
+                      topicId: 61474,
+                    ),
+                  },
+                  {
+                    '@type': 'forumTopic',
+                    'info': {
+                      '@type': 'forumTopicInfo',
+                      'chat_id': 700,
+                      'forum_topic_id': 61753,
+                      'name': 'Bot Topic B',
+                    },
+                    'last_message': _botMessage(
+                      14,
+                      'In bot topic 61753',
+                      topicId: 61753,
+                    ),
+                  },
+                  // Topic 61999 is deliberately absent: the transcript shows a
+                  // message from it, so the header falls back to a generic
+                  // label rather than to General.
+                ],
+              }
+            : {
+                '@type': 'forumTopics',
+                'topics': [
+                  {
+                    '@type': 'forumTopic',
+                    'info': {
+                      '@type': 'forumTopicInfo',
+                      'chat_id': -42,
+                      'forum_topic_id': 1,
+                      'name': 'General',
+                      'is_general': true,
+                    },
+                    'last_message': _message(12, 'In general'),
+                  },
+                  {
+                    '@type': 'forumTopic',
+                    'info': {
+                      '@type': 'forumTopicInfo',
+                      'chat_id': -42,
+                      'forum_topic_id': 78,
+                      'name': 'Topic A',
+                    },
+                    'last_message': _message(11, 'Still topic A', topicId: 78),
+                  },
+                  {
+                    '@type': 'forumTopic',
+                    'info': {
+                      '@type': 'forumTopicInfo',
+                      'chat_id': -42,
+                      'forum_topic_id': 79,
+                      'name': 'Topic B',
+                      'icon_color': 0x00FF8800,
+                    },
+                    'last_message': _message(9, 'In topic B', topicId: 79),
+                  },
+                  // Topic 99 is deliberately absent: the transcript shows a
+                  // message from it, so the header has to fall back to a
+                  // generic label.
+                ],
+              },
       'getForumTopic' => {
         '@type': 'forumTopic',
         'info': {
           '@type': 'forumTopicInfo',
-          'chat_id': -42,
+          'chat_id': botTopicChat ? 700 : -42,
           'forum_topic_id': request['forum_topic_id'],
-          'name': 'Topic ${(request['forum_topic_id'] as int) - 77}',
+          'name': botTopicChat
+              ? 'Bot Topic ${(request['forum_topic_id'] as int) - 61473}'
+              : 'Topic ${(request['forum_topic_id'] as int) - 77}',
         },
       },
       'getForumTopicHistory' || 'getMessageThreadHistory' => {
         '@type': 'messages',
         'messages': [
-          _message(
+          _historyMessage(
             20,
             'Scoped to ${(request['forum_topic_id'] ?? 0)}',
             topicId: request['forum_topic_id'] as int?,
@@ -447,14 +701,9 @@ Map<String, dynamic> _response(Map<String, dynamic> request) =>
           when (request['filter'] as Map?)?['@type'] ==
               'searchMessagesFilterPinned' =>
         {'@type': 'foundChatMessages', 'total_count': 0, 'messages': <Map>[]},
-      'getChatHistory' => {'@type': 'messages', 'messages': _mixedHistory},
+      'getChatHistory' => {'@type': 'messages', 'messages': _transcriptHistory},
       'getMessage' => _message(request['message_id'] as int, 'Fetched'),
       'getMe' => {'@type': 'user', 'id': 1, 'first_name': 'Test'},
-      'getUser' => {
-        '@type': 'user',
-        'id': request['user_id'],
-        'first_name': 'Author',
-      },
       _ => {'@type': 'ok'},
     };
 

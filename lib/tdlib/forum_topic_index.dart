@@ -239,10 +239,17 @@ class ForumTopicIndex extends ChangeNotifier {
     if (raw == null) return;
     final chatId = raw.int64('chat_id');
     if (chatId == null) return;
-    // A message outside any topic belongs to General (id 1).
+    // A message outside any topic belongs to General (id 1) — but only in a
+    // real forum supergroup, where TDLib omits `topic_id` there. A bot topic
+    // chat has no General topic (id 1 errors) and its messages always carry
+    // an explicit reference, so an unattributed message is unattributable,
+    // not General. The chat's user kind is not known here, so a bot chat's
+    // unscoped arrival updates nothing until it names its topic.
     final topicRef = raw.obj('topic_id');
     final topicId = topicRef?.type == 'messageTopicForum'
         ? topicRef?.integer('forum_topic_id')
+        : raw.boolean('is_outgoing') == false && chatId > 0
+        ? null
         : 1;
     if (topicId == null) return;
     final topics = _topics[(slot, chatId)];

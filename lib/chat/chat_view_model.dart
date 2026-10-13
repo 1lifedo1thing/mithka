@@ -516,9 +516,17 @@ class ChatViewModel extends ChangeNotifier {
       : null;
 
   /// Whether [raw] (a TDLib `message`) belongs to this transcript.
+  ///
+  /// In a bot topic chat there is no General topic, so an unattributed
+  /// message must not fall back to it (see
+  /// [rawMessageBelongsToForumTopic]).
   bool _belongsToTranscript(Map<String, dynamic> raw) =>
       !isForumTopicTranscript ||
-      rawMessageBelongsToForumTopic(raw, forumTopicId!);
+      rawMessageBelongsToForumTopic(
+        raw,
+        forumTopicId!,
+        isGeneralFallbackAllowed: isForum,
+      );
 
   /// Rewrites a chat-wide history request into its topic-scoped equivalent.
   Map<String, dynamic> _scopedHistoryRequest(Map<String, dynamic> request) =>
@@ -4683,9 +4691,15 @@ class ChatViewModel extends ChangeNotifier {
         final message = TDParse.message(raw!);
         if (message == null) return;
         final topicRef = raw.obj('topic_id');
+        // A message outside any topic belongs to General (id 1) — but only
+        // in a real forum. A bot topic chat has no General topic and every
+        // one of its messages carries an explicit topic reference, so a
+        // missing one is unattributable traffic, not General.
         final topicId = topicRef?.type == 'messageTopicForum'
             ? topicRef?.integer('forum_topic_id')
-            : 1;
+            : isForum
+            ? 1
+            : null;
         if (topicId == null) return;
         final index = forumTopics.indexWhere((topic) => topic.id == topicId);
         if (index < 0) return;
@@ -7580,6 +7594,21 @@ class ChatViewModel extends ChangeNotifier {
   @visibleForTesting
   void applyLiveUpdateForTesting(Map<String, dynamic> update) {
     _handle(update);
+  }
+
+  @visibleForTesting
+  void isForumForTesting(bool value) {
+    isForum = value;
+  }
+
+  @visibleForTesting
+  void supportsBotTopicsForTesting(bool value) {
+    supportsBotTopics = value;
+  }
+
+  @visibleForTesting
+  void historyReachesLatestForTesting() {
+    _historyReachesLatest = true;
   }
 
   @visibleForTesting
