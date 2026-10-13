@@ -4280,10 +4280,10 @@ class ChannelPostRow extends StatelessWidget {
               const SizedBox(height: 12),
               Builder(
                 builder: (context) {
-                  // `_displayText` is trimmed; re-address the entities so the
-                  // formatting stays on the characters it covers.
+                  // Trim the raw selected caption and its entities together.
+                  // Passing `_displayText` would discard its original offsets.
                   final display = trimTextForDisplay(
-                    text,
+                    _displayTextMessage?.text ?? '',
                     _displayTextMessage?.textEntities ?? const [],
                   );
                   return TelegramRichText(
