@@ -11,6 +11,7 @@ import '../components/document_file_icon.dart';
 import '../components/photo_avatar.dart';
 import '../components/toast.dart';
 import '../profile/adaptive_profile_launcher.dart';
+import '../tdlib/display_text.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -39,12 +40,15 @@ class TopicPostContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[];
-    final documentCaption = message.document == null ? '' : text.trim();
-    if (text.isNotEmpty && message.document == null) {
+    // The post text and the file caption arrive trimmed; re-address their
+    // entities to the displayed string so formatting stays on its characters.
+    final body = trimTextForDisplay(text, message.textEntities);
+    final documentCaption = message.document == null ? '' : body.text;
+    if (body.text.isNotEmpty && message.document == null) {
       children.add(
         TelegramRichText(
-          text: text,
-          entities: message.textEntities,
+          text: body.text,
+          entities: body.entities,
           maxLines: maxTextLines,
           overflow: textOverflow,
           style: textStyle,
@@ -68,7 +72,7 @@ class TopicPostContent extends StatelessWidget {
           messageId: message.id,
           document: message.document!,
           caption: documentCaption,
-          captionEntities: message.textEntities,
+          captionEntities: body.entities,
           captionStyle: textStyle.copyWith(
             fontSize: (textStyle.fontSize ?? 15) * (14 / 15),
             decoration: TextDecoration.none,

@@ -473,7 +473,6 @@ class _TopicPostRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final text = _displayText;
     final chatTextSize = context.watch<ThemeController>().chatTextSize(15);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -542,7 +541,9 @@ class _TopicPostRow extends StatelessWidget {
               TopicPostContent(
                 chatId: post.chat.id,
                 message: post.message,
-                text: text,
+                // The raw text: TopicPostContent trims it for display and
+                // re-addresses the entities to whatever it renders.
+                text: post.message.text,
                 maxTextLines: 6,
                 textOverflow: TextOverflow.ellipsis,
                 textStyle: TextStyle(
