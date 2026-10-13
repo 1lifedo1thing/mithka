@@ -562,7 +562,6 @@ class _ChatInputBarState extends State<ChatInputBar>
 
   final _controller = EmojiTextEditingController();
   final _focus = FocusNode();
-  static const _composerTapRegionGroupId = 'mithka.composer';
   final _panelSearch = TextEditingController();
   final List<OutgoingAttachment> _pendingClipboardAttachments = [];
   final _desktopActionOwner = Object();
@@ -3343,10 +3342,10 @@ class _ChatInputBarState extends State<ChatInputBar>
     // On a phone the whole bar joins the field's tap region group: taps on the
     // send button, attachments entry or panel strips count as inside, so the
     // app-wide outside-tap keyboard dismissal leaves the keyboard open.
+    // Keep the framework's default group so selection handles and the
+    // selection toolbar remain inside the same region too.
     return RepaintBoundary(
-      child: desktopComposer
-          ? bar
-          : TextFieldTapRegion(groupId: _composerTapRegionGroupId, child: bar),
+      child: desktopComposer ? bar : TextFieldTapRegion(child: bar),
     );
   }
 
@@ -5222,20 +5221,6 @@ class _ChatInputBarState extends State<ChatInputBar>
                                     maxLines: desktop ? null : 4,
                                     expands: desktop,
                                     keyboardType: TextInputType.multiline,
-                                    // On a phone the send button, attachments
-                                    // entry and other composer controls sit
-                                    // outside the field's own tap region.
-                                    // Without a shared group the app-wide
-                                    // outside-tap dismissal treats a tap on
-                                    // them as "outside", collapsing the
-                                    // keyboard right before the send path
-                                    // re-focuses the field — the keyboard
-                                    // visibly collapses and reopens on every
-                                    // message. Grouping the whole bar with
-                                    // the field keeps composer taps inside.
-                                    groupId: desktop
-                                        ? EditableText
-                                        : _composerTapRegionGroupId,
                                     textInputAction: desktop
                                         ? TextInputAction.newline
                                         : widget.enterToSend

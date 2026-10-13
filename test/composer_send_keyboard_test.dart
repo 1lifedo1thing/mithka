@@ -229,6 +229,38 @@ void main() {
       expect(_composerFocusNode(tester).hasFocus, isFalse);
     });
 
+    testWidgets(
+      'selection toolbar retains composer focus on ${platform.name}',
+      (tester) async {
+        await _pumpComposer(tester, enterToSend: true, platform: platform);
+        final field = find.byType(TextField);
+        await tester.enterText(field, 'Selected text');
+        await tester.pump();
+        final editable = tester.state<EditableTextState>(
+          find.byType(EditableText),
+        );
+        editable.widget.controller.selection = const TextSelection(
+          baseOffset: 0,
+          extentOffset: 8,
+        );
+        await tester.pump();
+        editable.showToolbar();
+        await tester.pumpAndSettle();
+        final cut = find.text('Cut');
+        expect(cut, findsOneWidget);
+        final press = await tester.startGesture(tester.getCenter(cut));
+        await tester.pump();
+        expect(
+          _composerFocusNode(tester).hasFocus,
+          isTrue,
+          reason: 'system selection actions are inside the field tap region',
+        );
+        await press.up();
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(field).controller!.text, ' text');
+      },
+    );
+
     testWidgets('newline mode does not submit on ${platform.name}', (
       tester,
     ) async {
