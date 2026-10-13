@@ -2094,7 +2094,6 @@ class _TopicPostRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final text = _displayText;
     final chatTextSize = context.watch<ThemeController>().chatTextSize(15);
     final name = sender?.name.trim().isNotEmpty == true
         ? sender!.name.trim()
@@ -2138,7 +2137,9 @@ class _TopicPostRow extends StatelessWidget {
             TopicPostContent(
               chatId: chatId,
               message: post.message,
-              text: text,
+              // The raw text: TopicPostContent trims it for display and
+              // re-addresses the entities to whatever it renders.
+              text: post.message.text,
               textStyle: TextStyle(
                 fontSize: chatTextSize,
                 height: 1.35,
@@ -2161,6 +2162,8 @@ class _TopicPostRow extends StatelessWidget {
   }
 
   String get _displayText {
+    // Trim only for the emptiness check; TopicPostContent trims for display
+    // and re-addresses the entities to the trimmed text itself.
     return post.message.text.trim();
   }
 

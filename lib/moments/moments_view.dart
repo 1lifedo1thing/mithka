@@ -51,6 +51,7 @@ import '../platform/adaptive_platform.dart';
 import '../profile/adaptive_profile_launcher.dart';
 import '../settings/accent_color_picker_view.dart';
 import '../tdlib/chat_membership.dart';
+import '../tdlib/display_text.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -1681,9 +1682,9 @@ class _ChannelMomentsViewState extends State<ChannelMomentsView> {
   }
 
   List<MessageTextEntity> _commentEntities(ChatMessage message) {
-    return message.text == message.text.trim()
-        ? message.textEntities
-        : const [];
+    // The comment text is shown trimmed; keep the formatting by re-addressing
+    // the entities to the trimmed string instead of dropping them all.
+    return trimTextForDisplay(message.text, message.textEntities).entities;
   }
 
   void _appendPosts(int channelId, List<ChannelPost> posts) {
@@ -3066,9 +3067,9 @@ class _ChannelPostDetailViewState extends State<ChannelPostDetailView> {
   }
 
   List<MessageTextEntity> _commentEntities(ChatMessage message) {
-    return message.text == message.text.trim()
-        ? message.textEntities
-        : const [];
+    // The comment text is shown trimmed; keep the formatting by re-addressing
+    // the entities to the trimmed string instead of dropping them all.
+    return trimTextForDisplay(message.text, message.textEntities).entities;
   }
 
   int _reactionCount(ChatMessage message) =>
@@ -4277,22 +4278,32 @@ class ChannelPostRow extends StatelessWidget {
             ],
             if (text.isNotEmpty) ...[
               const SizedBox(height: 12),
-              TelegramRichText(
-                text: text,
-                entities: _displayTextMessage?.textEntities ?? const [],
-                quoteBackgroundColor: _momentQuoteFill(c),
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.35,
-                  color: c.textPrimary,
-                ),
-                onMentionTap: (userId, name) {
-                  unawaited(
-                    openAdaptiveUserProfile(
-                      context,
-                      userId: userId,
-                      name: name,
+              Builder(
+                builder: (context) {
+                  // Trim the raw selected caption and its entities together.
+                  // Passing `_displayText` would discard its original offsets.
+                  final display = trimTextForDisplay(
+                    _displayTextMessage?.text ?? '',
+                    _displayTextMessage?.textEntities ?? const [],
+                  );
+                  return TelegramRichText(
+                    text: display.text,
+                    entities: display.entities,
+                    quoteBackgroundColor: _momentQuoteFill(c),
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.35,
+                      color: c.textPrimary,
                     ),
+                    onMentionTap: (userId, name) {
+                      unawaited(
+                        openAdaptiveUserProfile(
+                          context,
+                          userId: userId,
+                          name: name,
+                        ),
+                      );
+                    },
                   );
                 },
               ),
