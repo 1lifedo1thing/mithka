@@ -114,7 +114,9 @@ class ChatMessageSearchController extends ChangeNotifier {
     TdClient? client,
     this.onActivateResult,
     this.autoActivateFirstResult = true,
-  }) : _client = client ?? TdClient.shared;
+  }) : _client = client ?? TdClient.shared {
+    textController.addListener(_handleSelectionChanged);
+  }
 
   static const Duration _debounceDelay = Duration(milliseconds: 280);
   static const int _pageSize = 40;
@@ -279,6 +281,28 @@ class ChatMessageSearchController extends ChangeNotifier {
     if (_senderFilter?.query != _tokens.fromQuery) _senderFilter = null;
     _startSuggestions();
     _restart();
+  }
+
+  void _handleSelectionChanged() {
+    if (_disposed || !_active || textController.text != _query) return;
+    final caret = textController.selection.baseOffset;
+    final candidate = activeChatSearchToken(
+      _query,
+      caret < 0 ? _query.length : caret,
+    );
+    final next =
+        candidate?.kind == ChatSearchTokenKind.from ||
+            candidate?.kind == ChatSearchTokenKind.has
+        ? candidate
+        : null;
+    final previous = _activeToken;
+    if ((next?.kind, next?.value, next?.start, next?.end) ==
+        (previous?.kind, previous?.value, previous?.start, previous?.end)) {
+      return;
+    }
+    _activeToken = next;
+    _startSuggestions();
+    notifyListeners();
   }
 
   void _startSuggestions() {
@@ -499,14 +523,15 @@ class ChatMessageSearchController extends ChangeNotifier {
   }
 
   Future<_SearchPage?> _fetchPage(String query, {required int from}) async {
+    final userId = senderUserId;
     try {
       final response = await _client.query({
         '@type': 'searchChatMessages',
         'chat_id': chatId,
         'query': query,
-        'sender_id': _senderFilter == null
+        'sender_id': userId == null
             ? null
-            : {'@type': 'messageSenderUser', 'user_id': _senderFilter!.userId},
+            : {'@type': 'messageSenderUser', 'user_id': userId},
         'from_message_id': from,
         'offset': 0,
         'limit': _pageSize,

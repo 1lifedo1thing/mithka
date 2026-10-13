@@ -59,6 +59,7 @@ class DesktopInlineSearchController extends ChangeNotifier {
       _miniAppSearch = miniAppSearch ?? TelegramMiniAppRecents.search {
     _model.addListener(_handleModelChanged);
     focusNode.addListener(_handleFocusChanged);
+    textController.addListener(_handleSelectionChanged);
   }
 
   static const List<SearchTab> _searchTabs = [
@@ -543,6 +544,23 @@ class DesktopInlineSearchController extends ChangeNotifier {
 
   void _handleFocusChanged() {
     if (!_disposed) notifyListeners();
+  }
+
+  void _handleSelectionChanged() {
+    if (_disposed || textController.text != _query) return;
+    final caret = textController.selection.baseOffset;
+    final next = activeChatSearchToken(
+      _query,
+      caret < 0 ? _query.length : caret,
+    );
+    final previous = _activeToken;
+    if ((next?.kind, next?.value, next?.start, next?.end) ==
+        (previous?.kind, previous?.value, previous?.start, previous?.end)) {
+      return;
+    }
+    _activeToken = next;
+    _startSuggestions();
+    notifyListeners();
   }
 
   @override
