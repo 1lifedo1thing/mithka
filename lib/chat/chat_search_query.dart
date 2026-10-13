@@ -40,7 +40,7 @@ class ChatSearchTokens {
 }
 
 /// The kinds of token that offer suggestions while being typed.
-enum ChatSearchTokenKind { from, chat }
+enum ChatSearchTokenKind { from, chat, has }
 
 /// The token the caret is sitting in, which is the one to suggest for.
 class ChatSearchActiveToken {
@@ -84,6 +84,21 @@ const _filterAliases = <String, ChatSearchFilter>{
 /// Kinds `has:` accepts, for anything that wants to describe the syntax.
 Iterable<String> get chatSearchHasAliases => _filterAliases.keys;
 
+/// One accepted `has:` alias with the filter it resolves to.
+typedef ChatSearchHasAlias = ({String alias, ChatSearchFilter filter});
+
+/// The accepted `has:` aliases in display order: the first alias of each kind
+/// leads, so the suggestion list reads link, file, photo, voice, music — the
+/// order the hint's example line already promises.
+List<ChatSearchHasAlias> get chatSearchHasSuggestions {
+  final seen = <ChatSearchFilter>{};
+  final out = <ChatSearchHasAlias>[];
+  _filterAliases.forEach((alias, filter) {
+    if (seen.add(filter)) out.add((alias: alias, filter: filter));
+  });
+  return out;
+}
+
 final _tokenPattern = RegExp(
   // A token is `key:value`, where the value may be quoted to hold spaces.
   r'\b(from|in|has):("([^"]*)"|\S*)',
@@ -103,6 +118,7 @@ ChatSearchActiveToken? activeChatSearchToken(String raw, int caretOffset) {
     final kind = switch (key) {
       'from' => ChatSearchTokenKind.from,
       'in' => ChatSearchTokenKind.chat,
+      'has' => ChatSearchTokenKind.has,
       _ => null,
     };
     if (kind == null) return null;
@@ -128,6 +144,7 @@ ChatSearchActiveToken? activeChatSearchToken(String raw, int caretOffset) {
   final key = switch (token.kind) {
     ChatSearchTokenKind.from => 'from',
     ChatSearchTokenKind.chat => 'in',
+    ChatSearchTokenKind.has => 'has',
   };
   final quoted = value.contains(' ') ? '"$value"' : value;
   // Leave the caret past a single separating space. Adding one unconditionally

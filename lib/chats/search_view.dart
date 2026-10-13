@@ -118,13 +118,27 @@ class DesktopInlineSearchController extends ChangeNotifier {
   /// it remains editable text until the user chooses a suggestion.
   ChatSearchTokenSuggestion? get resolvedSender => _committedSender;
 
-  /// Whether the field is asking to be taught its syntax: focused, empty, and
-  /// carrying no filters yet.
+  /// Whether the field asks to be taught its syntax: focused, empty, and with
+  /// nothing to show.
+  ///
+  /// A committed scope or sender does not close the lesson — the remaining
+  /// tokens still combine with it — but once that filter's results are in, the
+  /// panel answers with them and the hints return only when the field is
+  /// emptied again.
   bool get showsTokenHints =>
       focusNode.hasFocus &&
       _query.trim().isEmpty &&
-      _scope == null &&
-      resolvedSender == null;
+      !_activeTabs.any((tab) => _model.resultsFor(tab).isNotEmpty);
+
+  /// The tokens this field can still state: everything except a filter that
+  /// already sits as a badge (`in:` when scoped, `from:` when a sender is
+  /// committed).
+  List<SearchTokenHint> get visibleHints => [
+    if (scope == null) searchTokenInHint,
+    if (resolvedSender == null) searchTokenFromHint,
+    searchTokenHasHint,
+  ];
+
   bool get panelVisible => showsTokenHints || (_panelVisible && _hasSearch);
   bool get isLoading =>
       _debouncing || _miniAppsLoading || _activeTabs.any(_model.isLoading);
@@ -382,6 +396,18 @@ class DesktopInlineSearchController extends ChangeNotifier {
   void applySuggestion(ChatSearchTokenSuggestion suggestion) {
     final token = _activeToken;
     if (_disposed || token == null) return;
+    if (token.kind == ChatSearchTokenKind.has) {
+      // A `has:` kind is complete text, not a badge — the field keeps the
+      // token so the stated filter stays visible and editable.
+      final applied = applyChatSearchToken(_query, token, suggestion.token);
+      textController.value = TextEditingValue(
+        text: applied.text,
+        selection: TextSelection.collapsed(offset: applied.caret),
+      );
+      focusNode.requestFocus();
+      updateQuery(applied.text);
+      return;
+    }
     if (token.kind == ChatSearchTokenKind.chat) {
       _committedChat = suggestion;
       _scope = ActiveConversationScope(
@@ -900,11 +926,7 @@ class DesktopInlineSearchPanel extends StatelessWidget {
         return _panelShell(
           context,
           child: SearchTokenHints(
-            hints: const [
-              searchTokenFromHint,
-              searchTokenInHint,
-              searchTokenHasHint,
-            ],
+            hints: controller.visibleHints,
             onPick: controller.startToken,
           ),
         );
