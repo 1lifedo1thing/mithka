@@ -5207,15 +5207,17 @@ class _ChatInputBarState extends State<ChatInputBar>
                                     controller: _controller,
                                     focusNode: _focus,
                                     onTap: _handleEmptyInputTap,
-                                    // Pressing the IME send key must not
-                                    // collapse the keyboard: the default
-                                    // EditableText.onEditingComplete drops
-                                    // focus for "completion actions" like
-                                    // send, and the field is re-focused after
-                                    // the message is sent, so on Android the
-                                    // keyboard visibly collapses and reopens.
-                                    // A no-op keeps the composer focused.
-                                    onEditingComplete: () {},
+                                    // Submit from editing completion without
+                                    // onSubmitted: Flutter restarts the input
+                                    // connection after a completion action
+                                    // whenever onSubmitted is present, even
+                                    // when onEditingComplete retains focus.
+                                    onEditingComplete: () {
+                                      _controller.clearComposing();
+                                      if (!desktop && widget.enterToSend) {
+                                        unawaited(_sendCurrentText());
+                                      }
+                                    },
                                     minLines: desktop ? null : 1,
                                     maxLines: desktop ? null : 4,
                                     expands: desktop,
@@ -5239,9 +5241,6 @@ class _ChatInputBarState extends State<ChatInputBar>
                                         : widget.enterToSend
                                         ? TextInputAction.send
                                         : TextInputAction.newline,
-                                    onSubmitted: !desktop && widget.enterToSend
-                                        ? (_) => unawaited(_sendCurrentText())
-                                        : null,
                                     inputFormatters:
                                         widget.enterToSend &&
                                             Theme.of(context).platform ==

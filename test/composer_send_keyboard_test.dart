@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,8 @@ class _SendKeyboardViewModel extends ChatViewModel {
     : super(chatId: 1, title: 'Test', markReadOnOpen: false);
 
   final sentTexts = <String>[];
+  Future<bool>? preparation;
+  bool sendSucceeds = true;
 
   @override
   void sendTyping() {}
@@ -26,7 +30,7 @@ class _SendKeyboardViewModel extends ChatViewModel {
   }
 
   @override
-  Future<bool> prepareMessageSend() async => true;
+  Future<bool> prepareMessageSend() => preparation ?? Future.value(true);
 
   @override
   Future<bool> currentUserIsPremium() async => true;
@@ -36,14 +40,15 @@ class _SendKeyboardViewModel extends ChatViewModel {
     String text,
     List<Map<String, dynamic>> entities,
   ) async {
-    sentTexts.add(text);
-    return true;
+    if (sendSucceeds) sentTexts.add(text);
+    return sendSucceeds;
   }
 }
 
 Future<_SendKeyboardViewModel> _pumpComposer(
   WidgetTester tester, {
   required bool enterToSend,
+  TargetPlatform platform = TargetPlatform.android,
 }) async {
   final vm = _SendKeyboardViewModel();
   addTearDown(vm.dispose);
@@ -61,10 +66,7 @@ Future<_SendKeyboardViewModel> _pumpComposer(
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      theme: ThemeData(
-        platform: TargetPlatform.android,
-        extensions: [AppColors.light],
-      ),
+      theme: ThemeData(platform: platform, extensions: [AppColors.light]),
       home: Scaffold(
         body: Align(
           alignment: Alignment.bottomCenter,
@@ -85,65 +87,214 @@ Future<_SendKeyboardViewModel> _pumpComposer(
 FocusNode _composerFocusNode(WidgetTester tester) =>
     tester.widget<EditableText>(find.byType(EditableText).first).focusNode;
 
+void _expectInputConnectionRetained(WidgetTester tester) {
+  expect(
+    tester.testTextInput.log.where(
+      (call) =>
+          call.method == 'TextInput.clearClient' ||
+          call.method == 'TextInput.setClient' ||
+          call.method == 'TextInput.hide',
+    ),
+    isEmpty,
+    reason: 'sending must retain the current input connection',
+  );
+  expect(_composerFocusNode(tester).hasFocus, isTrue);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('pointer down on send keeps the keyboard open on Android', (
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('pointer down on send retains the keyboard on ${platform.name}', (
+      tester,
+    ) async {
+      final vm = await _pumpComposer(
+        tester,
+        enterToSend: false,
+        platform: platform,
+      );
+      final field = find.byType(TextField);
+
+      await tester.tap(field);
+      await tester.pump();
+      expect(_composerFocusNode(tester).hasFocus, isTrue);
+
+      await tester.enterText(field, 'hello');
+      await tester.pump();
+
+      // The dismiss-on-tap handler runs on pointer down, before the button's
+      // onTap. Split the gesture so the intermediate state is observable: the
+      // send button joins the composer tap region group, so pressing it must
+      // not drop focus (which would collapse and then reopen the keyboard).
+      final sendButton = find.byKey(const ValueKey('composerSendButton'));
+      tester.testTextInput.log.clear();
+      final gesture = await tester.startGesture(tester.getCenter(sendButton));
+      await tester.pump();
+      expect(
+        _composerFocusNode(tester).hasFocus,
+        isTrue,
+        reason:
+            'pressing send must not be treated as an outside tap; the keyboard '
+            'would collapse and immediately reopen once the send path '
+            're-focuses the composer',
+      );
+      await gesture.up();
+      await tester.pump();
+
+      expect(vm.sentTexts, ['hello']);
+      _expectInputConnectionRetained(tester);
+    });
+
+    testWidgets(
+      'software send retains the input connection on ${platform.name}',
+      (tester) async {
+        final vm = await _pumpComposer(
+          tester,
+          enterToSend: true,
+          platform: platform,
+        );
+        final field = find.byType(TextField);
+
+        await tester.tap(field);
+        await tester.pump();
+        await tester.enterText(field, 'hello');
+        await tester.pump();
+
+        tester.testTextInput.log.clear();
+        await tester.testTextInput.receiveAction(TextInputAction.send);
+        await tester.pump();
+
+        expect(vm.sentTexts, ['hello']);
+        _expectInputConnectionRetained(tester);
+      },
+    );
+
+    testWidgets('pending send preparation retains focus on ${platform.name}', (
+      tester,
+    ) async {
+      final vm = await _pumpComposer(
+        tester,
+        enterToSend: true,
+        platform: platform,
+      );
+      final field = find.byType(TextField);
+      final ready = Completer<bool>();
+      vm.preparation = ready.future;
+      await tester.enterText(field, 'pending');
+      await tester.pump();
+      tester.testTextInput.log.clear();
+
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pump();
+      expect(vm.sentTexts, isEmpty);
+      expect(tester.widget<TextField>(field).controller!.text, 'pending');
+      _expectInputConnectionRetained(tester);
+
+      ready.complete(true);
+      await tester.pump();
+      expect(vm.sentTexts, ['pending']);
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      _expectInputConnectionRetained(tester);
+    });
+
+    testWidgets('failed software send retains the draft on ${platform.name}', (
+      tester,
+    ) async {
+      final vm = await _pumpComposer(
+        tester,
+        enterToSend: true,
+        platform: platform,
+      );
+      vm.sendSucceeds = false;
+      final field = find.byType(TextField);
+      await tester.enterText(field, 'retry later');
+      await tester.pump();
+      tester.testTextInput.log.clear();
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pump();
+      expect(vm.sentTexts, isEmpty);
+      expect(tester.widget<TextField>(field).controller!.text, 'retry later');
+      _expectInputConnectionRetained(tester);
+    });
+
+    testWidgets('outside taps still dismiss the keyboard on ${platform.name}', (
+      tester,
+    ) async {
+      await _pumpComposer(tester, enterToSend: true, platform: platform);
+      await tester.enterText(find.byType(TextField), 'draft');
+      await tester.pump();
+      expect(_composerFocusNode(tester).hasFocus, isTrue);
+      await tester.tapAt(const Offset(12, 12));
+      await tester.pump();
+      expect(_composerFocusNode(tester).hasFocus, isFalse);
+    });
+
+    testWidgets('newline mode does not submit on ${platform.name}', (
+      tester,
+    ) async {
+      final vm = await _pumpComposer(
+        tester,
+        enterToSend: false,
+        platform: platform,
+      );
+      final field = find.byType(TextField);
+      expect(
+        tester.widget<TextField>(field).textInputAction,
+        TextInputAction.newline,
+      );
+      await tester.enterText(field, 'first\nsecond');
+      await tester.pump();
+      tester.testTextInput.log.clear();
+      await tester.testTextInput.receiveAction(TextInputAction.newline);
+      await tester.pump();
+      expect(vm.sentTexts, isEmpty);
+      expect(tester.widget<TextField>(field).controller!.text, 'first\nsecond');
+      _expectInputConnectionRetained(tester);
+    });
+
+    testWidgets(
+      'software send commits composing text once on ${platform.name}',
+      (tester) async {
+        final vm = await _pumpComposer(
+          tester,
+          enterToSend: true,
+          platform: platform,
+        );
+        final field = find.byType(TextField);
+        await tester.enterText(field, 'hello');
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: 'hello',
+            selection: TextSelection.collapsed(offset: 5),
+            composing: TextRange(start: 0, end: 5),
+          ),
+        );
+        await tester.pump();
+        tester.testTextInput.log.clear();
+        await tester.testTextInput.receiveAction(TextInputAction.send);
+        await tester.pump();
+        expect(vm.sentTexts, ['hello']);
+        expect(
+          tester.widget<TextField>(field).controller!.value.composing,
+          TextRange.empty,
+        );
+        _expectInputConnectionRetained(tester);
+      },
+    );
+  }
+
+  testWidgets('desktop retains its default tap-region grouping', (
     tester,
   ) async {
-    final vm = await _pumpComposer(tester, enterToSend: false);
-    final field = find.byType(TextField);
-
-    await tester.tap(field);
-    await tester.pump();
-    expect(_composerFocusNode(tester).hasFocus, isTrue);
-
-    await tester.enterText(field, 'hello');
-    await tester.pump();
-
-    // The dismiss-on-tap handler runs on pointer down, before the button's
-    // onTap. Split the gesture so the intermediate state is observable: the
-    // send button joins the composer tap region group, so pressing it must
-    // not drop focus (which would collapse and then reopen the keyboard).
-    final sendButton = find.byKey(const ValueKey('composerSendButton'));
-    final gesture = await tester.startGesture(tester.getCenter(sendButton));
-    await tester.pump();
-    expect(
-      _composerFocusNode(tester).hasFocus,
-      isTrue,
-      reason:
-          'pressing send must not be treated as an outside tap; the keyboard '
-          'would collapse and immediately reopen once the send path '
-          're-focuses the composer',
+    final vm = await _pumpComposer(
+      tester,
+      enterToSend: true,
+      platform: TargetPlatform.macOS,
     );
-    await gesture.up();
-    await tester.pump();
-
-    expect(vm.sentTexts, ['hello']);
-    expect(_composerFocusNode(tester).hasFocus, isTrue);
-  });
-
-  testWidgets('the software send action keeps the keyboard open on Android', (
-    tester,
-  ) async {
-    final vm = await _pumpComposer(tester, enterToSend: true);
-    final field = find.byType(TextField);
-
-    await tester.tap(field);
-    await tester.pump();
-    await tester.enterText(field, 'hello');
-    await tester.pump();
-
-    await tester.testTextInput.receiveAction(TextInputAction.send);
-    await tester.pump();
-
-    expect(vm.sentTexts, ['hello']);
     expect(
-      _composerFocusNode(tester).hasFocus,
-      isTrue,
-      reason:
-          'send is a chat-completion action; the composer must stay focused '
-          'instead of collapsing and reopening the keyboard',
+      tester.widget<TextField>(find.byType(TextField)).groupId,
+      EditableText,
     );
+    expect(vm.sentTexts, isEmpty);
   });
 }
