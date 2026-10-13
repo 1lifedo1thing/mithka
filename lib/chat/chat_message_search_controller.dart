@@ -114,7 +114,9 @@ class ChatMessageSearchController extends ChangeNotifier {
     TdClient? client,
     this.onActivateResult,
     this.autoActivateFirstResult = true,
-  }) : _client = client ?? TdClient.shared;
+  }) : _client = client ?? TdClient.shared {
+    textController.addListener(_handleSelectionChanged);
+  }
 
   static const Duration _debounceDelay = Duration(milliseconds: 280);
   static const int _pageSize = 40;
@@ -270,11 +272,37 @@ class ChatMessageSearchController extends ChangeNotifier {
       value,
       caret < 0 ? value.length : caret,
     );
-    _activeToken = token?.kind == ChatSearchTokenKind.from ? token : null;
+    _activeToken =
+        token?.kind == ChatSearchTokenKind.from ||
+            token?.kind == ChatSearchTokenKind.has
+        ? token
+        : null;
     // A sender resolved for a different token no longer applies.
     if (_senderFilter?.query != _tokens.fromQuery) _senderFilter = null;
     _startSuggestions();
     _restart();
+  }
+
+  void _handleSelectionChanged() {
+    if (_disposed || !_active || textController.text != _query) return;
+    final caret = textController.selection.baseOffset;
+    final candidate = activeChatSearchToken(
+      _query,
+      caret < 0 ? _query.length : caret,
+    );
+    final next =
+        candidate?.kind == ChatSearchTokenKind.from ||
+            candidate?.kind == ChatSearchTokenKind.has
+        ? candidate
+        : null;
+    final previous = _activeToken;
+    if ((next?.kind, next?.value, next?.start, next?.end) ==
+        (previous?.kind, previous?.value, previous?.start, previous?.end)) {
+      return;
+    }
+    _activeToken = next;
+    _startSuggestions();
+    notifyListeners();
   }
 
   void _startSuggestions() {
@@ -308,10 +336,13 @@ class ChatMessageSearchController extends ChangeNotifier {
     }());
   }
 
-  /// Whether the field is asking to be taught its syntax: focused, empty, and
-  /// carrying no filter yet.
+  /// Whether the field is asking to be taught its syntax: focused and empty.
+  ///
+  /// A committed sender does not close the lesson — `has:` still combines with
+  /// it — but results on the pane outrank the lesson; the hints return when
+  /// the query is emptied.
   bool get showsTokenHints =>
-      focusNode.hasFocus && !hasSearch && _senderFilter == null;
+      focusNode.hasFocus && !hasSearch && _results.isEmpty;
 
   /// Starts a token in the field from the hint list.
   void startToken(String token) {
@@ -332,6 +363,18 @@ class ChatMessageSearchController extends ChangeNotifier {
   void applySuggestion(ChatSearchTokenSuggestion suggestion) {
     final token = _activeToken;
     if (_disposed || token == null) return;
+    if (token.kind == ChatSearchTokenKind.has) {
+      // A `has:` kind is complete text, not a badge — the field keeps the
+      // token so the stated filter stays visible and editable.
+      final applied = applyChatSearchToken(_query, token, suggestion.token);
+      textController.value = TextEditingValue(
+        text: applied.text,
+        selection: TextSelection.collapsed(offset: applied.caret),
+      );
+      focusNode.requestFocus();
+      updateQuery(applied.text);
+      return;
+    }
     _committedSender = _SearchSenderFilter(
       query: suggestion.token,
       userId: suggestion.id,
@@ -480,14 +523,15 @@ class ChatMessageSearchController extends ChangeNotifier {
   }
 
   Future<_SearchPage?> _fetchPage(String query, {required int from}) async {
+    final userId = senderUserId;
     try {
       final response = await _client.query({
         '@type': 'searchChatMessages',
         'chat_id': chatId,
         'query': query,
-        'sender_id': _senderFilter == null
+        'sender_id': userId == null
             ? null
-            : {'@type': 'messageSenderUser', 'user_id': _senderFilter!.userId},
+            : {'@type': 'messageSenderUser', 'user_id': userId},
         'from_message_id': from,
         'offset': 0,
         'limit': _pageSize,

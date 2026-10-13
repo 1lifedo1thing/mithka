@@ -561,22 +561,26 @@ class ChatSearchResultsPane extends StatelessWidget {
     // instead of listing hits for a half-written filter.
     final token = controller.activeToken;
     if (token != null) {
-      return ColoredBox(
-        color: backgroundColor ?? c.panelBackground,
-        child: SearchTokenSuggestionList(
-          suggestions: controller.suggestions,
-          onPick: controller.applySuggestion,
-          shrinkWrap: false,
+      return TextFieldTapRegion(
+        child: ColoredBox(
+          color: backgroundColor ?? c.panelBackground,
+          child: SearchTokenSuggestionList(
+            suggestions: controller.suggestions,
+            onPick: controller.applySuggestion,
+            shrinkWrap: false,
+          ),
         ),
       );
     }
     if (controller.showsTokenHints) {
-      return ColoredBox(
-        color: backgroundColor ?? c.panelBackground,
-        child: SingleChildScrollView(
-          child: SearchTokenHints(
-            hints: const [searchTokenFromHint, searchTokenHasHint],
-            onPick: controller.startToken,
+      return TextFieldTapRegion(
+        child: ColoredBox(
+          color: backgroundColor ?? c.panelBackground,
+          child: SingleChildScrollView(
+            child: SearchTokenHints(
+              hints: const [searchTokenFromHint, searchTokenHasHint],
+              onPick: controller.startToken,
+            ),
           ),
         ),
       );

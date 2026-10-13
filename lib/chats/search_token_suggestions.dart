@@ -10,6 +10,7 @@
 //
 
 import '../chat/chat_search_query.dart';
+import '../l10n/app_localizations.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -53,10 +54,29 @@ class ChatSearchTokenSuggester {
   Future<List<ChatSearchTokenSuggestion>> suggest(
     ChatSearchActiveToken token, {
     int? scopeChatId,
-  }) => switch (token.kind) {
-    ChatSearchTokenKind.chat => _chats(token.value),
-    ChatSearchTokenKind.from => _senders(token.value, scopeChatId),
+  }) async => switch (token.kind) {
+    ChatSearchTokenKind.chat => await _chats(token.value),
+    ChatSearchTokenKind.from => await _senders(token.value, scopeChatId),
+    ChatSearchTokenKind.has => _hasValues(token.value),
   };
+
+  /// The closed vocabulary of `has:`.
+  ///
+  /// Every kind the field understands; the needle keeps the aliases whose
+  /// token text matches what has been typed.
+  List<ChatSearchTokenSuggestion> _hasValues(String query) {
+    final needle = query.toLowerCase();
+    return [
+      for (final (:alias, :filter) in chatSearchHasSuggestions)
+        if (needle.isEmpty || alias.toLowerCase().contains(needle))
+          ChatSearchTokenSuggestion(
+            id: filter.index,
+            title: AppStrings.t(filter.labelKey),
+            token: alias,
+            subtitle: alias,
+          ),
+    ];
+  }
 
   /// Chats for `in:`. An empty token offers the top of the chat list, so the
   /// affordance is useful before anything is typed.
