@@ -1983,6 +1983,8 @@ abstract final class AppStringKeys {
   static const messageActionCopy = 'messageActionCopy';
   static const messageActionCopyImage = 'messageActionCopyImage';
   static const messageActionCopyImageFailed = 'messageActionCopyImageFailed';
+  static const messageActionCopyMessageLink = 'messageActionCopyMessageLink';
+  static const messageActionCopyLinkFailed = 'messageActionCopyLinkFailed';
   static const messageActionDisplayOriginal = 'messageActionDisplayOriginal';
   static const messageActionDisplayTranslation =
       'messageActionDisplayTranslation';
@@ -3195,6 +3197,7 @@ abstract final class AppStringKeys {
   static const blockingExemptions = 'blockingExemptions';
   static const blockingTitle = 'blockingTitle';
   static const messagePollVotes = 'messagePollVotes';
+  static const messageLinkCopied = 'messageLinkCopied';
   static const messagePollClosed = 'messagePollClosed';
   static const messagePollStop = 'messagePollStop';
   static const messagePollStopConfirm = 'messagePollStopConfirm';

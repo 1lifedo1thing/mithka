@@ -1980,6 +1980,8 @@
     <string name="messageActionCopy">복사</string>
     <string name="messageActionCopyImage">이미지 복사</string>
     <string name="messageActionCopyImageFailed">이미지를 복사할 수 없습니다</string>
+    <string name="messageActionCopyMessageLink">메시지 링크 복사</string>
+    <string name="messageActionCopyLinkFailed">링크를 복사하지 못했습니다</string>
     <string name="messageActionDisplayOriginal">원문 표시</string>
     <string name="messageActionDisplayTranslation">번역 표시</string>
     <string name="messageActionEdit">수정</string>
@@ -2090,6 +2092,7 @@
     <string name="messageInfoViews">조회수</string>
     <string name="messageInformationTitle">Message Info</string>
     <string name="messageLeaveAComment">댓글 남기기</string>
+    <string name="messageLinkCopied">링크 복사됨</string>
     <string name="messagePollClosed">Closed</string>
     <string name="messagePollStop">Close poll</string>
     <string name="messagePollStopConfirm">Voting cannot continue after this poll is closed.</string>
