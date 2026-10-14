@@ -28,6 +28,7 @@ import '../chat/chat_search_view.dart';
 import '../chat/chat_wallpaper.dart';
 import '../chat/custom_emoji.dart';
 import '../chat/full_image_viewer.dart';
+import '../chat/link_handler.dart';
 import '../chat/music_player_controller.dart';
 import '../chat/secret_chat_service.dart';
 import '../chat/sticker_item.dart';
@@ -55,6 +56,7 @@ import 'profile_contact_management_view.dart';
 import 'profile_contact_service.dart';
 import 'profile_gifts.dart';
 import 'profile_identity_summary.dart';
+import 'profile_link.dart';
 import 'profile_username_pill.dart';
 import 'registration_date_estimate.dart';
 
@@ -414,9 +416,9 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   }
 
   void _copyProfileLink() {
-    final link = _usernames.isNotEmpty
-        ? 'https://t.me/${_usernames.first}'
-        : 'tg://user?id=${widget.userId}';
+    final link =
+        profileLinkForIdentity(usernames: _usernames, userId: widget.userId) ??
+        'tg://user?id=${widget.userId}';
     Clipboard.setData(ClipboardData(text: link));
     showToast(context, AppStrings.t(AppStringKeys.profileDetailCardLinkCopied));
   }
@@ -1048,7 +1050,11 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
         behavior: HitTestBehavior.opaque,
         onLongPress: () => _copyValue(line.copyText),
         child: isUsername
-            ? ProfileUsernamePill(username: line.text)
+            ? ProfileUsernamePill(
+                username: line.text,
+                onTap: (username) =>
+                    unawaited(openLink(context, 'https://t.me/$username')),
+              )
             : Text(
                 line.text,
                 maxLines: 1,

@@ -5,6 +5,51 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image_lib;
 import 'package:mithka/chat/sticker_set_management_service.dart';
+import 'package:mithka/tdlib/td_client.dart';
+
+class _Accounts implements TdClient {
+  @override
+  int activeClientId = 9;
+  final Map<int, int> clients = {0: 9, 1: 10};
+  final requests = <int>[];
+  final sent = <int>[];
+
+  @override
+  int? clientId(int slot) => clients[slot];
+
+  @override
+  Future<Map<String, dynamic>> query(
+    Map<String, dynamic> request, {
+    Duration timeout = const Duration(seconds: 30),
+  }) => queryTo(request, activeClientId, timeout: timeout);
+
+  @override
+  Future<Map<String, dynamic>> queryTo(
+    Map<String, dynamic> request,
+    int clientId, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    requests.add(clientId);
+    switch (request['@type']) {
+      case 'getMe':
+        // A foreground switch happens between the read and the write.
+        activeClientId = 10;
+        return {'@type': 'user', 'id': 73};
+      case 'removeStickerFromSet':
+        sent.add(clientId);
+        final fileId = (request['sticker'] as Map)['id'] as int;
+        if (fileId == 12) {
+          throw StateError('TDLib error 400: STICKER_INVALID');
+        }
+        return {'@type': 'ok'};
+      default:
+        return {'@type': 'ok'};
+    }
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   test('new sticker and create set requests match pinned TDLib schema', () {
@@ -208,4 +253,103 @@ void main() {
       expect(requests[10], {'@type': 'deleteStickerSet', 'name': 'my_set'});
     },
   );
+
+  test('an unpinned service follows the active account on a switch', () async {
+    final accounts = _Accounts();
+    final service = StickerSetManagementService(query: accounts.query);
+    // A read first: getMe flips the foreground account mid-session.
+    await service.myId();
+    await service.remove(99);
+    // The unpinned default routes to the then-active client, which is the
+    // documented read-only behavior (and the hazard pinned callers avoid).
+    expect(accounts.sent, [10]);
+  });
+
+  test('a pinned service keeps writes on the source account', () async {
+    final accounts = _Accounts();
+    final query = stickerSetQueryForOwner(
+      accounts,
+      accountSlot: 0,
+      clientId: 9,
+    );
+    final service = StickerSetManagementService(
+      query: query,
+      pinnedQuery: query,
+    );
+
+    // A foreground switch happens mid-session (getMe flips the active
+    // client); every write still goes to the source client 9.
+    await service.myId();
+    await service.remove(11);
+    await service.move(11, 2);
+    expect(accounts.sent, everyElement(9));
+    expect(accounts.requests, everyElement(9));
+  });
+
+  test('a replaced source client fails closed, never retargets', () async {
+    final accounts = _Accounts();
+    final query = stickerSetQueryForOwner(
+      accounts,
+      accountSlot: 0,
+      clientId: 9,
+    );
+    final service = StickerSetManagementService(
+      query: query,
+      pinnedQuery: query,
+    );
+
+    // The source client was replaced (slot 0 now maps to client 10): the
+    // pinned query must throw rather than follow the mapping.
+    accounts.clients[0] = 10;
+    await expectLater(
+      service.remove(11),
+      throwsA(isA<StickerSetAccountUnavailable>()),
+    );
+    expect(accounts.sent, isEmpty);
+  });
+
+  test('removeSelected continues past failures and reports them', () async {
+    final accounts = _Accounts();
+    final query = stickerSetQueryForOwner(
+      accounts,
+      accountSlot: 0,
+      clientId: 9,
+    );
+    final service = StickerSetManagementService(
+      query: query,
+      pinnedQuery: query,
+    );
+
+    final result = await service.removeSelected([11, 12, 13]);
+    // 12 throws STICKER_INVALID; 13 is still deleted on the same account.
+    expect(result.removed, [11, 13]);
+    expect(result.failures, hasLength(1));
+    expect(result.failures.single.fileId, 12);
+    expect(result.allSucceeded, isFalse);
+    expect(accounts.sent, [9, 9, 9]);
+  });
+
+  test('removeSelected stops when the account goes away mid-batch', () async {
+    final accounts = _Accounts();
+    final query = stickerSetQueryForOwner(
+      accounts,
+      accountSlot: 0,
+      clientId: 9,
+    );
+    final service = StickerSetManagementService(
+      query: query,
+      pinnedQuery: query,
+    );
+
+    // After the first removal, the source account is removed entirely.
+    await service.removeSelected([11]).then((_) async {
+      accounts.clients.remove(0);
+      await expectLater(
+        service.removeSelected([12, 13]),
+        throwsA(isA<StickerSetAccountUnavailable>()),
+      );
+    });
+    // The doomed batch sent nothing once the owner vanished.
+    expect(accounts.sent.where((clientId) => clientId == 9), isNotEmpty);
+  });
 }

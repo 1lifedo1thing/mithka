@@ -326,20 +326,99 @@ Map<String, dynamic> uploadStickerFileRequest({
   'sticker': {'@type': 'inputFileLocal', 'path': sticker.path},
 };
 
+/// Thrown by a pinned query when the account that owns the sticker set is
+/// no longer the client the session captured — switched away, replaced, or
+/// removed. Callers treat it as "stop, do not fall back", unlike an
+/// ordinary TDLib error on a sticker.
+class StickerSetAccountUnavailable implements Exception {
+  const StickerSetAccountUnavailable(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Pins sticker-set ids to the client that supplied them, the ownership
+/// pattern `forwardQueryForOwner` uses for message ids: sticker file ids are
+/// account-scoped, so every request of an open session must keep going to
+/// the account that loaded the set even if the user switches the foreground
+/// account mid-session. A replaced or removed source client fails closed —
+/// the mutation never falls back to the then-active account.
+@visibleForTesting
+StickerSetQuery stickerSetQueryForOwner(
+  TdClient client, {
+  required int accountSlot,
+  required int clientId,
+}) => (request) async {
+  if (client.clientId(accountSlot) != clientId) {
+    throw const StickerSetAccountUnavailable(
+      'The sticker set account is unavailable',
+    );
+  }
+  return client.queryTo(request, clientId);
+};
+
+/// One sticker of a batch delete that did not complete.
+class StickerRemovalFailure {
+  const StickerRemovalFailure(this.fileId, this.error);
+
+  final int fileId;
+
+  /// The error the removal threw, so the caller can report what failed
+  /// rather than a bare count.
+  final Object error;
+}
+
+/// The outcome of a batch removal: the file ids actually removed, and the
+/// ones that failed with their errors. The loop continues past a failed
+/// removal — Telegram keeps per-sticker state independent, so one failed
+/// sticker does not forfeit the rest of the selection.
+class StickerRemovalResult {
+  const StickerRemovalResult(this.removed, this.failures);
+
+  final List<int> removed;
+  final List<StickerRemovalFailure> failures;
+
+  bool get allSucceeded => failures.isEmpty;
+}
+
 class StickerSetManagementService {
-  StickerSetManagementService({StickerSetQuery? query})
-    : _query = query ?? TdClient.shared.query;
+  final StickerSetQuery? pinnedQuery;
 
   final StickerSetQuery _query;
 
+  StickerSetManagementService({StickerSetQuery? query, this.pinnedQuery})
+    : _query = query ?? TdClient.shared.query;
+
+  StickerSetManagementService.forActiveAccount()
+    : pinnedQuery = _ownedQueryForActiveAccount(),
+      _query = TdClient.shared.query;
+
+  static StickerSetQuery _ownedQueryForActiveAccount() {
+    final client = TdClient.shared;
+    final slot = client.activeSlot;
+    final clientId = client.clientId(slot);
+    if (clientId == null) {
+      throw StateError('No active TDLib client for account slot $slot');
+    }
+    return stickerSetQueryForOwner(
+      client,
+      accountSlot: slot,
+      clientId: clientId,
+    );
+  }
+
+  StickerSetQuery get _effectiveQuery => pinnedQuery ?? _query;
+
   Future<int> myId() async =>
-      (await _query({'@type': 'getMe'})).int64('id') ?? 0;
+      (await _effectiveQuery({'@type': 'getMe'})).int64('id') ?? 0;
 
   Future<List<Map<String, dynamic>>> ownedSets() async {
     final result = <Map<String, dynamic>>[];
     var offset = 0;
     while (true) {
-      final response = await _query({
+      final response = await _effectiveQuery({
         '@type': 'getOwnedStickerSets',
         'offset_sticker_set_id': offset,
         'limit': 100,
@@ -355,17 +434,17 @@ class StickerSetManagementService {
   }
 
   Future<Map<String, dynamic>> getSet(int setId) =>
-      _query({'@type': 'getStickerSet', 'set_id': setId});
+      _effectiveQuery({'@type': 'getStickerSet', 'set_id': setId});
 
   Future<String> suggestedName(String title) async =>
-      (await _query({
+      (await _effectiveQuery({
         '@type': 'getSuggestedStickerSetName',
         'title': title.trim(),
       })).str('text') ??
       '';
 
   Future<Map<String, dynamic>> checkName(String name) =>
-      _query({'@type': 'checkStickerSetName', 'name': name.trim()});
+      _effectiveQuery({'@type': 'checkStickerSetName', 'name': name.trim()});
 
   Future<Map<String, dynamic>> create({
     required String title,
@@ -379,7 +458,7 @@ class StickerSetManagementService {
     for (final sticker in stickers) {
       uploaded.add(await _upload(userId, sticker));
     }
-    return _query(
+    return _effectiveQuery(
       createStickerSetRequest(
         userId: userId,
         title: title,
@@ -394,7 +473,7 @@ class StickerSetManagementService {
   Future<void> add(String name, NewStickerDraft sticker) async {
     final userId = await myId();
     final uploaded = await _upload(userId, sticker);
-    await _query(
+    await _effectiveQuery(
       addStickerToSetRequest(userId: userId, name: name, sticker: uploaded),
     );
   }
@@ -406,7 +485,7 @@ class StickerSetManagementService {
   ) async {
     final userId = await myId();
     final uploaded = await _upload(userId, sticker);
-    await _query(
+    await _effectiveQuery(
       replaceStickerInSetRequest(
         userId: userId,
         name: name,
@@ -416,43 +495,71 @@ class StickerSetManagementService {
     );
   }
 
-  Future<void> setTitle(String name, String title) => _query({
+  Future<void> setTitle(String name, String title) => _effectiveQuery({
     '@type': 'setStickerSetTitle',
     'name': name,
     'title': title.trim(),
   });
 
   Future<void> delete(String name) =>
-      _query({'@type': 'deleteStickerSet', 'name': name});
+      _effectiveQuery({'@type': 'deleteStickerSet', 'name': name});
 
-  Future<void> move(int fileId, int position) => _query({
+  Future<void> move(int fileId, int position) => _effectiveQuery({
     '@type': 'setStickerPositionInSet',
     'sticker': {'@type': 'inputFileId', 'id': fileId},
     'position': position,
   });
 
-  Future<void> remove(int fileId) => _query({
+  Future<void> remove(int fileId) => _effectiveQuery({
     '@type': 'removeStickerFromSet',
     'sticker': {'@type': 'inputFileId', 'id': fileId},
   });
 
-  Future<void> setEmojis(int fileId, String emojis) => _query({
+  /// Removes the picked stickers serially (TDLib has no bulk remove).
+  ///
+  /// A failed sticker does not forfeit the rest: the loop continues so the
+  /// still-selected stickers are actually deleted, and every failure is
+  /// reported in the result with the error that broke it. If the owning
+  /// account went away mid-batch (switch or removal), the pinned query
+  /// throws, the batch stops without writing, and the error propagates so
+  /// the caller can report it instead of half-deleting silently.
+  Future<StickerRemovalResult> removeSelected(List<int> fileIds) async {
+    final removed = <int>[];
+    final failures = <StickerRemovalFailure>[];
+    for (final fileId in fileIds) {
+      try {
+        await remove(fileId);
+        removed.add(fileId);
+      } on StickerSetAccountUnavailable {
+        rethrow;
+      } catch (error) {
+        failures.add(StickerRemovalFailure(fileId, error));
+      }
+    }
+    return StickerRemovalResult(
+      List.unmodifiable(removed),
+      List.unmodifiable(failures),
+    );
+  }
+
+  Future<void> setEmojis(int fileId, String emojis) => _effectiveQuery({
     '@type': 'setStickerEmojis',
     'sticker': {'@type': 'inputFileId', 'id': fileId},
     'emojis': emojis.trim(),
   });
 
-  Future<void> setKeywords(int fileId, List<String> keywords) => _query({
-    '@type': 'setStickerKeywords',
-    'sticker': {'@type': 'inputFileId', 'id': fileId},
-    'keywords': keywords
-        .map((keyword) => keyword.trim())
-        .where((keyword) => keyword.isNotEmpty)
-        .toList(growable: false),
-  });
+  Future<void> setKeywords(int fileId, List<String> keywords) =>
+      _effectiveQuery({
+        '@type': 'setStickerKeywords',
+        'sticker': {'@type': 'inputFileId', 'id': fileId},
+        'keywords': keywords
+            .map((keyword) => keyword.trim())
+            .where((keyword) => keyword.isNotEmpty)
+            .toList(growable: false),
+      });
 
   Future<void> setMaskPlacement(int fileId, StickerMaskPlacement? placement) =>
-      _query({
+      _effectiveQuery({
         '@type': 'setStickerMaskPosition',
         'sticker': {'@type': 'inputFileId', 'id': fileId},
         'mask_position': placement?.toTdJson(),
@@ -463,7 +570,7 @@ class StickerSetManagementService {
     required String? path,
     required StickerFileFormat? format,
   }) async {
-    await _query({
+    await _effectiveQuery({
       '@type': 'setStickerSetThumbnail',
       'user_id': await myId(),
       'name': name,
@@ -474,15 +581,31 @@ class StickerSetManagementService {
     });
   }
 
+  /// Uses one of the set's own sticker files as the set thumbnail. Telegram
+  /// iOS picks a thumbnail from the grid; TDLib accepts an inputFileId that
+  /// references a file it already knows, so no re-upload is needed. The
+  /// sticker's own format is the thumbnail's format.
+  Future<void> setThumbnailFromFileId(
+    String name,
+    int stickerFileId,
+    StickerFileFormat format,
+  ) async => _effectiveQuery({
+    '@type': 'setStickerSetThumbnail',
+    'user_id': await myId(),
+    'name': name,
+    'thumbnail': {'@type': 'inputFileId', 'id': stickerFileId},
+    'format': {'@type': format.tdType},
+  });
+
   Future<void> setCustomEmojiThumbnail(String name, int customEmojiId) =>
-      _query({
+      _effectiveQuery({
         '@type': 'setCustomEmojiStickerSetThumbnail',
         'name': name,
         'custom_emoji_id': customEmojiId,
       });
 
   Future<NewStickerDraft> _upload(int userId, NewStickerDraft sticker) async {
-    final file = await _query(
+    final file = await _effectiveQuery(
       uploadStickerFileRequest(userId: userId, sticker: sticker),
     );
     final fileId = file.int64('id') ?? 0;

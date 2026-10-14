@@ -1069,8 +1069,6 @@ class ThemeController extends ChangeNotifier {
     _hideSidebarPhone = _prefs.getBool(_hideSidebarPhoneKey) ?? false;
     _showMemberTags = _prefs.getBool(_memberTagsKey) ?? false;
     _showPlainMemberRoleTags = _prefs.getBool(_plainMemberRoleTagsKey) ?? false;
-    _forumTopicsAsGroupChat =
-        _prefs.getBool(_forumTopicsAsGroupChatKey) ?? false;
     _chatListNameColorAudience = _storedNameColorAudience(
       _chatListNameColorAudienceKey,
       fallback: _prefs.getBool(_nameColorsKey) == false
@@ -1140,6 +1138,11 @@ class ThemeController extends ChangeNotifier {
     _forwardRichMarkdown = _prefs.getBool(_forwardRichMarkdownKey) ?? false;
     // Viewer media facts are on by default, like the Swift Nagram setting.
     _mediaMetadataEnabled = _prefs.getBool(_mediaMetadataEnabledKey) ?? true;
+    // 盘古之白 changes how text reads, never what a message says, so all three
+    // directions stay opt-in.
+    _panguOnReceive = _prefs.getBool(_panguOnReceiveKey) ?? false;
+    _panguOnSend = _prefs.getBool(_panguOnSendKey) ?? false;
+    _panguOnEdit = _prefs.getBool(_panguOnEditKey) ?? false;
     _quickRepliesEnabled = _prefs.getBool(_quickRepliesEnabledKey) ?? true;
     final storedQuickReactions = _prefs.getStringList(_quickReactionsKey);
     _quickReactions = storedQuickReactions == null
@@ -1231,7 +1234,6 @@ class ThemeController extends ChangeNotifier {
   static const _hideSidebarPhoneKey = 'hideSidebarPhone';
   static const _memberTagsKey = 'showMemberTags';
   static const _plainMemberRoleTagsKey = 'showPlainMemberRoleTags';
-  static const _forumTopicsAsGroupChatKey = 'forumTopicsAsGroupChat';
   // Storage names are retained so existing appearance preferences survive the
   // user-facing rename from Premium name colors to name colors.
   static const _nameColorsKey = 'showPremiumNameColors';
@@ -1257,6 +1259,9 @@ class ThemeController extends ChangeNotifier {
   static const _preserveSenderWhenRepeatingKey = 'preserveSenderWhenRepeating';
   static const _forwardRichMarkdownKey = 'forwardRichMarkdown';
   static const _mediaMetadataEnabledKey = 'mediaMetadataEnabled';
+  static const _panguOnReceiveKey = 'panguOnReceive';
+  static const _panguOnSendKey = 'panguOnSend';
+  static const _panguOnEditKey = 'panguOnEdit';
   static const _quickRepliesEnabledKey = 'quickRepliesEnabled';
   static const _quickReactionsKey = 'quickReactions';
   static const _groupImageMessagesKey = 'groupImageMessages';
@@ -1327,7 +1332,6 @@ class ThemeController extends ChangeNotifier {
   bool _hideSidebarPhone = false;
   bool _showMemberTags = false;
   bool _showPlainMemberRoleTags = false;
-  bool _forumTopicsAsGroupChat = false;
   NameColorAudience _chatListNameColorAudience = NameColorAudience.premium;
   NameColorAudience _chatNameColorAudience = NameColorAudience.allUsers;
   StatusEmojiDisplayMode _chatListStatusEmojiMode =
@@ -1346,6 +1350,9 @@ class ThemeController extends ChangeNotifier {
   bool _preserveSenderWhenRepeating = true;
   bool _forwardRichMarkdown = false;
   bool _mediaMetadataEnabled = true;
+  bool _panguOnReceive = false;
+  bool _panguOnSend = false;
+  bool _panguOnEdit = false;
   bool _quickRepliesEnabled = true;
   late List<QuickReactionChoice> _quickReactions;
   bool _groupImageMessages = true;
@@ -1785,9 +1792,6 @@ class ThemeController extends ChangeNotifier {
   bool get showMemberTags => _showMemberTags;
   bool get showPlainMemberRoleTags => _showPlainMemberRoleTags;
 
-  /// Opens a forum topic in the regular chat transcript, scoped to that topic,
-  /// instead of the topic post feed.
-  bool get forumTopicsAsGroupChat => _forumTopicsAsGroupChat;
   NameColorAudience get chatListNameColorAudience => _chatListNameColorAudience;
   NameColorAudience get chatNameColorAudience => _chatNameColorAudience;
   StatusEmojiDisplayMode get chatListStatusEmojiMode =>
@@ -1818,6 +1822,17 @@ class ThemeController extends ChangeNotifier {
 
   /// Shows the metadata row in the photo and video viewers' menus.
   bool get mediaMetadataEnabled => _mediaMetadataEnabled;
+
+  /// Whether received messages render with 盘古之白: a display-only space
+  /// between CJK and half-width text. The stored message never changes.
+  bool get panguOnReceive => _panguOnReceive;
+
+  /// Whether composer text is spaced before it is sent.
+  bool get panguOnSend => _panguOnSend;
+
+  /// Whether an edit rewrites the message with spacing. Editing is separate
+  /// from sending because it changes a message the other side already read.
+  bool get panguOnEdit => _panguOnEdit;
   bool get quickRepliesEnabled => _quickRepliesEnabled;
   List<QuickReactionChoice> get quickReactions =>
       List.unmodifiable(_quickReactions);
@@ -2575,13 +2590,6 @@ class ThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  set forumTopicsAsGroupChat(bool value) {
-    if (_forumTopicsAsGroupChat == value) return;
-    _forumTopicsAsGroupChat = value;
-    _prefs.setBool(_forumTopicsAsGroupChatKey, value);
-    notifyListeners();
-  }
-
   set showNameColors(bool value) {
     chatListNameColorAudience = value
         ? NameColorAudience.allUsers
@@ -2714,6 +2722,27 @@ class ThemeController extends ChangeNotifier {
     if (_mediaMetadataEnabled == value) return;
     _mediaMetadataEnabled = value;
     _prefs.setBool(_mediaMetadataEnabledKey, value);
+    notifyListeners();
+  }
+
+  set panguOnReceive(bool value) {
+    if (_panguOnReceive == value) return;
+    _panguOnReceive = value;
+    _prefs.setBool(_panguOnReceiveKey, value);
+    notifyListeners();
+  }
+
+  set panguOnSend(bool value) {
+    if (_panguOnSend == value) return;
+    _panguOnSend = value;
+    _prefs.setBool(_panguOnSendKey, value);
+    notifyListeners();
+  }
+
+  set panguOnEdit(bool value) {
+    if (_panguOnEdit == value) return;
+    _panguOnEdit = value;
+    _prefs.setBool(_panguOnEditKey, value);
     notifyListeners();
   }
 

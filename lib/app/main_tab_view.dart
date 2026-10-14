@@ -18,7 +18,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/account_store.dart';
 import '../auth/auth_manager.dart';
 import '../channels/topic_channels_view.dart';
-import '../channels/topic_chat_view.dart';
 import '../channels/topic_list_host.dart';
 import '../chat/chat_info_view.dart';
 import '../chat/chat_members_view.dart';
@@ -28,6 +27,7 @@ import '../chat/desktop_chat_context_pane.dart';
 import '../chat/media_send_preview_view.dart';
 import '../chat/music_player_controller.dart';
 import '../chat/outgoing_attachment.dart';
+import '../chat/pangu_spacing.dart';
 import '../chats/archived_chats_view.dart';
 import '../chats/chat_list_view.dart';
 import '../communities/community_view.dart';
@@ -42,7 +42,6 @@ import '../moments/moments_view.dart';
 import '../platform/android_share_intent.dart';
 import '../profile/profile_view.dart';
 import '../settings/desktop_hotkey_controller.dart';
-import '../settings/topic_group_display_mode.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -302,13 +301,19 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
             ),
           );
       if (!mounted || preview == null || preview.attachments.isEmpty) return;
+      // Read the switch before the await below: the caption is plain text, so
+      // 盘古之白 has no entities to move.
+      final spaceCaption = context.read<ThemeController>().panguOnSend;
       final resolved = await resolveAttachmentListDimensions(
         preview.attachments,
       );
+      final spacedCaption = spaceCaption
+          ? PanguSpacing.transformUnannotated(preview.caption).text
+          : preview.caption;
       final requests = buildAttachmentSendRequests(
         chatId: picked.id,
         attachments: resolved,
-        caption: preview.caption,
+        caption: spacedCaption,
         sendConfiguration: preview.sendConfiguration,
       );
       for (final request in requests) {
@@ -1266,6 +1271,11 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
                                         unread: _unread.countFor(
                                           theme.unreadBadgeMode,
                                         ),
+                                        // The system glass bar measures itself
+                                        // against the window bottom, not this
+                                        // sidebar column; draw the app glass
+                                        // whose indicator follows the tabs.
+                                        useNativeGlass: false,
                                       ),
                                     ),
                                   ),
@@ -1570,47 +1580,29 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
         '${selected.initialMessageId ?? 0}-${selected.forumTopicId ?? 0}-'
         '${selected.composerFocusRequestId}',
       ),
-      child:
-          selected.supportsTopics &&
-              chat != null &&
-              selected.initialMessageId == null &&
-              !context.read<ThemeController>().forumTopicsAsGroupChat
-          ? _ForumSplitDetailPane(
-              chat: chat,
-              headerHeight: headerHeight,
-              headerColor: headerColor,
-              exitController: _messageChatExitController,
-              showBackButton: showBackButton,
-              onBack: () => setState(() => _selectedMessageChat = null),
-              onInfoPressed: onInfoPressed,
-              onOpenFullInfo: onOpenFullInfo,
-              onOpenUserProfile: onOpenUserProfile,
-              trailingPane: trailingPane,
-              trailingPaneWidth: trailingPaneWidth,
-            )
-          : ChatView(
-              chatId: selected.chatId,
-              title: selected.title,
-              seedMessage: chat?.lastChatMessage,
-              initialMessageId: selected.initialMessageId,
-              forumTopicId: selected.forumTopicId,
-              showBackButton: showBackButton,
-              headerHeight: headerHeight,
-              headerColor: headerColor,
-              showHeaderDivider: false,
-              trailingPane: trailingPane,
-              trailingPaneWidth: trailingPaneWidth,
-              requestComposerFocusOnReady: selected.composerFocusRequestId != 0,
-              exitController: _messageChatExitController,
-              onChatKindResolved: (kind) =>
-                  _handleSelectedChatKindResolved(selected.chatId, kind),
-              onInfoPressed: onInfoPressed,
-              onOpenFullInfo: onOpenFullInfo,
-              onOpenUserProfile: onOpenUserProfile,
-              onOpenTopicTranscript: (topicId) =>
-                  _openSelectedChatTopic(selected.chatId, topicId),
-              onBack: () => setState(() => _selectedMessageChat = null),
-            ),
+      child: ChatView(
+        chatId: selected.chatId,
+        title: selected.title,
+        seedMessage: chat?.lastChatMessage,
+        initialMessageId: selected.initialMessageId,
+        forumTopicId: selected.forumTopicId,
+        showBackButton: showBackButton,
+        headerHeight: headerHeight,
+        headerColor: headerColor,
+        showHeaderDivider: false,
+        trailingPane: trailingPane,
+        trailingPaneWidth: trailingPaneWidth,
+        requestComposerFocusOnReady: selected.composerFocusRequestId != 0,
+        exitController: _messageChatExitController,
+        onChatKindResolved: (kind) =>
+            _handleSelectedChatKindResolved(selected.chatId, kind),
+        onInfoPressed: onInfoPressed,
+        onOpenFullInfo: onOpenFullInfo,
+        onOpenUserProfile: onOpenUserProfile,
+        onOpenTopicTranscript: (topicId) =>
+            _openSelectedChatTopic(selected.chatId, topicId),
+        onBack: () => setState(() => _selectedMessageChat = null),
+      ),
     );
   }
 
@@ -1877,95 +1869,6 @@ class _ProfileDrawerOverlayState extends State<_ProfileDrawerOverlay>
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ForumSplitDetailPane extends StatefulWidget {
-  const _ForumSplitDetailPane({
-    required this.chat,
-    required this.headerHeight,
-    required this.headerColor,
-    required this.exitController,
-    required this.showBackButton,
-    required this.onBack,
-    this.onInfoPressed,
-    this.onOpenFullInfo,
-    this.onOpenUserProfile,
-    this.trailingPane,
-    this.trailingPaneWidth = 0,
-  });
-
-  final ChatSummary chat;
-  final double headerHeight;
-  final Color headerColor;
-  final ChatViewExitController exitController;
-  final bool showBackButton;
-  final VoidCallback onBack;
-  final VoidCallback? onInfoPressed;
-  final VoidCallback? onOpenFullInfo;
-  final void Function(int userId, String name)? onOpenUserProfile;
-  final Widget? trailingPane;
-  final double trailingPaneWidth;
-
-  @override
-  State<_ForumSplitDetailPane> createState() => _ForumSplitDetailPaneState();
-}
-
-class _ForumSplitDetailPaneState extends State<_ForumSplitDetailPane> {
-  var _index = 0;
-  int? _topicThreadId;
-
-  Future<void> _showChatMode() async {
-    await TopicGroupDisplayPreference.set(TopicGroupDisplayMode.chat);
-    if (!mounted) return;
-    setState(() => _index = 0);
-  }
-
-  Future<void> _showChannelMode([int? threadId]) async {
-    await TopicGroupDisplayPreference.set(TopicGroupDisplayMode.channel);
-    if (!mounted) return;
-    widget.exitController.prepareExit();
-    setState(() {
-      _index = 1;
-      _topicThreadId = threadId;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final content = _index == 0
-        ? ChatView(
-            key: const ValueKey('forum-detail-chat'),
-            chatId: widget.chat.id,
-            title: widget.chat.title,
-            seedMessage: widget.chat.lastChatMessage,
-            showBackButton: widget.showBackButton,
-            headerHeight: widget.headerHeight,
-            headerColor: widget.headerColor,
-            trailingPane: widget.trailingPane,
-            trailingPaneWidth: widget.trailingPaneWidth,
-            exitController: widget.exitController,
-            onInfoPressed: widget.onInfoPressed,
-            onOpenFullInfo: widget.onOpenFullInfo,
-            onOpenUserProfile: widget.onOpenUserProfile,
-            onBack: widget.onBack,
-            onOpenTopicMode: (threadId) =>
-                unawaited(_showChannelMode(threadId)),
-          )
-        : TopicChatView(
-            key: ValueKey('${widget.chat.id}:${_topicThreadId ?? 0}'),
-            chat: widget.chat,
-            initialThreadId: _topicThreadId,
-            showBackButton: widget.showBackButton,
-            headerHeight: widget.headerHeight,
-            headerColor: widget.headerColor,
-            onOpenChatView: () => unawaited(_showChatMode()),
-            onBack: widget.onBack,
-          );
-    return DetailContentReveal(
-      motionKey: ValueKey('forum-detail-$_index-${_topicThreadId ?? 0}'),
-      child: content,
     );
   }
 }
@@ -2261,6 +2164,7 @@ class _MainBottomBar extends StatelessWidget {
     required this.items,
     required this.unread,
     this.chatListController,
+    this.useNativeGlass = true,
   });
   final int selection;
   final ValueChanged<int> onSelect;
@@ -2268,6 +2172,13 @@ class _MainBottomBar extends StatelessWidget {
   final List<_MainTabItem> items;
   final int unread;
   final ChatListController? chatListController;
+
+  /// The system glass bar is a window-bottom bar: UIKit paints its selection
+  /// capsule to its own slot metrics, so a split shell hosting it inside a
+  /// narrow sidebar column misplaces the highlight over the tabs. Split-shell
+  /// callers opt out to draw the app-owned glass bar instead, whose indicator
+  /// follows the actual tab slots.
+  final bool useNativeGlass;
 
   /// Label size the bar is laid out around. The icon block above it keeps its
   /// size at every text scale, so only this line's growth is added to the bar.
@@ -2364,7 +2275,10 @@ class _MainBottomBar extends StatelessWidget {
         ),
       );
     }
-    if (glass && !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    if (glass &&
+        useNativeGlass &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS) {
       return NativeBottomTabBar(
         items: [
           for (final item in items)

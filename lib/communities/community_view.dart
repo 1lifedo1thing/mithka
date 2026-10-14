@@ -11,20 +11,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app/app_navigator.dart';
-import '../channels/forum_topic_browser_view.dart';
 import '../chat/chat_view.dart';
 import '../chats/chat_row_view.dart';
 import '../components/app_icons.dart';
+import '../components/app_interactive_surface.dart';
 import '../components/photo_avatar.dart';
 import '../components/ui_components.dart';
 import '../l10n/app_localizations.dart';
-import '../settings/topic_group_display_mode.dart';
 import '../tdlib/td_models.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
+import 'community_edit_view.dart';
 import 'community_models.dart';
 
-enum _CommunityHeaderAction { toggleCollapsed }
+enum _CommunityHeaderAction { toggleCollapsed, editProfile }
 
 class CommunityChatListRow extends StatelessWidget {
   const CommunityChatListRow({
@@ -265,6 +266,38 @@ class _CommunityViewState extends State<CommunityView> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _onHeaderAction(_CommunityHeaderAction action) async {
+    switch (action) {
+      case _CommunityHeaderAction.editProfile:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => CommunityEditView(community: widget.community),
+          ),
+        );
+        // The editor mutates the shared summary in place (name), so one
+        // rebuild keeps the hub header in sync after popping.
+        if (mounted) setState(() {});
+      case _CommunityHeaderAction.toggleCollapsed:
+        _setCollapsed(!_collapsed);
+    }
+  }
+
+  /// The ellipsis opens the app's owned action sheet (AppInteractiveSurface
+  /// rows in a showAppModalSheet card) instead of a Material popup menu:
+  /// the repository owns every surface users see.
+  Future<void> _showHeaderMenu() async {
+    final action = await showAppModalSheet<_CommunityHeaderAction>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _CommunityHeaderMenuSheet(
+        canEdit: widget.community.canChangeInfo,
+        collapsed: _collapsed,
+      ),
+    );
+    if (!mounted || action == null) return;
+    await _onHeaderAction(action);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -312,33 +345,11 @@ class _CommunityViewState extends State<CommunityView> {
     );
   }
 
-  Widget _headerMenu() => PopupMenuButton<_CommunityHeaderAction>(
+  Widget _headerMenu() => AppInteractiveSurface(
     key: const ValueKey('community-header-menu'),
-    tooltip: '',
-    color: context.colors.background,
-    padding: EdgeInsets.zero,
-    onSelected: (_) => _setCollapsed(!_collapsed),
-    itemBuilder: (context) => [
-      PopupMenuItem<_CommunityHeaderAction>(
-        value: _CommunityHeaderAction.toggleCollapsed,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 22,
-              child: _collapsed
-                  ? AppIcon(
-                      HeroAppIcons.check,
-                      size: 16,
-                      color: context.colors.linkBlue,
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            Text(AppStringKeys.communityShowAsOneChat.l10n(context)),
-          ],
-        ),
-      ),
-    ],
+    semanticLabel: AppStringKeys.communityTitle.l10n(context),
+    onTap: _showHeaderMenu,
+    borderRadius: BorderRadius.circular(AppRadius.sm),
     child: SizedBox(
       width: AppMetric.hitTarget,
       height: AppMetric.hitTarget,
@@ -476,27 +487,6 @@ class _CommunityViewState extends State<CommunityView> {
       onChatSelected(chat);
       return;
     }
-    if (chat.supportsTopics) {
-      final mode = await TopicGroupDisplayPreference.load();
-      if (!mounted) return;
-      final topicsAsChat = context
-          .read<ThemeController>()
-          .forumTopicsAsGroupChat;
-      if (!mode.isChat && !topicsAsChat) {
-        unawaited(
-          pushAppChatRoute(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ForumTopicBrowserView(
-                chats: [..._currentChats, ..._currentViewableChats],
-                initialChat: chat,
-              ),
-            ),
-          ),
-        );
-        return;
-      }
-    }
     if (!mounted) return;
     unawaited(
       pushAppChatRoute(
@@ -506,6 +496,85 @@ class _CommunityViewState extends State<CommunityView> {
             chatId: chat.id,
             title: chat.title,
             seedMessage: chat.lastChatMessage,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hub's owned ellipsis menu: a showAppModalSheet card of
+/// AppInteractiveSurface rows, matching the profile and story-management
+/// action sheets. Edit Profile appears only with can_change_info.
+class _CommunityHeaderMenuSheet extends StatelessWidget {
+  const _CommunityHeaderMenuSheet({
+    required this.canEdit,
+    required this.collapsed,
+  });
+
+  final bool canEdit;
+  final bool collapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        decoration: BoxDecoration(
+          color: c.card,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (canEdit) ...[
+              _row(
+                context,
+                icon: HeroAppIcons.penToSquare,
+                label: AppStringKeys.communityEditAction.l10n(context),
+                action: _CommunityHeaderAction.editProfile,
+              ),
+              const InsetDivider(leadingInset: 56),
+            ],
+            _row(
+              context,
+              icon: collapsed ? HeroAppIcons.check : null,
+              label: AppStringKeys.communityShowAsOneChat.l10n(context),
+              action: _CommunityHeaderAction.toggleCollapsed,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(
+    BuildContext context, {
+    required AppIconData? icon,
+    required String label,
+    required _CommunityHeaderAction action,
+  }) {
+    final c = context.colors;
+    return AppInteractiveSurface(
+      onTap: () => Navigator.of(context).pop(action),
+      child: SizedBox(
+        height: 56,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 21,
+                child: icon != null
+                    ? AppIcon(icon, size: 21, color: c.textPrimary)
+                    : null,
+              ),
+              const SizedBox(width: 15),
+              Text(label, style: AppTextStyle.body(c.textPrimary)),
+            ],
           ),
         ),
       ),

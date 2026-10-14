@@ -99,13 +99,20 @@ Future<void> openLink(BuildContext context, String url) async {
     switch (type.type) {
       case 'internalLinkTypePublicChat':
         final username = type.str('chat_username') ?? '';
-        await _openPublicChat(
+        final opened = await _openPublicChat(
           nav,
           username,
           draftText: type.str('draft_text') ?? '',
           sourceChat: sourceChat,
           query: query,
         );
+        // A failed username lookup must never end as a dead tap: the outer
+        // catch only runs when getInternalLinkType itself throws, so without
+        // this branch a network hiccup on searchPublicChat silently swallows
+        // the click (no navigation, no fallback, no message).
+        if (!opened && context.mounted) {
+          await _openBrowserLink(context, fallbackLink);
+        }
       case 'internalLinkTypeMessage':
         // TDLib can canonicalize a message link (notably tg:// variants).
         // Its contract requires getMessageLinkInfo to receive this returned

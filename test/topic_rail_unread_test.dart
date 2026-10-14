@@ -54,7 +54,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     try {
       await _setSurfaceSize(tester, const Size(1180, 820));
-      await _pumpMainShell(tester, forumTopicsAsGroupChat: true);
+      await _pumpMainShell(tester);
       tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
         ChatListSelection.fromChat(_chat()),
       );
@@ -87,7 +87,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     try {
       await _setSurfaceSize(tester, const Size(1180, 820));
-      await _pumpMainShell(tester, forumTopicsAsGroupChat: true);
+      await _pumpMainShell(tester);
       tester.widget<ChatListView>(find.byType(ChatListView)).onChatSelected!(
         ChatListSelection.fromChat(_chat()),
       );
@@ -137,7 +137,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     try {
       await _setSurfaceSize(tester, const Size(390, 844));
-      await _pumpMainShell(tester, forumTopicsAsGroupChat: true);
+      await _pumpMainShell(tester);
       ChatDeepLinkController.shared.openChat(chatId: -42, title: 'Forum');
       await _settle(tester);
       await tester.tap(find.byKey(const ValueKey('chatHeaderTopics')));
@@ -222,7 +222,6 @@ Map<String, dynamic> _response(Map<String, dynamic> request) =>
         'has_forum_tabs': false,
         'status': {'@type': 'chatMemberStatusMember'},
       },
-      'getConnectionState' => {'@type': 'connectionStateReady'},
       'getForumTopics' => {
         '@type': 'forumTopics',
         'topics': [
@@ -262,11 +261,9 @@ Future<void> _pumpMainShell(
   WidgetTester tester, {
   bool reducedMotion = true,
   bool showChannelsTab = false,
-  bool forumTopicsAsGroupChat = false,
 }) async {
   SharedPreferences.setMockInitialValues({
     'showChannelsTab': showChannelsTab,
-    'forumTopicsAsGroupChat': forumTopicsAsGroupChat,
     'showMomentsTab': false,
     'communitiesEnabled': false,
   });

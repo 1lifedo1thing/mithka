@@ -478,8 +478,6 @@ abstract final class AppStringKeys {
   static const appearanceFontLoadFailed = 'appearanceFontLoadFailed';
   static const appearanceFontSize = 'appearanceFontSize';
   static const appearanceFontUnused = 'appearanceFontUnused';
-  static const appearanceForumTopicsAsGroupChat =
-      'appearanceForumTopicsAsGroupChat';
   static const appearanceGoogleDownloaded = 'appearanceGoogleDownloaded';
   static const gesturesChatActions = 'gesturesChatActions';
   static const gesturesChatActionsModeDescription =
@@ -1136,6 +1134,17 @@ abstract final class AppStringKeys {
   static const communityChatRemovedByService = 'communityChatRemovedByService';
   static const communityChatsYouAreIn = 'communityChatsYouAreIn';
   static const communityChatsYouCanView = 'communityChatsYouCanView';
+  static const communityEditAction = 'communityEditAction';
+  static const communityEditChangePhoto = 'communityEditChangePhoto';
+  static const communityEditChangePhotoHint = 'communityEditChangePhotoHint';
+  static const communityEditNameLabel = 'communityEditNameLabel';
+  static const communityEditNameTitle = 'communityEditNameTitle';
+  static const communityEditPhotoSaveFailed = 'communityEditPhotoSaveFailed';
+  static const communityEditPhotoUpdated = 'communityEditPhotoUpdated';
+  static const communityEditSaveFailed = 'communityEditSaveFailed';
+  static const communityEditSection = 'communityEditSection';
+  static const communityEditTitle = 'communityEditTitle';
+  static const communityEditUnsupported = 'communityEditUnsupported';
   static const communityNoChats = 'communityNoChats';
   static const communityShowAsOneChat = 'communityShowAsOneChat';
   static const communityShowAsOneChatDescription =
@@ -1565,8 +1574,10 @@ abstract final class AppStringKeys {
   static const emojiCategorySymbols = 'emojiCategorySymbols';
   static const emojiCategoryTravelAndPlaces = 'emojiCategoryTravelAndPlaces';
   static const emojiFontCatalogSystemDefault = 'emojiFontCatalogSystemDefault';
+  static const emojiPanelPreview = 'emojiPanelPreview';
   static const emojiPreviewFaceWithTearsOfJoy =
       'emojiPreviewFaceWithTearsOfJoy';
+  static const emojiRecentsSection = 'emojiRecentsSection';
   static const emojiStatusClear = 'emojiStatusClear';
   static const emojiStatusNoAvailableStatuses =
       'emojiStatusNoAvailableStatuses';
@@ -1614,6 +1625,11 @@ abstract final class AppStringKeys {
   static const generalForwardRichMarkdown = 'generalForwardRichMarkdown';
   static const generalForwardRichMarkdownHint =
       'generalForwardRichMarkdownHint';
+  static const generalPanguSpacing = 'generalPanguSpacing';
+  static const generalPanguSpacingNote = 'generalPanguSpacingNote';
+  static const generalPanguOnReceive = 'generalPanguOnReceive';
+  static const generalPanguOnSend = 'generalPanguOnSend';
+  static const generalPanguOnEdit = 'generalPanguOnEdit';
   static const generalKeepChatContextPaneClosed =
       'generalKeepChatContextPaneClosed';
   static const generalKeepChatContextPaneClosedHint =
@@ -2713,6 +2729,13 @@ abstract final class AppStringKeys {
       'stickerStudioCustomEmojiThumbnailRemove';
   static const stickerStudioDelete = 'stickerStudioDelete';
   static const stickerStudioDeleteFailed = 'stickerStudioDeleteFailed';
+  static const stickerStudioDone = 'stickerStudioDone';
+  static const stickerStudioLinkCopied = 'stickerStudioLinkCopied';
+  static const stickerStudioLinkInvalid = 'stickerStudioLinkInvalid';
+  static const stickerStudioLinkPrefixEmoji = 'stickerStudioLinkPrefixEmoji';
+  static const stickerStudioLinkPrefixStickers =
+      'stickerStudioLinkPrefixStickers';
+  static const stickerStudioMaskBadge = 'stickerStudioMaskBadge';
   static const stickerStudioDeleteMessage = 'stickerStudioDeleteMessage';
   static const stickerStudioDeleteTitle = 'stickerStudioDeleteTitle';
   static const stickerStudioEmpty = 'stickerStudioEmpty';
@@ -2736,18 +2759,30 @@ abstract final class AppStringKeys {
       'stickerStudioMaskPlacementValue';
   static const stickerStudioMatchingEmojiHint =
       'stickerStudioMatchingEmojiHint';
+  static const stickerStudioNameAvailable = 'stickerStudioNameAvailable';
+  static const stickerStudioNameChecking = 'stickerStudioNameChecking';
   static const stickerStudioNameUnavailable = 'stickerStudioNameUnavailable';
   static const stickerStudioNewSet = 'stickerStudioNewSet';
   static const stickerStudioNoFile = 'stickerStudioNoFile';
+  static const stickerStudioOpenLink = 'stickerStudioOpenLink';
   static const stickerStudioRemove = 'stickerStudioRemove';
   static const stickerStudioRefresh = 'stickerStudioRefresh';
   static const stickerStudioRemoveMessage = 'stickerStudioRemoveMessage';
+  static const stickerStudioRemoveSelectedFailed =
+      'stickerStudioRemoveSelectedFailed';
+  static const stickerStudioRemoveSelectedMessage =
+      'stickerStudioRemoveSelectedMessage';
+  static const stickerStudioRemoveSelectedTitle =
+      'stickerStudioRemoveSelectedTitle';
   static const stickerStudioRemoveSticker = 'stickerStudioRemoveSticker';
   static const stickerStudioRemoveThumbnail = 'stickerStudioRemoveThumbnail';
   static const stickerStudioRename = 'stickerStudioRename';
+  static const stickerStudioReorderHint = 'stickerStudioReorderHint';
   static const stickerStudioRepaint = 'stickerStudioRepaint';
   static const stickerStudioSave = 'stickerStudioSave';
   static const stickerStudioScale = 'stickerStudioScale';
+  static const stickerStudioSelectedCount = 'stickerStudioSelectedCount';
+  static const stickerStudioSelectHint = 'stickerStudioSelectHint';
   static const stickerStudioSetLimit = 'stickerStudioSetLimit';
   static const stickerStudioSetThumbnail = 'stickerStudioSetThumbnail';
   static const stickerStudioSetTitle = 'stickerStudioSetTitle';
@@ -2952,6 +2987,7 @@ abstract final class AppStringKeys {
   static const topicChatChannelMessages = 'topicChatChannelMessages';
   static const topicChatChannelNumber = 'topicChatChannelNumber';
   static const topicChatChannelSettings = 'topicChatChannelSettings';
+  static const topicChatCloseTopic = 'topicChatCloseTopic';
   static const topicChatCommentCount = 'topicChatCommentCount';
   static const topicChatComposerPlaceholder = 'topicChatComposerPlaceholder';
   static const topicChatExpand = 'topicChatExpand';
@@ -2972,6 +3008,7 @@ abstract final class AppStringKeys {
   static const topicChatPinnedPrefix = 'topicChatPinnedPrefix';
   static const topicChatPinToggle = 'topicChatPinToggle';
   static const topicChatPublish = 'topicChatPublish';
+  static const topicChatReopenTopic = 'topicChatReopenTopic';
   static const topicChatReplyCount = 'topicChatReplyCount';
   static const topicChatSearch = 'topicChatSearch';
   static const topicChatSelectSection = 'topicChatSelectSection';
@@ -3184,6 +3221,7 @@ abstract final class AppStringKeys {
   static const contactShareEmpty = 'contactShareEmpty';
   static const composerMediaSearch = 'composerMediaSearch';
   static const composerMediaSearchEmpty = 'composerMediaSearchEmpty';
+  static const composerMediaPicker = 'composerMediaPicker';
   static const storyReplyHint = 'storyReplyHint';
   static const storyReplySent = 'storyReplySent';
   static const storyShare = 'storyShare';
