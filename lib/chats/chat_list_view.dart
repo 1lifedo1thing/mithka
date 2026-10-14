@@ -183,74 +183,85 @@ class ChatFolderRail extends StatelessWidget {
                       onInvoke: () => onEdit!(filter),
                     ),
                   ],
-            child: AppInteractiveSurface(
-              key: keyForFolder?.call(filter.folderId),
-              semanticLabel: filter.title.l10n(context),
-              selected: filter.folderId == selectedFolderId,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              onTap: () => onSelect?.call(filter),
-              child: Container(
-                key: ValueKey('side-folder-${filter.folderId ?? 'all'}'),
-                constraints: const BoxConstraints(minHeight: 56),
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  color: c.linkBlue.withValues(
-                    alpha: 0.10 * _highlight(filter),
+            child: _FolderNameHint(
+              key: ValueKey((filter.folderId, filter.title.l10n(context))),
+              message: filter.title.l10n(context),
+              hintKey: ValueKey(
+                'side-folder-name-tooltip-${filter.folderId ?? 'all'}',
+              ),
+              child: AppInteractiveSurface(
+                key: keyForFolder?.call(filter.folderId),
+                semanticLabel: filter.title.l10n(context),
+                selected: filter.folderId == selectedFolderId,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                onTap: () => onSelect?.call(filter),
+                child: Container(
+                  key: ValueKey('side-folder-${filter.folderId ?? 'all'}'),
+                  constraints: const BoxConstraints(minHeight: 56),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 2,
                   ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ChatFolderIcon(
-                      filter.isAll ? 'All' : filter.iconName,
-                      size: 22,
-                      color: Color.lerp(
-                        c.textSecondary,
-                        c.linkBlue,
-                        _highlight(filter),
-                      )!,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    color: c.linkBlue.withValues(
+                      alpha: 0.10 * _highlight(filter),
                     ),
-                    const SizedBox(height: 3),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            filter.title.l10n(context),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: _highlight(filter) >= 0.5
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: Color.lerp(
-                                c.textSecondary,
-                                c.linkBlue,
-                                _highlight(filter),
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (showBadges &&
-                            !filter.isAll &&
-                            filter.unreadChatCount > 0) ...[
-                          const SizedBox(width: 3),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ChatFolderIcon(
+                        filter.isAll ? 'All' : filter.iconName,
+                        size: 22,
+                        color: Color.lerp(
+                          c.textSecondary,
+                          c.linkBlue,
+                          _highlight(filter),
+                        )!,
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
                           Flexible(
-                            child: FolderUnreadBadge(
-                              label: badgeOverflowMode.format(
-                                filter.unreadChatCount,
+                            child: Text(
+                              filter.title.l10n(context),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.15,
+                                fontWeight: _highlight(filter) >= 0.5
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: Color.lerp(
+                                  c.textSecondary,
+                                  c.linkBlue,
+                                  _highlight(filter),
+                                ),
                               ),
-                              accent: filter.hasUnmutedUnread,
                             ),
                           ),
+                          if (showBadges &&
+                              !filter.isAll &&
+                              filter.unreadChatCount > 0) ...[
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: FolderUnreadBadge(
+                                label: badgeOverflowMode.format(
+                                  filter.unreadChatCount,
+                                ),
+                                accent: filter.hasUnmutedUnread,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -258,6 +269,135 @@ class ChatFolderRail extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The rail's full-name hover label uses owned styling and no touch gesture.
+class _FolderNameHint extends StatefulWidget {
+  const _FolderNameHint({
+    super.key,
+    required this.message,
+    required this.hintKey,
+    required this.child,
+  });
+
+  final String message;
+  final Key hintKey;
+  final Widget child;
+
+  @override
+  State<_FolderNameHint> createState() => _FolderNameHintState();
+}
+
+class _FolderNameHintState extends State<_FolderNameHint> {
+  final _overlay = OverlayPortalController();
+  Timer? _timer;
+
+  void _hide() {
+    _timer?.cancel();
+    _timer = null;
+    _overlay.hide();
+  }
+
+  void _enter() {
+    _timer?.cancel();
+    _timer = Timer(const Duration(milliseconds: 450), () {
+      _timer = null;
+      if (mounted) _overlay.show();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => OverlayPortal.overlayChildLayoutBuilder(
+    controller: _overlay,
+    overlayChildBuilder: (context, info) {
+      final anchor = MatrixUtils.transformRect(
+        info.childPaintTransform,
+        Offset.zero & info.childSize,
+      );
+      if (!anchor.overlaps(Offset.zero & info.overlaySize)) {
+        return const SizedBox.shrink();
+      }
+      final c = context.colors;
+      return IgnorePointer(
+        child: ExcludeSemantics(
+          // AppInteractiveSurface already exposes the complete folder name.
+          child: CustomSingleChildLayout(
+            delegate: _FolderNameHintLayout(anchor),
+            child: Container(
+              key: widget.hintKey,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: c.panelBackground,
+                border: Border.all(color: c.divider),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Text(
+                widget.message,
+                style: TextStyle(
+                  color: c.textPrimary,
+                  fontSize: 12,
+                  height: 1.2,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    child: MouseRegion(
+      onEnter: (_) => _enter(),
+      onExit: (_) => _hide(),
+      child: Listener(
+        onPointerDown: (_) => _hide(),
+        onPointerSignal: (_) => _hide(),
+        child: widget.child,
+      ),
+    ),
+  );
+}
+
+class _FolderNameHintLayout extends SingleChildLayoutDelegate {
+  const _FolderNameHintLayout(this.anchor);
+  final Rect anchor;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.loose(
+        Size(
+          math.min(320, math.max(0, constraints.maxWidth - 16)),
+          math.max(0, constraints.maxHeight - 16),
+        ),
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final maxX = math.max(0.0, size.width - childSize.width);
+    final maxY = math.max(0.0, size.height - childSize.height);
+    final marginX = math.min(8.0, maxX / 2);
+    final marginY = math.min(8.0, maxY / 2);
+    final right = anchor.right + 6;
+    final left = right + childSize.width <= size.width - 8
+        ? right
+        : anchor.left - childSize.width - 6;
+    return Offset(
+      left.clamp(marginX, maxX - marginX),
+      (anchor.center.dy - childSize.height / 2).clamp(marginY, maxY - marginY),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_FolderNameHintLayout oldDelegate) =>
+      anchor != oldDelegate.anchor;
 }
 
 class ChatListSelection {
