@@ -183,74 +183,83 @@ class ChatFolderRail extends StatelessWidget {
                       onInvoke: () => onEdit!(filter),
                     ),
                   ],
-            child: AppInteractiveSurface(
-              key: keyForFolder?.call(filter.folderId),
-              semanticLabel: filter.title.l10n(context),
-              selected: filter.folderId == selectedFolderId,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              onTap: () => onSelect?.call(filter),
-              child: Container(
-                key: ValueKey('side-folder-${filter.folderId ?? 'all'}'),
-                constraints: const BoxConstraints(minHeight: 56),
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  color: c.linkBlue.withValues(
-                    alpha: 0.10 * _highlight(filter),
+            child: Tooltip(
+              message: filter.title.l10n(context),
+              waitDuration: const Duration(milliseconds: 450),
+              excludeFromSemantics: true,
+              child: AppInteractiveSurface(
+                key: keyForFolder?.call(filter.folderId),
+                semanticLabel: filter.title.l10n(context),
+                selected: filter.folderId == selectedFolderId,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                onTap: () => onSelect?.call(filter),
+                child: Container(
+                  key: ValueKey('side-folder-${filter.folderId ?? 'all'}'),
+                  constraints: const BoxConstraints(minHeight: 56),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 2,
                   ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ChatFolderIcon(
-                      filter.isAll ? 'All' : filter.iconName,
-                      size: 22,
-                      color: Color.lerp(
-                        c.textSecondary,
-                        c.linkBlue,
-                        _highlight(filter),
-                      )!,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    color: c.linkBlue.withValues(
+                      alpha: 0.10 * _highlight(filter),
                     ),
-                    const SizedBox(height: 3),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            filter.title.l10n(context),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: _highlight(filter) >= 0.5
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: Color.lerp(
-                                c.textSecondary,
-                                c.linkBlue,
-                                _highlight(filter),
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (showBadges &&
-                            !filter.isAll &&
-                            filter.unreadChatCount > 0) ...[
-                          const SizedBox(width: 3),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ChatFolderIcon(
+                        filter.isAll ? 'All' : filter.iconName,
+                        size: 22,
+                        color: Color.lerp(
+                          c.textSecondary,
+                          c.linkBlue,
+                          _highlight(filter),
+                        )!,
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
                           Flexible(
-                            child: FolderUnreadBadge(
-                              label: badgeOverflowMode.format(
-                                filter.unreadChatCount,
+                            child: Text(
+                              filter.title.l10n(context),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.15,
+                                fontWeight: _highlight(filter) >= 0.5
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: Color.lerp(
+                                  c.textSecondary,
+                                  c.linkBlue,
+                                  _highlight(filter),
+                                ),
                               ),
-                              accent: filter.hasUnmutedUnread,
                             ),
                           ),
+                          if (showBadges &&
+                              !filter.isAll &&
+                              filter.unreadChatCount > 0) ...[
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: FolderUnreadBadge(
+                                label: badgeOverflowMode.format(
+                                  filter.unreadChatCount,
+                                ),
+                                accent: filter.hasUnmutedUnread,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
