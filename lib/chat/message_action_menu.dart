@@ -27,6 +27,10 @@ import 'quick_reaction_choice.dart';
 enum MessageAction {
   copy(HeroAppIcons.file, AppStringKeys.messageActionCopy),
   copyImage(HeroAppIcons.image, AppStringKeys.messageActionCopyImage),
+  copyMessageLink(
+    HeroAppIcons.link,
+    AppStringKeys.messageActionCopyMessageLink,
+  ),
   edit(HeroAppIcons.pen, AppStringKeys.messageActionEdit),
   suggestOffer(HeroAppIcons.penToSquare, AppStringKeys.suggestedPostEditOffer),
   translate(HeroAppIcons.language, AppStringKeys.messageActionTranslate),
@@ -318,6 +322,7 @@ class MessageActionMenu extends StatelessWidget {
     this.hasSelectedQuote = false,
     this.allowSuggestedPostOffer = false,
     this.allowHideSender = false,
+    this.allowCopyMessageLink = false,
     this.source = MessageActionSource.normal,
     this.showingOriginalTranslation = false,
     this.layout = MessageActionMenuLayout.adaptive,
@@ -333,6 +338,9 @@ class MessageActionMenu extends StatelessWidget {
 
   /// Offer to hide this sender's messages on this device (groups only).
   final bool allowHideSender;
+
+  /// Offer [MessageAction.copyMessageLink] (server-verified availability).
+  final bool allowCopyMessageLink;
   final MessageActionSource source;
   final bool showingOriginalTranslation;
   final MessageActionMenuLayout layout;
@@ -491,6 +499,11 @@ class MessageActionMenu extends StatelessWidget {
         message.image != null &&
         !message.isContentRestricted) {
       result.add(MessageAction.copyImage);
+    }
+    // The availability flag already covers service messages, calls and
+    // protected content — the menu never guesses it client-side.
+    if (allowCopyMessageLink) {
+      result.add(MessageAction.copyMessageLink);
     }
     if (!_hasCopyableText && message.isOutgoing && _isEditableMessage) {
       result.add(MessageAction.edit);

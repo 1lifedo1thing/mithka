@@ -1226,6 +1226,8 @@ class _ChatViewState extends State<ChatView> {
   String _reactionTab = 'standard'; // 'standard' or a custom-emoji pack id
   MessageReactionAvailability? _actionReactionAvailability;
   int _actionReactionAvailabilityGeneration = 0;
+  bool? _actionMessageLinkAvailable;
+  int _actionMessageLinkAvailabilityGeneration = 0;
   Offset?
   _actionAnchor; // overlay-space point the HUD grows from / collapses to
   Widget? _actionOverlaySnapshot; // last visible overlay, replayed during exit
@@ -5302,6 +5304,8 @@ class _ChatViewState extends State<ChatView> {
         unawaited(Clipboard.setData(ClipboardData(text: message.text)));
       case MessageAction.copyImage:
         await _copyMessageImage(message);
+      case MessageAction.copyMessageLink:
+        await _copyMessageLink(message);
       case MessageAction.edit:
         unawaited(_editMessage(message));
       case MessageAction.suggestOffer:
@@ -5511,6 +5515,23 @@ class _ChatViewState extends State<ChatView> {
     } catch (_) {
       if (mounted) {
         showToast(context, AppStringKeys.messageActionCopyImageFailed);
+      }
+    }
+  }
+
+  Future<void> _copyMessageLink(ChatMessage message) async {
+    try {
+      final link = await _vm.messageLink(message.id);
+      if (!mounted) return;
+      if (link.isEmpty) {
+        showToast(context, AppStringKeys.messageActionCopyLinkFailed);
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: link));
+      if (mounted) showToast(context, AppStringKeys.messageLinkCopied);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, AppStringKeys.messageActionCopyLinkFailed);
       }
     }
   }
@@ -10018,6 +10039,7 @@ class _ChatViewState extends State<ChatView> {
   ]) {
     EmojiStore.shared.loadIfNeeded();
     final reactionGeneration = ++_actionReactionAvailabilityGeneration;
+    final linkGeneration = ++_actionMessageLinkAvailabilityGeneration;
     final overlayBox =
         _actionOverlayKey.currentContext?.findRenderObject() as RenderBox?;
     final platform = Theme.of(context).platform;
@@ -10065,6 +10087,7 @@ class _ChatViewState extends State<ChatView> {
       _reactionExpanded = false;
       _reactionTab = 'standard';
       _actionReactionAvailability = null;
+      _actionMessageLinkAvailable = null;
     });
     oldSelectionState?.selectableRegion.clearSelection();
     if (!message.isCall) {
@@ -10072,6 +10095,29 @@ class _ChatViewState extends State<ChatView> {
         _loadActionReactionAvailability(message.id, reactionGeneration),
       );
     }
+    unawaited(_loadActionMessageLinkAvailability(message.id, linkGeneration));
+  }
+
+  /// The link action appears only once the server confirms the message
+  /// carries one (`messageProperties.can_get_link`). While the offline
+  /// properties query is in flight the entry stays hidden, so the menu never
+  /// grows a row it would have to remove a moment later.
+  Future<void> _loadActionMessageLinkAvailability(
+    int messageId,
+    int generation,
+  ) async {
+    bool? available;
+    try {
+      available = await _vm.canCopyMessageLink(messageId);
+    } catch (_) {
+      available = false; // Fail closed — no query answer, no action.
+    }
+    if (!mounted ||
+        generation != _actionMessageLinkAvailabilityGeneration ||
+        _actionTarget?.id != messageId) {
+      return;
+    }
+    setState(() => _actionMessageLinkAvailable = available);
   }
 
   Future<void> _loadActionReactionAvailability(
@@ -10589,6 +10635,8 @@ class _ChatViewState extends State<ChatView> {
       allowSuggestedPostOffer:
           _vm.isDirectMessagesGroup && !_vm.isAdministeredDirectMessagesGroup,
       allowHideSender: _canHideSender(target),
+      allowCopyMessageLink:
+          !target.isCall && _actionMessageLinkAvailable == true,
       source: _actionSource,
       showingOriginalTranslation: _showOriginalTranslationMessageIds.contains(
         target.id,

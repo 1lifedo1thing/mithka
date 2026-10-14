@@ -1987,6 +1987,8 @@
     <string name="messageActionCopy">Copy</string>
     <string name="messageActionCopyImage">Copy image</string>
     <string name="messageActionCopyImageFailed">Could not copy image</string>
+    <string name="messageActionCopyMessageLink">Copy message link</string>
+    <string name="messageActionCopyLinkFailed">Could not copy link</string>
     <string name="messageActionDisplayOriginal">Display original</string>
     <string name="messageActionDisplayTranslation">Display translation</string>
     <string name="messageActionEdit">Edit</string>
@@ -2097,6 +2099,7 @@
     <string name="messageInfoViews">Views</string>
     <string name="messageInformationTitle">Message Info</string>
     <string name="messageLeaveAComment">Leave a comment</string>
+    <string name="messageLinkCopied">Link copied</string>
     <string name="messagePollClosed">Closed</string>
     <string name="messagePollStop">Close poll</string>
     <string name="messagePollStopConfirm">Voting cannot continue after this poll is closed.</string>

@@ -1980,6 +1980,8 @@
     <string name="messageActionCopy">複製</string>
     <string name="messageActionCopyImage">複製圖片</string>
     <string name="messageActionCopyImageFailed">無法複製圖片</string>
+    <string name="messageActionCopyMessageLink">複製訊息連結</string>
+    <string name="messageActionCopyLinkFailed">連結複製失敗</string>
     <string name="messageActionDisplayOriginal">顯示原文</string>
     <string name="messageActionDisplayTranslation">顯示譯文</string>
     <string name="messageActionEdit">編輯</string>
@@ -2090,6 +2092,7 @@
     <string name="messageInfoViews">瀏覽次數</string>
     <string name="messageInformationTitle">Message Info</string>
     <string name="messageLeaveAComment">發表評論</string>
+    <string name="messageLinkCopied">連結已複製</string>
     <string name="messagePollClosed">Closed</string>
     <string name="messagePollStop">Close poll</string>
     <string name="messagePollStopConfirm">Voting cannot continue after this poll is closed.</string>

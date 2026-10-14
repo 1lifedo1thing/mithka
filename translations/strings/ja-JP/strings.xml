@@ -1980,6 +1980,8 @@
     <string name="messageActionCopy">コピー</string>
     <string name="messageActionCopyImage">画像をコピー</string>
     <string name="messageActionCopyImageFailed">画像をコピーできませんでした</string>
+    <string name="messageActionCopyMessageLink">メッセージのリンクをコピー</string>
+    <string name="messageActionCopyLinkFailed">リンクをコピーできませんでした</string>
     <string name="messageActionDisplayOriginal">原文を表示</string>
     <string name="messageActionDisplayTranslation">翻訳を表示</string>
     <string name="messageActionEdit">編集</string>
@@ -2090,6 +2092,7 @@
     <string name="messageInfoViews">表示</string>
     <string name="messageInformationTitle">Message Info</string>
     <string name="messageLeaveAComment">コメントを残す</string>
+    <string name="messageLinkCopied">リンクをコピーしました</string>
     <string name="messagePollClosed">Closed</string>
     <string name="messagePollStop">Close poll</string>
     <string name="messagePollStopConfirm">Voting cannot continue after this poll is closed.</string>
