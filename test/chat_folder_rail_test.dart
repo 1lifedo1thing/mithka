@@ -44,10 +44,176 @@ void main() {
       final paintedLines = boxes.map((box) => box.top).toSet().length;
       expect(paintedLines, 2, reason: 'full name wraps instead of ellipsizing');
       // Anything still too long for two lines stays reachable via hover.
-      expect(find.byTooltip(title), findsOneWidget);
+      expect(find.byType(Tooltip), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final platform in [
+    TargetPlatform.macOS,
+    TargetPlatform.windows,
+    TargetPlatform.linux,
+    TargetPlatform.iOS,
+  ]) {
+    testWidgets(
+      'folder hover label timing and dismissal on $platform',
+      (tester) async {
+        const title = 'Very Long Folder Name';
+        const hintKey = ValueKey('side-folder-name-tooltip-9');
+        var selections = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 58,
+                height: 300,
+                child: ChatFolderRail(
+                  filters: const [ChatFilterOption(title: title, folderId: 9)],
+                  selectedFolderId: null,
+                  onSelect: (_) => selections++,
+                ),
+              ),
+            ),
+          ),
+        );
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: const Offset(700, 500));
+        final target = find.byKey(const ValueKey('side-folder-9'));
+        await mouse.moveTo(tester.getCenter(target));
+        await tester.pump(const Duration(milliseconds: 449));
+        expect(find.byKey(hintKey), findsNothing);
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump();
+        expect(find.byKey(hintKey), findsOneWidget);
+        expect(
+          find.descendant(of: find.byKey(hintKey), matching: find.text(title)),
+          findsOneWidget,
+        );
+        expect(find.byType(Tooltip), findsNothing);
+        await mouse.down(tester.getCenter(target));
+        await mouse.up();
+        await tester.pump();
+        expect(selections, 1);
+        expect(find.byKey(hintKey), findsNothing);
+        await mouse.moveTo(const Offset(700, 500));
+        await mouse.moveTo(tester.getCenter(target));
+        await tester.pump(const Duration(milliseconds: 200));
+        await mouse.moveTo(const Offset(700, 500));
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byKey(hintKey), findsNothing);
+        await mouse.moveTo(tester.getCenter(target));
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byKey(hintKey), findsNothing);
+        expect(tester.takeException(), isNull);
+        await mouse.removePointer();
+      },
+      variant: TargetPlatformVariant.only(platform),
+    );
+  }
+
+  testWidgets('folder hover label fits a scaled RTL rail near window edges', (
+    tester,
+  ) async {
+    const title = '文件与视频资料归档非常长的文件夹名称';
+    const hintKey = ValueKey('side-folder-name-tooltip-9');
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: SizedBox(
+                width: 58,
+                height: 82,
+                child: ChatFolderRail(
+                  filters: [
+                    ChatFilterOption(
+                      title: title,
+                      folderId: 9,
+                      unreadChatCount: 150,
+                    ),
+                  ],
+                  selectedFolderId: null,
+                  showUnreadBadges: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byType(ChatFolderIcon)));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pump();
+    expect(find.byKey(hintKey), findsOneWidget);
+    final rect = tester.getRect(find.byKey(hintKey));
+    expect(rect.left, greaterThanOrEqualTo(0));
+    expect(rect.top, greaterThanOrEqualTo(0));
+    expect(rect.right, lessThanOrEqualTo(800));
+    expect(rect.bottom, lessThanOrEqualTo(600));
+    expect(find.text('99+'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('folder hover label is dismissed on rename and disposal', (
+    tester,
+  ) async {
+    const hintKey = ValueKey('side-folder-name-tooltip-9');
+    var title = 'Original Folder Name';
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 58,
+            height: 300,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return ChatFolderRail(
+                  filters: [ChatFilterOption(title: title, folderId: 9)],
+                  selectedFolderId: null,
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(700, 500));
+    final target = find.byKey(const ValueKey('side-folder-9'));
+    await mouse.moveTo(tester.getCenter(target));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pump();
+    expect(find.byKey(hintKey), findsOneWidget);
+    update(() => title = 'Renamed Folder Name');
+    await tester.pump();
+    expect(find.byKey(hintKey), findsNothing);
+    await mouse.moveTo(const Offset(700, 500));
+    await mouse.moveTo(tester.getCenter(target));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pump();
+    expect(
+      find.descendant(of: find.byKey(hintKey), matching: find.text(title)),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(find.byKey(hintKey), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+    await mouse.removePointer();
+  });
 
   testWidgets('right click edits only custom folders without selecting them', (
     tester,
@@ -81,15 +247,33 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Edit folder'), findsNothing);
-    await tester.tap(
-      find.byKey(const ValueKey('side-folder-7')),
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
       buttons: kSecondaryMouseButton,
     );
+    await mouse.addPointer(location: const Offset(700, 500));
+    final target = tester.getCenter(
+      find.byKey(const ValueKey('side-folder-7')),
+    );
+    await mouse.moveTo(target);
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('side-folder-name-tooltip-7')),
+      findsOneWidget,
+    );
+    await mouse.down(target);
+    await mouse.up();
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('side-folder-name-tooltip-7')),
+      findsNothing,
+    );
     await tester.tap(find.text('Edit folder'));
     await tester.pumpAndSettle();
     expect(edited, 7);
     expect(selections, 0);
+    await mouse.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());
     debugDefaultTargetPlatformOverride = null;
   });
