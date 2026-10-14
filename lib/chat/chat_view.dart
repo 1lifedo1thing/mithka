@@ -5522,13 +5522,12 @@ class _ChatViewState extends State<ChatView> {
   Future<void> _copyMessageLink(ChatMessage message) async {
     try {
       final link = await _vm.messageLink(message.id);
+      if (!mounted) return;
       if (link.isEmpty) {
-        if (mounted) {
-          showToast(context, AppStringKeys.messageActionCopyLinkFailed);
-        }
+        showToast(context, AppStringKeys.messageActionCopyLinkFailed);
         return;
       }
-      unawaited(Clipboard.setData(ClipboardData(text: link)));
+      await Clipboard.setData(ClipboardData(text: link));
       if (mounted) showToast(context, AppStringKeys.messageLinkCopied);
     } catch (_) {
       if (mounted) {

@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chat/chat_view.dart'
     show ChatView, clearChatMemoryCaches;
+import 'package:mithka/chat/message_action_menu.dart' show MessageActionSource;
+import 'package:mithka/chat/message_bubble.dart' show MessageBubble;
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:mithka/settings/translation_controller.dart';
 import 'package:mithka/tdlib/td_client.dart';
@@ -22,7 +24,7 @@ import 'support/l10n_fixtures.dart';
 // getMessageLink URL. Pumped through the real ChatView against the TdClient
 // proxy so the actual scoped TDLib requests are pinned.
 
-const _chatId = -1004242;
+const _chatId = -1000000004242;
 
 Map<String, dynamic> _textMessage(int id) => {
   '@type': 'message',
@@ -62,10 +64,20 @@ void main() {
   // Clipboard.setData never returns in a plain widget test (no platform
   // plugin) — mock the platform channel and record what the app copied.
   final clipboard = <String>[];
+  Completer<void>? clipboardCompletion;
+  Completer<Map<String, dynamic>>? linkCompletion;
+  var clipboardFails = false;
+  var propertiesFail = false;
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(SystemChannels.platform, (call) async {
         if (call.method == 'Clipboard.setData') {
           clipboard.add((call.arguments as Map)['text'] as String);
+          if (clipboardCompletion case final completion?) {
+            await completion.future;
+          }
+          if (clipboardFails) {
+            throw PlatformException(code: 'clipboard_unavailable');
+          }
         }
         return null;
       });
@@ -78,6 +90,14 @@ void main() {
         accountSlot: 0,
         query: (request) async {
           requests.add(Map<String, dynamic>.from(request));
+          if (request['@type'] == 'getMessageProperties' && propertiesFail) {
+            throw StateError('properties unavailable');
+          }
+          if (request['@type'] == 'getMessageLink') {
+            if (linkCompletion case final completion?) {
+              return completion.future;
+            }
+          }
           return switch (request['@type']) {
             'getChat' => _chatJson(),
             'getChatHistory' => {
@@ -139,6 +159,11 @@ void main() {
   setUp(() async {
     requests = [];
     canGetLink = true;
+    clipboard.clear();
+    clipboardCompletion = null;
+    linkCompletion = null;
+    clipboardFails = false;
+    propertiesFail = false;
     SharedPreferences.setMockInitialValues({});
     theme = ThemeController(await SharedPreferences.getInstance());
     translation = TranslationController(await SharedPreferences.getInstance());
@@ -150,8 +175,11 @@ void main() {
     translation.dispose();
   });
 
-  Future<void> openMenuOnMessage(WidgetTester tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+  Future<void> openMenuOnMessage(
+    WidgetTester tester, {
+    TargetPlatform platform = TargetPlatform.android,
+  }) async {
+    debugDefaultTargetPlatformOverride = platform;
     clearChatMemoryCaches();
     await tester.pumpWidget(
       MultiProvider(
@@ -162,10 +190,7 @@ void main() {
           ),
         ],
         child: MaterialApp(
-          theme: ThemeData(
-            extensions: [AppColors.light],
-            platform: TargetPlatform.android,
-          ),
+          theme: ThemeData(extensions: [AppColors.light], platform: platform),
           locale: const Locale('en'),
           localizationsDelegates: const [AppLocalizations.delegate],
           supportedLocales: AppLocalizations.supportedLocales,
@@ -183,7 +208,16 @@ void main() {
       findsOneWidget,
       reason: 'the fixture message must render',
     );
-    await tester.longPress(find.byKey(const ValueKey('messageTapTarget-5')));
+    if (platform == TargetPlatform.macOS) {
+      // Exercise the actual bubble-to-chat action callback and desktop menu.
+      // Pointer hit-testing is outside this clipboard/lifecycle regression.
+      final bubble = tester
+          .widgetList<MessageBubble>(find.byType(MessageBubble))
+          .singleWhere((bubble) => bubble.message.id == 5);
+      bubble.onLongPress!(bubble.message, null, MessageActionSource.normal);
+    } else {
+      await tester.longPress(find.byKey(const ValueKey('messageTapTarget-5')));
+    }
     await tester.pump(const Duration(milliseconds: 120));
     await tester.pump(const Duration(milliseconds: 120));
   }
@@ -249,5 +283,98 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets('desktop link copy waits for clipboard completion', (
+    tester,
+  ) async {
+    clipboardCompletion = Completer<void>();
+    await openMenuOnMessage(tester, platform: TargetPlatform.macOS);
+    await tester.tap(
+      find.byKey(const ValueKey('message-action-copyMessageLink')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    final reportedSuccessEarly = find.text('Link copied').evaluate().isNotEmpty;
+    expect(clipboard, ['https://t.me/c/4242/5']);
+    clipboardCompletion!.complete();
+    await tester.pump(const Duration(milliseconds: 300));
+    try {
+      expect(reportedSuccessEarly, isFalse);
+      expect(find.text('Link copied'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 6));
+    }
+  });
+
+  testWidgets('clipboard failure reports failure without an uncaught error', (
+    tester,
+  ) async {
+    clipboardFails = true;
+    await openMenuOnMessage(tester);
+    await tester.tap(
+      find.byKey(const ValueKey('message-action-copyMessageLink')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    try {
+      expect(tester.takeException(), isNull);
+      expect(find.text('Link copied'), findsNothing);
+      expect(find.text('Could not copy link'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 6));
+    }
+  });
+
+  testWidgets('closing the chat cancels a pending link clipboard write', (
+    tester,
+  ) async {
+    linkCompletion = Completer<Map<String, dynamic>>();
+    await openMenuOnMessage(tester, platform: TargetPlatform.iOS);
+    await tester.tap(
+      find.byKey(const ValueKey('message-action-copyMessageLink')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      requests.where((request) => request['@type'] == 'getMessageLink'),
+      hasLength(1),
+    );
+    expect(clipboard, isEmpty);
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(const SizedBox.shrink());
+    linkCompletion!.complete({
+      '@type': 'messageLink',
+      'link': 'https://t.me/c/4242/5',
+      'is_public': false,
+    });
+    await tester.pump(const Duration(seconds: 6));
+    expect(clipboard, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed link permissions keep the menu action hidden', (
+    tester,
+  ) async {
+    propertiesFail = true;
+    await openMenuOnMessage(tester);
+    try {
+      expect(
+        find.byKey(const ValueKey('message-action-copyMessageLink')),
+        findsNothing,
+      );
+      expect(
+        requests.where((request) => request['@type'] == 'getMessageLink'),
+        isEmpty,
+      );
+      expect(clipboard, isEmpty);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 6));
+    }
   });
 }
