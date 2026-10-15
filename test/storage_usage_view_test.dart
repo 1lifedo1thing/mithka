@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mithka/components/ui_components.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:mithka/settings/data_storage_service.dart';
 import 'package:mithka/settings/storage_usage_view.dart';
@@ -156,6 +160,131 @@ void main() {
     ]);
     expect(service.optimizeCalls.single, isNot(contains('@type')));
   });
+
+  testWidgets(
+    'clear cache spinners size their icon to the indicator and rotate around the button center',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final optimizeCompleter = Completer<Map<String, dynamic>>();
+      final service = _FakeDataStorageService(
+        optimizeGate: optimizeCompleter.future,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final theme = ThemeController(prefs);
+      addTearDown(theme.dispose);
+      tester.view.physicalSize = const Size(430, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<ThemeController>.value(
+          value: theme,
+          child: _testApp(StorageUsageView(service: service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Clear cache'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear cache').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final cacheCard = find.byKey(const ValueKey('storage-cache-card'));
+      final indicatorFinder = find.descendant(
+        of: cacheCard,
+        matching: find.byType(AppActivityIndicator),
+      );
+      expect(indicatorFinder, findsOneWidget);
+      final iconFinder = find.descendant(
+        of: indicatorFinder,
+        matching: find.byType(Icon),
+      );
+      final icon = tester.widget<Icon>(iconFinder);
+      expect(icon.size, 15);
+      expect(icon.color, AppTheme.tagRed);
+
+      var maxPivotDrift = 0.0;
+      final indicatorCenter = tester.getCenter(indicatorFinder);
+      for (var step = 0; step < 8; step++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        final iconCenter = tester.getCenter(iconFinder);
+        maxPivotDrift = math.max(
+          maxPivotDrift,
+          (iconCenter - indicatorCenter).distance,
+        );
+      }
+      expect(maxPivotDrift, lessThan(0.01));
+
+      optimizeCompleter.complete(const {'@type': 'storageStatistics'});
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'storage manager clear selected spinner sizes its icon to the indicator and rotates in place',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final optimizeCompleter = Completer<Map<String, dynamic>>();
+      final service = _FakeDataStorageService(
+        optimizeGate: optimizeCompleter.future,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final theme = ThemeController(prefs);
+      addTearDown(theme.dispose);
+      tester.view.physicalSize = const Size(430, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<ThemeController>.value(
+          value: theme,
+          child: _testApp(StorageUsageView(service: service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Manage'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('storage-chat-7')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('storage-clear-selected')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear selected').last);
+      await tester.pump();
+
+      final clearButton = find.byKey(const ValueKey('storage-clear-selected'));
+      final indicatorFinder = find.descendant(
+        of: clearButton,
+        matching: find.byType(AppActivityIndicator),
+      );
+      expect(indicatorFinder, findsOneWidget);
+      final iconFinder = find.descendant(
+        of: indicatorFinder,
+        matching: find.byType(Icon),
+      );
+      final icon = tester.widget<Icon>(iconFinder);
+      expect(icon.size, 14);
+      expect(icon.color, AppTheme.tagRed);
+
+      var maxPivotDrift = 0.0;
+      final indicatorCenter = tester.getCenter(indicatorFinder);
+      for (var step = 0; step < 8; step++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        final iconCenter = tester.getCenter(iconFinder);
+        maxPivotDrift = math.max(
+          maxPivotDrift,
+          (iconCenter - indicatorCenter).distance,
+        );
+      }
+      expect(maxPivotDrift, lessThan(0.01));
+
+      optimizeCompleter.complete(const {'@type': 'storageStatistics'});
+      await tester.pumpAndSettle();
+    },
+  );
 }
 
 Widget _testApp(Widget home) => MaterialApp(
@@ -172,6 +301,9 @@ Widget _testApp(Widget home) => MaterialApp(
 );
 
 class _FakeDataStorageService extends DataStorageService {
+  _FakeDataStorageService({this.optimizeGate});
+
+  final Future<Map<String, dynamic>>? optimizeGate;
   final List<Map<String, dynamic>> optimizeCalls = [];
 
   @override
@@ -258,6 +390,9 @@ class _FakeDataStorageService extends DataStorageService {
       'return_deleted_file_statistics': returnDeletedStatistics,
       'chat_limit': chatLimit,
     });
+    if (optimizeGate != null) {
+      return await optimizeGate!;
+    }
     return const {'@type': 'storageStatistics'};
   }
 }
