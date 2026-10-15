@@ -1029,6 +1029,7 @@ class _StorageActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final actionColor = destructive ? AppTheme.tagRed : AppTheme.brand;
     return SettingsPanel(
       padding: EdgeInsets.all(desktopDense ? 14 : 17),
       child: Row(
@@ -1100,15 +1101,11 @@ class _StorageActionCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.control),
               ),
               child: showProgress
-                  ? const SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: AppActivityIndicator(),
-                    )
+                  ? AppActivityIndicator(size: 15, color: actionColor)
                   : Text(
                       action,
                       style: TextStyle(
-                        color: destructive ? AppTheme.tagRed : AppTheme.brand,
+                        color: actionColor,
                         fontSize: desktopDense ? 12 : 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1368,11 +1365,7 @@ class _StorageManagerViewState extends State<_StorageManagerView> {
                     borderRadius: BorderRadius.circular(AppRadius.control),
                   ),
                   child: _working
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: AppActivityIndicator(),
-                        )
+                      ? AppActivityIndicator(size: 14, color: AppTheme.tagRed)
                       : Text(
                           AppStrings.t(
                             AppStringKeys.storageManagerClearSelected,
