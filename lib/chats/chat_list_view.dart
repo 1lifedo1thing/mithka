@@ -3168,6 +3168,7 @@ class _ChatListViewState extends State<ChatListView>
       _dismissDesktopChatMenu();
     }
 
+    final owner = ChatPreviewAccounts.defaultPreviewAccounts.pinActiveOwner();
     entry = OverlayEntry(
       builder: (_) => DesktopChatContextMenu(
         anchor: anchor,
@@ -3184,6 +3185,7 @@ class _ChatListViewState extends State<ChatListView>
             ? null
             : () => unawaited(openInSeparateWindow(chat)),
         onToggleMute: () => _model.toggleMute(chat),
+        onArchive: () => _model.archive(chat, owner: owner),
         onDeleteOrLeave: () => unawaited(_confirmDeleteChat(chat)),
       ),
     );
@@ -3223,6 +3225,7 @@ class _ChatListViewState extends State<ChatListView>
     final accounts = context.read<AccountStore>();
     final activeAccount = accounts.activeSummary;
     final avatarPath = activeAccount?.avatarPath?.trim();
+    final owner = ChatPreviewAccounts.defaultPreviewAccounts.pinActiveOwner();
     unawaited(
       showChatListPreview(
         context,
@@ -3257,6 +3260,11 @@ class _ChatListViewState extends State<ChatListView>
                 : AppStringKeys.chatInfoPin,
             icon: HeroAppIcons.thumbtack,
             onSelected: () => _model.togglePin(chat),
+          ),
+          ChatListPreviewAction(
+            label: AppStringKeys.chatListArchive,
+            icon: HeroAppIcons.archiveBox,
+            onSelected: () => _model.archive(chat, owner: owner),
           ),
           ChatListPreviewAction(
             label: chat.isMuted
@@ -3960,6 +3968,7 @@ class DesktopChatContextMenu extends StatelessWidget {
     required this.onToggleRead,
     required this.onToggleMute,
     required this.onDeleteOrLeave,
+    required this.onArchive,
     this.onOpenSeparateWindow,
   });
 
@@ -3980,10 +3989,11 @@ class DesktopChatContextMenu extends StatelessWidget {
   final VoidCallback? onOpenSeparateWindow;
   final VoidCallback onToggleMute;
   final VoidCallback onDeleteOrLeave;
+  final VoidCallback onArchive;
 
   double get _menuHeight =>
       verticalPadding * 2 +
-      rowHeight * (onOpenSeparateWindow == null ? 4 : 5) +
+      rowHeight * (onOpenSeparateWindow == null ? 5 : 6) +
       dividerHeight;
 
   void _select(VoidCallback action) {
@@ -4083,6 +4093,12 @@ class DesktopChatContextMenu extends StatelessWidget {
                                 ? AppStringKeys.chatUnmute
                                 : AppStringKeys.callMute,
                             onTap: () => _select(onToggleMute),
+                          ),
+                          _DesktopChatContextMenuItem(
+                            key: const ValueKey('desktop-chat-context-archive'),
+                            icon: HeroAppIcons.archiveBox,
+                            label: AppStringKeys.chatListArchive,
+                            onTap: () => _select(onArchive),
                           ),
                           SizedBox(
                             height: dividerHeight,

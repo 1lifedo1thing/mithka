@@ -25,6 +25,7 @@ import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
 import '../tdlib/td_user_index.dart';
 import 'chat_delete_policy.dart';
+import 'chat_list_preview.dart';
 import 'chat_removal_actions.dart';
 
 class ChatFilterOption {
@@ -688,13 +689,28 @@ class ChatListViewModel extends ChangeNotifier {
 
   /// Moves an archived chat back to the main list without deleting history.
   void unarchive(ChatSummary chat) {
-    _client
-        .query({
-          '@type': 'addChatToList',
-          'chat_id': chat.id,
-          'chat_list': {'@type': 'chatListMain'},
-        })
-        .catchError((Object _) => <String, dynamic>{});
+    _chatListQuery({
+      '@type': 'addChatToList',
+      'chat_id': chat.id,
+      'chat_list': {'@type': 'chatListMain'},
+    }).catchError((Object _) => <String, dynamic>{});
+  }
+
+  /// Moves a main-list chat into the archive without deleting history.
+  ///
+  /// [owner] must be pinned at preview/menu open. A missing or expired owner
+  /// drops the request; otherwise it is dispatched
+  /// through [ChatPreviewOwner.query] (bound to `owner.clientId`).
+  void archive(ChatSummary chat, {required ChatPreviewOwner? owner}) {
+    if (_disposed) return;
+    if (owner == null || !owner.isCurrent) return;
+    final request = <String, dynamic>{
+      '@type': 'addChatToList',
+      'chat_id': chat.id,
+      'chat_list': {'@type': 'chatListArchive'},
+    };
+    final send = owner.query;
+    send(request).catchError((Object _) => <String, dynamic>{});
   }
 
   void toggleMute(ChatSummary chat) {

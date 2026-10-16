@@ -99,6 +99,11 @@ ChatListPreviewGeometry chatListPreviewGeometry(
 /// Shows a Telegram-style, lifted conversation preview without opening the
 /// chat or sending `viewMessages`. Selecting an action dismisses the preview
 /// before handing control back to the chat list.
+///
+/// The foreground account owner is pinned when the preview opens and re-checked
+/// after the delayed dismissal transition, so an account switch, session
+/// replacement, slot close, or shutdown during dismissal suppresses the action
+/// instead of running it against the replacement account.
 Future<void> showChatListPreview(
   BuildContext context, {
   required ChatSummary chat,
@@ -106,8 +111,10 @@ Future<void> showChatListPreview(
   String? meName,
   TdFileRef? mePhoto,
   ChatListPreviewLoader? loadMessages,
+  ChatPreviewAccounts accounts = _tdChatPreviewAccounts,
 }) async {
   unawaited(HapticFeedback.mediumImpact());
+  final owner = accounts.pinActiveOwner();
   final reduceMotion = AppMotion.isReduced(context);
   final route = RawDialogRoute<ChatListPreviewAction>(
     barrierLabel: AppStringKeys.countryPickerCancel.l10n(context),
@@ -119,6 +126,7 @@ Future<void> showChatListPreview(
       meName: meName,
       mePhoto: mePhoto,
       loadMessages: loadMessages,
+      accounts: accounts,
     ),
     transitionBuilder: (dialogContext, animation, _, child) {
       if (reduceMotion) return child;
@@ -148,6 +156,7 @@ Future<void> showChatListPreview(
   // collide with the preview route.
   await route.completed;
   if (!context.mounted || selected == null) return;
+  if (owner != null && !owner.isCurrent) return;
   selected.onSelected();
 }
 
@@ -178,6 +187,9 @@ abstract interface class ChatPreviewOwner {
 
 /// Supplies the owner a preview load runs against.
 abstract interface class ChatPreviewAccounts {
+  static const ChatPreviewAccounts defaultPreviewAccounts =
+      _TdChatPreviewAccounts();
+
   /// Null when nothing can be pinned: nothing logged in, shutdown already
   /// running, or a client replaced between the reads.
   ChatPreviewOwner? pinActiveOwner();
@@ -225,7 +237,8 @@ final class _TdChatPreviewAccounts implements ChatPreviewAccounts {
   }
 }
 
-const ChatPreviewAccounts _tdChatPreviewAccounts = _TdChatPreviewAccounts();
+const ChatPreviewAccounts _tdChatPreviewAccounts =
+    ChatPreviewAccounts.defaultPreviewAccounts;
 
 /// The oldest message id in a `Messages` page, read from the raw payload so an
 /// unparseable entry still moves the boundary instead of stalling the loop.
