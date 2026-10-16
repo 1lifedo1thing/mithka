@@ -19,6 +19,7 @@ import 'package:mithka/chat/chat_view.dart';
 import 'package:mithka/chats/archived_chats_view.dart';
 import 'package:mithka/chats/chat_list_view.dart';
 import 'package:mithka/chats/search_view.dart';
+import 'package:mithka/components/app_icons.dart';
 import 'package:mithka/components/drawer_controller.dart' as dc;
 import 'package:mithka/contacts/contacts_view.dart';
 import 'package:mithka/l10n/app_locale_controller.dart';
@@ -598,6 +599,51 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets(
+    'phone chat back button slides the conversation out across the viewport',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        await _setSurfaceSize(tester, const Size(390, 844));
+        await _pumpMainShell(tester);
+        final deepLinks = ChatDeepLinkController.shared;
+
+        deepLinks.openChat(chatId: 41, title: 'Mobile chat', messageId: 410);
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        _discardMissingTdlibErrors(tester);
+
+        final chatView = find.byType(ChatView);
+        expect(chatView, findsOneWidget);
+        expect(tester.getTopLeft(chatView).dx, closeTo(0, 0.5));
+
+        final backButton = find.descendant(
+          of: chatView,
+          matching: find.byIcon(HeroAppIcons.chevronLeft.data),
+        );
+        expect(backButton, findsOneWidget);
+        await tester.tap(backButton);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 90));
+        _discardMissingTdlibErrors(tester);
+
+        final midPopLeft = tester.getTopLeft(chatView).dx;
+        expect(midPopLeft, greaterThan(180));
+        expect(midPopLeft, lessThan(390));
+
+        await tester.pump(const Duration(milliseconds: 240));
+        await tester.pump();
+        _discardMissingTdlibErrors(tester);
+        expect(chatView, findsNothing);
+        expect(find.byType(ChatListView), findsOneWidget);
+        await _disposeShell(tester);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 }
 
 void _discardMissingTdlibErrors(WidgetTester tester) {

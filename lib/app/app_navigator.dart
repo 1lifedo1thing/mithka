@@ -199,15 +199,27 @@ class AppChatPageRoute<T> extends PageRoute<T>
     if (AppMotion.isReduced(context) && !_fullPageBackSwipeActive) {
       return child;
     }
-    final leaving = _fullPageBackSwipeActive;
+    final leaving =
+        _fullPageBackSwipeActive ||
+        animation.status == AnimationStatus.reverse ||
+        animation.status == AnimationStatus.dismissed;
     if (leaving) {
       final effectiveAnimation = popGestureInProgress
           ? animation
           : CurvedAnimation(
               parent: animation,
               curve: AppMotion.standard,
-              reverseCurve: AppMotion.accelerate,
+              reverseCurve: AppMotion.standard.flipped,
             );
+      final slide = SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(effectiveAnimation),
+        transformHitTests: false,
+        child: child,
+      );
+      if (!_fullPageBackSwipeActive) return slide;
       return Stack(
         fit: StackFit.expand,
         children: [
@@ -220,14 +232,7 @@ class AppChatPageRoute<T> extends PageRoute<T>
               child: ColoredBox(color: Color(0xFF000000)),
             ),
           ),
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(effectiveAnimation),
-            transformHitTests: false,
-            child: child,
-          ),
+          slide,
         ],
       );
     }
