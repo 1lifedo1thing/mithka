@@ -4323,14 +4323,33 @@ class _MessageBubbleState extends State<MessageBubble>
       outgoing,
     );
     if (appendMeta) children.add(_metaSpan(outgoing));
-    final style = DefaultTextStyle.of(
-      context,
-    ).style.merge(TextStyle(fontSize: effectiveFontSize, color: base));
+    final hasCustomEmoji = (entities ?? message.textEntities).any(
+      (e) =>
+          !e.isBlockQuote &&
+          e.isCustomEmoji &&
+          e.customEmojiId != null &&
+          e.offset < end &&
+          e.end > start,
+    );
+    final style = DefaultTextStyle.of(context).style.merge(
+      TextStyle(
+        fontSize: effectiveFontSize,
+        color: base,
+        height: hasCustomEmoji ? 1.0 : null,
+      ),
+    );
     return Builder(
       builder: (context) => RichText(
         textScaler: MediaQuery.textScalerOf(context),
         maxLines: maxLines,
         overflow: maxLines == null ? TextOverflow.clip : TextOverflow.fade,
+        textHeightBehavior: hasCustomEmoji
+            ? const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+                leadingDistribution: TextLeadingDistribution.even,
+              )
+            : null,
         text: TextSpan(style: style, children: children),
         selectionRegistrar: SelectionContainer.maybeOf(context),
         selectionColor:
@@ -4597,14 +4616,11 @@ class _MessageBubbleState extends State<MessageBubble>
       return [
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0.5),
-            child: SelectableCustomEmojiView(
-              id: customEmojiId,
-              fallbackText: segment,
-              size: math.max(20, fontSize * 1.15),
-              color: style.color ?? base,
-            ),
+          child: SelectableCustomEmojiView(
+            id: customEmojiId,
+            fallbackText: segment,
+            size: math.max(20, (fontSize * 1.15).roundToDouble()),
+            color: style.color ?? base,
           ),
         ),
       ];
