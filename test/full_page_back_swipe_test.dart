@@ -392,7 +392,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('ordinary pop keeps the compact non-interactive transition', (
+  testWidgets('ordinary pop slides the conversation across the full viewport', (
     tester,
   ) async {
     final harness = await _pumpRouteHarness(tester);
@@ -402,8 +402,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 90));
 
     final chatLeft = tester.getTopLeft(find.byKey(_chatKey)).dx;
-    expect(chatLeft, greaterThan(0));
-    expect(chatLeft, lessThan(30));
+    expect(chatLeft, greaterThan(180));
+    expect(chatLeft, lessThan(390));
+    final revealedColor = await _pixelAt(
+      tester,
+      harness,
+      const Offset(24, 420),
+    );
+    _expectColorClose(revealedColor, _previousColor);
 
     await tester.pumpAndSettle();
     expect(harness.observer.popCount, 1);
