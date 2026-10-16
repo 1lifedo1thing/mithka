@@ -42,6 +42,7 @@ import '../theme/theme_controller.dart';
 import 'forum_topic_fields.dart';
 import 'topic_list_actions.dart';
 import 'topic_list_host.dart';
+import 'topic_list_row.dart';
 import 'topic_navigation.dart';
 import 'topic_post_content.dart';
 
@@ -2003,6 +2004,8 @@ class _TopicChatViewState extends State<TopicChatView> {
               chatId: widget.chat.id,
               post: post,
               sender: _senderCache[post.message.senderId],
+              showTopicChip: _selectedThreadId == null,
+              onOpenTopic: () => _selectTopic(post.topic.id),
               onLike: () => _addReaction(post, '❤️'),
               onPickReaction: () => _showReactionPicker(post),
               onComments: () => _openComments(post),
@@ -2080,6 +2083,8 @@ class _TopicPostRow extends StatelessWidget {
     required this.onPickReaction,
     required this.onComments,
     required this.onShare,
+    this.showTopicChip = false,
+    this.onOpenTopic,
     this.sender,
   });
 
@@ -2090,6 +2095,12 @@ class _TopicPostRow extends StatelessWidget {
   final VoidCallback onPickReaction;
   final VoidCallback onComments;
   final VoidCallback onShare;
+
+  /// The aggregated "All" feed labels every post with its topic; a single
+  /// topic's feed already names itself in the header, so the chip is
+  /// redundant there.
+  final bool showTopicChip;
+  final VoidCallback? onOpenTopic;
 
   @override
   Widget build(BuildContext context) {
@@ -2104,6 +2115,10 @@ class _TopicPostRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (showTopicChip) ...[
+            _TopicChip(topic: post.topic, onOpen: onOpenTopic),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               PhotoAvatar(title: name, photo: sender?.photo, size: 48),
@@ -2172,6 +2187,59 @@ class _TopicPostRow extends StatelessWidget {
       post.message.image != null ||
       post.message.document != null ||
       post.message.buttonRows.isNotEmpty;
+}
+
+/// Topic label above a post in the aggregated feed: a 20px `TopicIconSurface`
+/// (custom emoji or tinted hashtag tile), 6px gap, single-line 14px w600 topic
+/// name tinted with `topic.iconColor ?? AppTheme.avatarColor(topic.name)`, and
+/// an optional 12px `HeroAppIcons.lock` (`c.textTertiary`, 4px gap) for closed
+/// topics. Tapping it routes through `_selectTopic(post.topic.id)`.
+class _TopicChip extends StatelessWidget {
+  const _TopicChip({required this.topic, this.onOpen});
+
+  final _ForumTopic topic;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final tint = topic.iconColor ?? AppTheme.avatarColor(topic.name);
+    return GestureDetector(
+      key: ValueKey('topic-post-chip-${topic.id}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TopicIconSurface(
+              size: 20,
+              iconCustomEmojiId: topic.iconCustomEmojiId,
+              tint: tint,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                topic.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: tint,
+                ),
+              ),
+            ),
+            if (topic.isClosed) ...[
+              const SizedBox(width: 4),
+              AppIcon(HeroAppIcons.lock, size: 12, color: c.textTertiary),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PostActions extends StatelessWidget {
