@@ -305,6 +305,7 @@ class SelectableCustomEmojiView extends StatelessWidget {
           softWrap: false,
           overflow: TextOverflow.clip,
           textAlign: TextAlign.center,
+          textScaler: TextScaler.noScaling,
           style: TextStyle(
             color: Colors.transparent,
             fontSize: size * 0.9,

@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mithka/chat/custom_emoji.dart';
+import 'package:mithka/chat/message_bubble.dart';
 import 'package:mithka/chat/telegram_rich_text.dart';
 import 'package:mithka/tdlib/td_models.dart';
+import 'package:mithka/theme/app_theme.dart';
+import 'package:mithka/theme/theme_controller.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Iterable<TextSpan> _textSpans(InlineSpan span) sync* {
   if (span is! TextSpan) return;
@@ -155,4 +160,147 @@ void main() {
     expect(copiedText, text);
     await tester.pump(const Duration(milliseconds: 50));
   });
+
+  testWidgets(
+    'MessageBubble lays out consecutive custom emoji collages flush horizontally and vertically',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final theme = ThemeController(prefs);
+      addTearDown(theme.dispose);
+
+      // Two rows of two custom emojis each: "😀😀\n😀😀"
+      // UTF-16 offsets:
+      // 0..2, 2..4, 4..5 ('\n'), 5..7, 7..9
+      const text = '😀😀\n😀😀';
+      final message = ChatMessage(
+        id: 501,
+        isOutgoing: false,
+        text: text,
+        date: 1000,
+        contentType: 'messageText',
+        textEntities: const [
+          MessageTextEntity(
+            offset: 0,
+            length: 2,
+            type: 'textEntityTypeCustomEmoji',
+            customEmojiId: 1001,
+          ),
+          MessageTextEntity(
+            offset: 2,
+            length: 2,
+            type: 'textEntityTypeCustomEmoji',
+            customEmojiId: 1002,
+          ),
+          MessageTextEntity(
+            offset: 5,
+            length: 2,
+            type: 'textEntityTypeCustomEmoji',
+            customEmojiId: 1003,
+          ),
+          MessageTextEntity(
+            offset: 7,
+            length: 2,
+            type: 'textEntityTypeCustomEmoji',
+            customEmojiId: 1004,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<ThemeController>.value(
+          value: theme,
+          child: MaterialApp(
+            theme: ThemeData(extensions: [AppColors.light]),
+            home: Scaffold(
+              body: MessageBubble(
+                message: message,
+                peerTitle: 'Collage',
+                isGroup: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final emojis = find.byType(SelectableCustomEmojiView);
+      expect(emojis, findsNWidgets(4));
+
+      final r0 = tester.getRect(emojis.at(0));
+      final r1 = tester.getRect(emojis.at(1));
+      final r2 = tester.getRect(emojis.at(2));
+      final r3 = tester.getRect(emojis.at(3));
+
+      // Horizontal adjacency: no gap between tile 0 and tile 1, or tile 2 and tile 3.
+      expect(r1.left, closeTo(r0.right, 0.01));
+      expect(r3.left, closeTo(r2.right, 0.01));
+
+      // Vertical adjacency: row 2 top meets row 1 bottom without extra line-height gap.
+      expect(r2.top, closeTo(r0.bottom, 0.01));
+      expect(r3.top, closeTo(r1.bottom, 0.01));
+
+      await tester.pump(const Duration(milliseconds: 50));
+    },
+  );
+
+  testWidgets(
+    'TelegramRichText lays out consecutive custom emoji collages flush horizontally and vertically',
+    (tester) async {
+      const text = '😀😀\n😀😀';
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(extensions: [AppColors.light]),
+          home: const Scaffold(
+            body: TelegramRichText(
+              text: text,
+              style: TextStyle(fontSize: 15, height: 1.35, color: Colors.black),
+              entities: [
+                MessageTextEntity(
+                  offset: 0,
+                  length: 2,
+                  type: 'textEntityTypeCustomEmoji',
+                  customEmojiId: 2001,
+                ),
+                MessageTextEntity(
+                  offset: 2,
+                  length: 2,
+                  type: 'textEntityTypeCustomEmoji',
+                  customEmojiId: 2002,
+                ),
+                MessageTextEntity(
+                  offset: 5,
+                  length: 2,
+                  type: 'textEntityTypeCustomEmoji',
+                  customEmojiId: 2003,
+                ),
+                MessageTextEntity(
+                  offset: 7,
+                  length: 2,
+                  type: 'textEntityTypeCustomEmoji',
+                  customEmojiId: 2004,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final emojis = find.byType(SelectableCustomEmojiView);
+      expect(emojis, findsNWidgets(4));
+
+      final r0 = tester.getRect(emojis.at(0));
+      final r1 = tester.getRect(emojis.at(1));
+      final r2 = tester.getRect(emojis.at(2));
+      final r3 = tester.getRect(emojis.at(3));
+
+      expect(r1.left, closeTo(r0.right, 0.01));
+      expect(r3.left, closeTo(r2.right, 0.01));
+      expect(r2.top, closeTo(r0.bottom, 0.01));
+      expect(r3.top, closeTo(r1.bottom, 0.01));
+
+      await tester.pump(const Duration(milliseconds: 50));
+    },
+  );
 }

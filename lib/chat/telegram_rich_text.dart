@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,6 +67,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
   String? _spanCacheText;
   List<MessageTextEntity>? _spanCacheEntities;
   TextStyle? _spanCacheBaseStyle;
+  TextScaler? _spanCacheTextScaler;
   Color? _spanCacheLinkColor;
   bool _spanCacheUnderlineLinks = false;
   bool _spanCacheHashtagTap = false;
@@ -102,13 +105,24 @@ class _TelegramRichTextState extends State<TelegramRichText> {
       _disposeRecognizers();
       return _richTextWithQuoteBlocks(context, baseStyle, linkColor);
     }
+    final hasCustomEmoji = _hasCustomEmoji();
+    final effectiveStyle = hasCustomEmoji
+        ? baseStyle.copyWith(height: 1.0)
+        : baseStyle;
     return RichText(
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: widget.maxLines,
       overflow: widget.overflow,
+      textHeightBehavior: hasCustomEmoji
+          ? const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
+              leadingDistribution: TextLeadingDistribution.even,
+            )
+          : null,
       text: TextSpan(
-        style: baseStyle,
-        children: _memoizedSpans(context, baseStyle, linkColor),
+        style: effectiveStyle,
+        children: _memoizedSpans(context, effectiveStyle, linkColor),
       ),
       selectionRegistrar: SelectionContainer.maybeOf(context),
       selectionColor:
@@ -127,6 +141,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
   ) {
     final hashtagTap = widget.onHashtagTap != null;
     final mentionTap = widget.onMentionTap != null;
+    final textScaler = MediaQuery.textScalerOf(context);
     // A code span resolves the monospace family and the inline-code fill from
     // the ambient theme, which no key below can see — leave those uncached.
     final cacheable = !_display.entities.any(_isCodeEntity);
@@ -135,6 +150,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
         _spanCacheText == _display.text &&
         identical(_spanCacheEntities, _display.entities) &&
         _spanCacheBaseStyle == baseStyle &&
+        _spanCacheTextScaler == textScaler &&
         _spanCacheLinkColor == linkColor &&
         _spanCacheUnderlineLinks == widget.underlineLinks &&
         _spanCacheHashtagTap == hashtagTap &&
@@ -148,6 +164,7 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     _spanCacheText = _display.text;
     _spanCacheEntities = _display.entities;
     _spanCacheBaseStyle = baseStyle;
+    _spanCacheTextScaler = textScaler;
     _spanCacheLinkColor = linkColor;
     _spanCacheUnderlineLinks = widget.underlineLinks;
     _spanCacheHashtagTap = hashtagTap;
@@ -170,6 +187,16 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     final textLength = _display.text.length;
     return _display.entities.any(
       (entity) => entity.isBlockQuote && _isEntityInRange(entity, textLength),
+    );
+  }
+
+  bool _hasCustomEmoji() {
+    final textLength = _display.text.length;
+    return _display.entities.any(
+      (entity) =>
+          entity.isCustomEmoji &&
+          entity.customEmojiId != null &&
+          _isEntityInRange(entity, textLength),
     );
   }
 
@@ -369,16 +396,17 @@ class _TelegramRichTextState extends State<TelegramRichText> {
     final customEmojiId = effectiveActive.customEmojiId;
     if (customEmojiId != null) {
       final ambientScaler = MediaQuery.textScalerOf(context);
+      final rawFontSize = style.fontSize ?? baseStyle.fontSize ?? 16;
       return [
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
           child: SelectableCustomEmojiView(
             id: customEmojiId,
             fallbackText: segment,
-            size:
-                (style.fontSize ?? baseStyle.fontSize ?? 16) *
-                ambientScaler.scale(1.0) *
-                1.25,
+            size: math.max(
+              20,
+              (ambientScaler.scale(rawFontSize) * 1.15).roundToDouble(),
+            ),
             color: style.color,
           ),
         ),
