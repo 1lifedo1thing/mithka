@@ -2231,6 +2231,24 @@ class _SearchViewModel extends ChangeNotifier {
           if (id != null) await addChat(id, subtitle: '@$handle');
         } catch (_) {}
       }
+      if (!_isCurrent(tab, runId, trimmed)) return;
+
+      final lookupUserId = telegramUserIdFromQuery(trimmed);
+      if (lookupUserId != null &&
+          out.length < resultLimit &&
+          seenUsers.add(lookupUserId)) {
+        try {
+          final user = await TdClient.shared.query({
+            '@type': 'getUser',
+            'user_id': lookupUserId,
+          });
+          if (!_isCurrent(tab, runId, trimmed)) return;
+          if (user.obj('type')?.type != 'userTypeDeleted' &&
+              out.length < resultLimit) {
+            out.add(_SearchHit.user(lookupUserId, user, showUserId: true));
+          }
+        } catch (_) {}
+      }
 
       _finish(tab, runId, trimmed, out.take(resultLimit).toList());
     } catch (_) {
@@ -2450,13 +2468,21 @@ class _SearchHit {
     userId: chat.peerUserId,
   );
 
-  factory _SearchHit.user(int id, Map<String, dynamic> user) {
-    final username = user.obj('usernames')?.str('editable_username');
+  factory _SearchHit.user(
+    int id,
+    Map<String, dynamic> user, {
+    bool showUserId = false,
+  }) {
+    final username =
+        user.obj('usernames')?.str('editable_username') ??
+        TDParse.activeUsernames(user).firstOrNull;
+    final hasUsername = username != null && username.isNotEmpty;
+    final baseSubtitle = hasUsername ? '@$username' : TDParse.userStatus(user);
     return _SearchHit(
       title: TDParse.userName(user),
-      subtitle: username != null && username.isNotEmpty
-          ? '@$username'
-          : TDParse.userStatus(user),
+      subtitle: showUserId
+          ? (hasUsername ? '$baseSubtitle · ID: $id' : 'ID: $id')
+          : baseSubtitle,
       photo: TDParse.smallPhoto(user.obj('profile_photo')),
       userId: id,
     );

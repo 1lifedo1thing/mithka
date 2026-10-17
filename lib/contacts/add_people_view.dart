@@ -97,6 +97,9 @@ class _AddPeopleViewState extends State<AddPeopleView> {
     if (mounted) setState(() => _loading = false);
   }
 
+  bool _peopleSearchIsCurrent(String q) =>
+      mounted && _mode == 0 && q == _query.trim();
+
   Future<void> _searchPeople(String q) async {
     final byId = <int, Contact>{};
     try {
@@ -105,11 +108,14 @@ class _AddPeopleViewState extends State<AddPeopleView> {
         'query': q,
         'limit': 30,
       });
+      if (!_peopleSearchIsCurrent(q)) return;
       for (final id in res.int64Array('user_ids') ?? const <int>[]) {
         final c = await _contact(id);
+        if (!_peopleSearchIsCurrent(q)) return;
         if (c != null) byId[id] = c;
       }
     } catch (_) {}
+    if (!_peopleSearchIsCurrent(q)) return;
     // searchContacts only covers saved contacts; if the input is an exact public
     // username (or t.me link), resolve it so any user shows up as a candidate.
     final handle = telegramUsernameFromQuery(q);
@@ -119,6 +125,7 @@ class _AddPeopleViewState extends State<AddPeopleView> {
           '@type': 'searchPublicChat',
           'username': handle,
         });
+        if (!_peopleSearchIsCurrent(q)) return;
         final uid = chat.obj('type')?.int64('user_id');
         if (uid != null && !byId.containsKey(uid)) {
           final c = await _contact(uid);
@@ -126,7 +133,13 @@ class _AddPeopleViewState extends State<AddPeopleView> {
         }
       } catch (_) {}
     }
-    if (q != _query.trim() || _mode != 0) return;
+    if (!_peopleSearchIsCurrent(q)) return;
+    final lookupUserId = telegramUserIdFromQuery(q);
+    if (lookupUserId != null && !byId.containsKey(lookupUserId)) {
+      final c = await _contact(lookupUserId);
+      if (c != null) byId[lookupUserId] = c;
+    }
+    if (!_peopleSearchIsCurrent(q)) return;
     _people = byId.values.toList();
   }
 
@@ -191,12 +204,18 @@ class _AddPeopleViewState extends State<AddPeopleView> {
   Future<Contact?> _contact(int id) async {
     try {
       final user = await _client.query({'@type': 'getUser', 'user_id': id});
+      if (user.obj('type')?.type == 'userTypeDeleted') return null;
+      final usernames = TDParse.activeUsernames(user);
       return Contact(
         id: id,
         name: TDParse.userName(user),
-        username: user.obj('usernames')?.str('editable_username'),
+        username:
+            user.obj('usernames')?.str('editable_username') ??
+            usernames.firstOrNull,
+        usernames: usernames,
         statusText: TDParse.userStatus(user),
         photo: TDParse.smallPhoto(user.obj('profile_photo')),
+        isOnline: TDParse.isUserOnline(user),
       );
     } catch (_) {
       return null;

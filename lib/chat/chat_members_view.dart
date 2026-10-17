@@ -27,6 +27,7 @@ import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'chat_administrator_edit_view.dart';
+import 'telegram_link.dart';
 
 enum ChatMembersMode { members, administrators, banned }
 
@@ -136,14 +137,19 @@ class _ChatMembersViewState extends State<ChatMembersView> {
 
   /// What the list renders: the full supergroup list, or the basic-group
   /// list filtered by the current search locally.
-  List<GroupMember> get _visibleMembers =>
-      _searchQuery.isEmpty || !_isBasicGroup
-      ? _members
-      : _members
-            .where(
-              (m) => m.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-            )
-            .toList(growable: false);
+  List<GroupMember> get _visibleMembers {
+    if (_searchQuery.isEmpty || !_isBasicGroup) return _members;
+    final query = _searchQuery.toLowerCase();
+    final lookupUserId = telegramUserIdFromQuery(_searchQuery);
+    return _members
+        .where(
+          (m) =>
+              (lookupUserId != null && m.id == lookupUserId) ||
+              m.id.toString().contains(query) ||
+              m.name.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
+  }
 
   @override
   void initState() {
@@ -269,6 +275,29 @@ class _ChatMembersViewState extends State<ChatMembersView> {
           );
           raw = res.objects('members') ?? const <Map<String, dynamic>>[];
           if (!mounted || myEpoch != _listEpoch) return;
+          if (searching) {
+            final lookupUserId = telegramUserIdFromQuery(_searchQuery);
+            if (lookupUserId != null &&
+                raw.every(
+                  (entry) =>
+                      entry.obj('member_id')?.int64('user_id') != lookupUserId,
+                )) {
+              try {
+                final member = await _query({
+                  '@type': 'getChatMember',
+                  'chat_id': widget.chatId,
+                  'member_id': {
+                    '@type': 'messageSenderUser',
+                    'user_id': lookupUserId,
+                  },
+                });
+                if (!mounted || myEpoch != _listEpoch) return;
+                if (_matchesSearchMode(member)) {
+                  raw = [...raw, member];
+                }
+              } catch (_) {}
+            }
+          }
           if (!searching) {
             _hasMore = raw.length >= _pageSize;
             _nextOffset = raw.length;
@@ -297,6 +326,20 @@ class _ChatMembersViewState extends State<ChatMembersView> {
     final type = entry.obj('status')?.type;
     return type == 'chatMemberStatusCreator' ||
         type == 'chatMemberStatusAdministrator';
+  }
+
+  bool _matchesSearchMode(Map<String, dynamic> entry) {
+    final type = entry.obj('status')?.type;
+    return switch (widget.mode) {
+      ChatMembersMode.administrators => _isAdministratorEntry(entry),
+      ChatMembersMode.banned => type == 'chatMemberStatusBanned',
+      ChatMembersMode.members =>
+        type == 'chatMemberStatusCreator' ||
+            type == 'chatMemberStatusAdministrator' ||
+            type == 'chatMemberStatusMember' ||
+            (type == 'chatMemberStatusRestricted' &&
+                (entry.obj('status')?.boolean('is_member') ?? true)),
+    };
   }
 
   /// Loads the next supergroup page and appends it, skipping users already

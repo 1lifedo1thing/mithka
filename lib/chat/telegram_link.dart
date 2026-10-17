@@ -17,6 +17,55 @@ String? telegramUsernameFromQuery(String query) {
   return isPublicTelegramUsername(value) ? value : null;
 }
 
+final RegExp _userIdPrefix = RegExp(
+  r'^(?:user(?:_?id)?|uid|id)\s*[:=#]?\s*(\d+)$',
+  caseSensitive: false,
+);
+final RegExp _digitsOnly = RegExp(r'^\d+$');
+
+/// Extracts a positive Telegram user ID from a numeric query, an `id:`/`uid:`
+/// prefix, or a `tg://user?id=...` / `tg://openmessage?user_id=...` link.
+///
+/// Queries beginning with `+` (such as E.164 phone numbers) or evaluating to
+/// non-positive integers return null.
+int? telegramUserIdFromQuery(String query) {
+  final value = query.trim();
+  if (value.isEmpty || value.startsWith('+')) return null;
+
+  int? validUserId(String? raw) {
+    if (raw == null || !_digitsOnly.hasMatch(raw)) return null;
+    final parsed = int.tryParse(raw);
+    return parsed != null && parsed > 0 ? parsed : null;
+  }
+
+  final direct = validUserId(value);
+  if (direct != null) return direct;
+
+  final prefixed = _userIdPrefix.firstMatch(value);
+  if (prefixed != null) return validUserId(prefixed.group(1));
+
+  final link = normalizeTelegramLink(value);
+  if (link == null) return null;
+  final uri = Uri.tryParse(link);
+  if (uri == null || uri.scheme.toLowerCase() != 'tg') return null;
+  final host = uri.host.toLowerCase();
+  try {
+    if (host == 'user') {
+      return validUserId(uri.queryParameters['id']);
+    }
+    if (host == 'openmessage') {
+      return validUserId(
+        uri.queryParameters['user_id'] ?? uri.queryParameters['id'],
+      );
+    }
+  } on FormatException {
+    // Uri.tryParse accepts escaped bytes whose UTF-8 decoding can still fail
+    // when queryParameters is read. Search input must never throw on them.
+    return null;
+  }
+  return null;
+}
+
 /// Returns the canonical web form understood by Mithka's Telegram link
 /// handler, or null when [raw] is not a Telegram deep link.
 String? normalizeTelegramLink(String raw) {
