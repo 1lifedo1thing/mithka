@@ -17,6 +17,7 @@ import '../app/bottom_bar_layout.dart';
 import '../app/ipad_window_chrome.dart';
 import '../app/primary_chat_launcher.dart';
 import '../chat/chat_view.dart';
+import '../chat/telegram_link.dart';
 import '../components/app_icons.dart';
 import '../components/app_interactive_surface.dart';
 import '../components/drawer_controller.dart' as dc;
@@ -36,13 +37,16 @@ import 'contact_users.dart';
 bool contactMatchesQuery(Contact contact, String rawQuery) => _contactMatches(
   contact,
   rawQuery.trim().toLowerCase().replaceFirst(RegExp(r'^@+'), ''),
+  lookupUserId: telegramUserIdFromQuery(rawQuery),
 );
 
 /// Takes the already-normalised query so the tab filters normalise once per
 /// build instead of once per row.
-bool _contactMatches(Contact contact, String query) {
+bool _contactMatches(Contact contact, String query, {int? lookupUserId}) {
   if (query.isEmpty) return true;
-  return contact.name.toLowerCase().contains(query) ||
+  if (lookupUserId != null && contact.id == lookupUserId) return true;
+  return contact.id.toString().contains(query) ||
+      contact.name.toLowerCase().contains(query) ||
       contact.usernames.any(
         (username) => username.toLowerCase().contains(query),
       ) ||
@@ -153,6 +157,11 @@ class ContactsView extends StatefulWidget {
 class _ContactsViewState extends State<ContactsView> {
   final _vm = ContactsViewModel();
   final _searchController = TextEditingController();
+  Timer? _userIdLookupDebounce;
+  int _userIdLookupRunId = 0;
+  Contact? _resolvedUserById;
+  bool _resolvedUserIsBot = false;
+  bool _resolvingUserById = false;
   String _meName = AppStringKeys.chatMeLabel;
   TdFileRef? _mePhoto;
   int _tab = 0; // 0 好友, 1 群聊, 2 频道, 3 机器人
@@ -169,6 +178,7 @@ class _ContactsViewState extends State<ContactsView> {
 
   @override
   void dispose() {
+    _userIdLookupDebounce?.cancel();
     _searchController.dispose();
     _vm.dispose();
     super.dispose();
@@ -210,8 +220,10 @@ class _ContactsViewState extends State<ContactsView> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final query = _searchController.text.trim().toLowerCase();
+    final rawQuery = _searchController.text;
+    final query = rawQuery.trim().toLowerCase();
     final contactQuery = query.replaceFirst(RegExp(r'^@+'), '');
+    final lookupUserId = telegramUserIdFromQuery(rawQuery);
     return Container(
       color: c.groupedBackground,
       child: Column(
@@ -232,8 +244,13 @@ class _ContactsViewState extends State<ContactsView> {
                 SliverToBoxAdapter(child: _tabs()),
                 switch (_tab) {
                   0 => _contactSliver(
-                    _filterContacts(_vm.contacts, contactQuery),
-                    loading: _vm.contactsLoading,
+                    _filterContacts(
+                      _vm.contacts,
+                      contactQuery,
+                      lookupUserId: lookupUserId,
+                      includeBots: false,
+                    ),
+                    loading: _vm.contactsLoading || _resolvingUserById,
                   ),
                   1 => _chatSliver(
                     _filterChats(_vm.groups, query),
@@ -244,8 +261,13 @@ class _ContactsViewState extends State<ContactsView> {
                     loading: _vm.chatsLoading,
                   ),
                   _ => _contactSliver(
-                    _filterContacts(_vm.bots, contactQuery),
-                    loading: _vm.contactsLoading,
+                    _filterContacts(
+                      _vm.bots,
+                      contactQuery,
+                      lookupUserId: lookupUserId,
+                      includeBots: true,
+                    ),
+                    loading: _vm.contactsLoading || _resolvingUserById,
                   ),
                 },
                 SliverToBoxAdapter(
@@ -259,9 +281,92 @@ class _ContactsViewState extends State<ContactsView> {
     );
   }
 
-  List<Contact> _filterContacts(List<Contact> source, String query) => source
-      .where((contact) => _contactMatches(contact, query))
-      .toList(growable: false);
+  List<Contact> _filterContacts(
+    List<Contact> source,
+    String query, {
+    int? lookupUserId,
+    required bool includeBots,
+  }) {
+    final matched = source
+        .where(
+          (contact) =>
+              _contactMatches(contact, query, lookupUserId: lookupUserId),
+        )
+        .toList();
+    final resolved = _resolvedUserById;
+    if (lookupUserId != null &&
+        resolved != null &&
+        resolved.id == lookupUserId &&
+        _resolvedUserIsBot == includeBots &&
+        matched.every((contact) => contact.id != resolved.id)) {
+      matched.add(resolved);
+    }
+    return matched;
+  }
+
+  void _onSearchChanged(String rawQuery) {
+    _userIdLookupDebounce?.cancel();
+    final lookupUserId = telegramUserIdFromQuery(rawQuery);
+    final runId = ++_userIdLookupRunId;
+    if (lookupUserId == null) {
+      _resolvedUserById = null;
+      _resolvedUserIsBot = false;
+      _resolvingUserById = false;
+      setState(() {});
+      return;
+    }
+    if (_resolvedUserById?.id != lookupUserId) {
+      _resolvedUserById = null;
+      _resolvedUserIsBot = false;
+    }
+    final alreadyLoaded =
+        _vm.contacts.any((contact) => contact.id == lookupUserId) ||
+        _vm.bots.any((contact) => contact.id == lookupUserId);
+    if (alreadyLoaded) {
+      _resolvingUserById = false;
+      setState(() {});
+      return;
+    }
+    _resolvingUserById = true;
+    setState(() {});
+    _userIdLookupDebounce = Timer(const Duration(milliseconds: 240), () {
+      if (!mounted || runId != _userIdLookupRunId) return;
+      unawaited(_lookupUserById(lookupUserId, runId));
+    });
+  }
+
+  Future<void> _lookupUserById(int userId, int runId) async {
+    Contact? resolved;
+    var isBot = false;
+    try {
+      final user = await TdClient.shared.query({
+        '@type': 'getUser',
+        'user_id': userId,
+      });
+      if (!mounted || runId != _userIdLookupRunId) return;
+      if (user.obj('type')?.type != 'userTypeDeleted') {
+        isBot = TDParse.isBotUser(user);
+        final usernames = TDParse.activeUsernames(user);
+        resolved = Contact(
+          id: userId,
+          name: TDParse.userName(user),
+          username: usernames.isEmpty ? null : usernames.first,
+          usernames: usernames,
+          statusText: isBot
+              ? AppStringKeys.chatsSearchBots
+              : TDParse.userStatus(user),
+          photo: TDParse.smallPhoto(user.obj('profile_photo')),
+          isOnline: TDParse.isUserOnline(user),
+        );
+      }
+    } catch (_) {}
+    if (!mounted || runId != _userIdLookupRunId) return;
+    setState(() {
+      _resolvedUserById = resolved;
+      _resolvedUserIsBot = isBot;
+      _resolvingUserById = false;
+    });
+  }
 
   List<ChatSummary> _filterChats(List<ChatSummary> source, String query) =>
       query.isEmpty
@@ -379,7 +484,7 @@ class _ContactsViewState extends State<ContactsView> {
             child: TextField(
               controller: _searchController,
               textInputAction: TextInputAction.search,
-              onChanged: (_) => setState(() {}),
+              onChanged: _onSearchChanged,
               style: TextStyle(fontSize: 14, color: c.textPrimary),
               decoration: InputDecoration(
                 isCollapsed: true,
@@ -394,7 +499,7 @@ class _ContactsViewState extends State<ContactsView> {
               semanticLabel: AppStringKeys.countryPickerCancel.l10n(context),
               onTap: () {
                 _searchController.clear();
-                setState(() {});
+                _onSearchChanged('');
               },
               borderRadius: BorderRadius.circular(AppRadius.control),
               child: Padding(

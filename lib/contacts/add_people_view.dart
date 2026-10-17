@@ -126,6 +126,11 @@ class _AddPeopleViewState extends State<AddPeopleView> {
         }
       } catch (_) {}
     }
+    final lookupUserId = telegramUserIdFromQuery(q);
+    if (lookupUserId != null && !byId.containsKey(lookupUserId)) {
+      final c = await _contact(lookupUserId);
+      if (c != null) byId[lookupUserId] = c;
+    }
     if (q != _query.trim() || _mode != 0) return;
     _people = byId.values.toList();
   }
@@ -191,12 +196,18 @@ class _AddPeopleViewState extends State<AddPeopleView> {
   Future<Contact?> _contact(int id) async {
     try {
       final user = await _client.query({'@type': 'getUser', 'user_id': id});
+      if (user.obj('type')?.type == 'userTypeDeleted') return null;
+      final usernames = TDParse.activeUsernames(user);
       return Contact(
         id: id,
         name: TDParse.userName(user),
-        username: user.obj('usernames')?.str('editable_username'),
+        username:
+            user.obj('usernames')?.str('editable_username') ??
+            usernames.firstOrNull,
+        usernames: usernames,
         statusText: TDParse.userStatus(user),
         photo: TDParse.smallPhoto(user.obj('profile_photo')),
+        isOnline: TDParse.isUserOnline(user),
       );
     } catch (_) {
       return null;

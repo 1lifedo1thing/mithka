@@ -21,6 +21,7 @@ import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'forward_markdown.dart';
 import 'forward_options.dart';
+import 'telegram_link.dart';
 
 class ChatPickerResult {
   const ChatPickerResult({required this.chat, required this.forwardOptions});
@@ -106,8 +107,11 @@ class _ChatPickerViewState extends State<ChatPickerView> {
           _PickerEntry.contact(contact),
     ];
     if (_query.trim().isEmpty) return all;
-    final q = _query.toLowerCase();
-    return all.where((entry) => entry.matches(q)).toList();
+    final q = _query.trim().toLowerCase();
+    final lookupUserId = telegramUserIdFromQuery(_query);
+    return all
+        .where((entry) => entry.matches(q, lookupUserId: lookupUserId))
+        .toList();
   }
 
   Future<void> _loadContacts() async {
@@ -466,13 +470,20 @@ class _PickerEntry {
         : '@$username';
   }
 
-  bool matches(String query) {
+  bool matches(String query, {int? lookupUserId}) {
+    final chat = this.chat;
     final contact = this.contact;
+    final peerUserId = contact?.id ?? chat?.peerUserId;
+    if (lookupUserId != null &&
+        (peerUserId == lookupUserId || chat?.id == lookupUserId)) {
+      return true;
+    }
     final fields = [
       title,
       subtitle,
       chat?.lastMessage ?? '',
       contact?.username ?? '',
+      if (peerUserId != null) '$peerUserId',
     ].join(' ').toLowerCase();
     return fields.contains(query);
   }

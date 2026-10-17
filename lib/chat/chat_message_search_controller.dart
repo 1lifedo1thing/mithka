@@ -21,6 +21,7 @@ import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
 import 'chat_search_query.dart';
+import 'telegram_link.dart';
 
 /// Width of the trailing results pane in a wide chat.
 const double chatSearchResultsPaneWidth = 300;
@@ -573,6 +574,17 @@ class ChatMessageSearchController extends ChangeNotifier {
       return;
     }
     if (_senderFilter?.query == query) return;
+    final lookupUserId = telegramUserIdFromQuery(query);
+    if (lookupUserId != null) {
+      final resolved = await _resolveSender(lookupUserId);
+      if (_disposed || runId != _runId) return;
+      _senderFilter = _SearchSenderFilter(
+        query: query,
+        userId: lookupUserId,
+        name: resolved?.name ?? '$lookupUserId',
+      );
+      return;
+    }
     try {
       final response = await _client.query({
         '@type': 'searchChatMembers',
